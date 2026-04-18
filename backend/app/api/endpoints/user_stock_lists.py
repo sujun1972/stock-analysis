@@ -5,10 +5,11 @@
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 
 from app.core.dependencies import get_current_active_user
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.models.user import User
 from app.services.user_stock_list_service import UserStockListService
@@ -39,6 +40,7 @@ class StockCodesRequest(BaseModel):
 # ------------------------------------------------------------------
 
 @router.get("")
+@handle_api_errors
 async def get_my_lists(
     current_user: User = Depends(get_current_active_user),
 ):
@@ -49,20 +51,19 @@ async def get_my_lists(
 
 
 @router.post("")
+@handle_api_errors
 async def create_list(
     body: CreateListRequest,
     current_user: User = Depends(get_current_active_user),
 ):
     """创建新股票列表"""
     service = UserStockListService()
-    try:
-        result = await service.create_list(current_user.id, body.name, body.description)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    result = await service.create_list(current_user.id, body.name, body.description)
     return ApiResponse.success(data=result, message="列表创建成功").to_dict()
 
 
 @router.put("/{list_id}")
+@handle_api_errors
 async def update_list(
     list_id: int,
     body: UpdateListRequest,
@@ -70,24 +71,19 @@ async def update_list(
 ):
     """重命名 / 修改列表描述"""
     service = UserStockListService()
-    try:
-        result = await service.update_list(list_id, current_user.id, body.name, body.description)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    result = await service.update_list(list_id, current_user.id, body.name, body.description)
     return ApiResponse.success(data=result, message="列表更新成功").to_dict()
 
 
 @router.delete("/{list_id}")
+@handle_api_errors
 async def delete_list(
     list_id: int,
     current_user: User = Depends(get_current_active_user),
 ):
     """删除列表（同时删除列表中的所有股票）"""
     service = UserStockListService()
-    try:
-        await service.delete_list(list_id, current_user.id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    await service.delete_list(list_id, current_user.id)
     return ApiResponse.success(message="列表删除成功").to_dict()
 
 
@@ -96,6 +92,7 @@ async def delete_list(
 # ------------------------------------------------------------------
 
 @router.get("/{list_id}/items")
+@handle_api_errors
 async def get_list_items(
     list_id: int,
     current_user: User = Depends(get_current_active_user),
@@ -107,6 +104,7 @@ async def get_list_items(
 
 
 @router.get("/{list_id}/ts-codes")
+@handle_api_errors
 async def get_list_ts_codes(
     list_id: int,
     current_user: User = Depends(get_current_active_user),
@@ -118,6 +116,7 @@ async def get_list_ts_codes(
 
 
 @router.post("/{list_id}/items")
+@handle_api_errors
 async def add_stocks_to_list(
     list_id: int,
     body: StockCodesRequest,
@@ -125,10 +124,7 @@ async def add_stocks_to_list(
 ):
     """批量添加股票到列表"""
     service = UserStockListService()
-    try:
-        result = await service.add_stocks(list_id, current_user.id, body.ts_codes)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    result = await service.add_stocks(list_id, current_user.id, body.ts_codes)
     return ApiResponse.success(
         data=result,
         message=f"已添加 {result['added']} 只股票"
@@ -136,6 +132,7 @@ async def add_stocks_to_list(
 
 
 @router.delete("/{list_id}/items")
+@handle_api_errors
 async def remove_stocks_from_list(
     list_id: int,
     body: StockCodesRequest,
@@ -143,10 +140,7 @@ async def remove_stocks_from_list(
 ):
     """批量从列表移除股票"""
     service = UserStockListService()
-    try:
-        result = await service.remove_stocks(list_id, current_user.id, body.ts_codes)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    result = await service.remove_stocks(list_id, current_user.id, body.ts_codes)
     return ApiResponse.success(
         data=result,
         message=f"已移除 {result['removed']} 只股票"

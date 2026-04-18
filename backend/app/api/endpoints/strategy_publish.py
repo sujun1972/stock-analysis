@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, get_current_user
 from app.models.user import User
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.repositories.strategy_repository import StrategyRepository
 from app.repositories.publish_review_repository import PublishReviewRepository
@@ -26,6 +27,7 @@ router = APIRouter(tags=["strategies-publish"])
     summary="申请发布策略",
     status_code=status.HTTP_200_OK
 )
+@handle_api_errors
 async def request_publish_strategy(
     strategy_id: int,
     db: Session = Depends(get_db),
@@ -105,6 +107,7 @@ async def request_publish_strategy(
     summary="撤回发布申请",
     status_code=status.HTTP_200_OK
 )
+@handle_api_errors
 async def withdraw_publish_request(
     strategy_id: int,
     db: Session = Depends(get_db),
@@ -176,6 +179,7 @@ async def withdraw_publish_request(
     summary="获取我的策略列表",
     status_code=status.HTTP_200_OK
 )
+@handle_api_errors
 async def get_my_strategies(
     publish_status: str = None,
     page: int = 1,

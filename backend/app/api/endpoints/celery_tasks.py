@@ -27,6 +27,7 @@ from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
 
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.core.dependencies import get_current_active_user
 from app.models.user import User
@@ -64,6 +65,7 @@ class TaskHistoryUpdate(BaseModel):
 # ==================== Celery 任务状态查询 ====================
 
 @router.get("/task/{task_id}")
+@handle_api_errors
 async def get_celery_task_status(
     task_id: str,
     current_user: User = Depends(get_current_active_user)
@@ -208,6 +210,7 @@ async def get_celery_task_status(
 
 
 @router.post("/task/{task_id}/revoke")
+@handle_api_errors
 async def revoke_celery_task(
     task_id: str,
     terminate: bool = False,
@@ -223,22 +226,18 @@ async def revoke_celery_task(
     Returns:
         取消结果
     """
-    try:
-        celery_app.control.revoke(task_id, terminate=terminate)
+    celery_app.control.revoke(task_id, terminate=terminate)
 
-        return ApiResponse.success(
-            message=f"任务 {task_id} 已取消",
-            data={'task_id': task_id, 'terminated': terminate}
-        )
-
-    except Exception as e:
-        logger.error(f"取消任务 {task_id} 失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(
+        message=f"任务 {task_id} 已取消",
+        data={'task_id': task_id, 'terminated': terminate}
+    )
 
 
 # ==================== 任务历史记录 CRUD ====================
 
 @router.post("/task-history")
+@handle_api_errors
 async def create_task_history(
     task_data: TaskHistoryCreate,
     current_user: User = Depends(get_current_active_user)
@@ -252,34 +251,30 @@ async def create_task_history(
     Returns:
         创建的任务历史记录
     """
-    try:
-        service = CeleryTaskHistoryService()
+    service = CeleryTaskHistoryService()
 
-        # 使用 Service 层的验证和创建方法
-        task = await service.validate_and_create_or_update(
-            celery_task_id=task_data.celery_task_id,
-            task_name=task_data.task_name,
-            display_name=task_data.display_name,
-            task_type=task_data.task_type,
-            user_id=current_user.id,
-            params=task_data.params,
-            metadata=task_data.metadata
-        )
+    # 使用 Service 层的验证和创建方法
+    task = await service.validate_and_create_or_update(
+        celery_task_id=task_data.celery_task_id,
+        task_name=task_data.task_name,
+        display_name=task_data.display_name,
+        task_type=task_data.task_type,
+        user_id=current_user.id,
+        params=task_data.params,
+        metadata=task_data.metadata
+    )
 
-        if task.get('id'):
-            # 任务已存在
-            message = "任务历史记录已存在"
-        else:
-            message = "任务历史记录创建成功"
+    if task.get('id'):
+        # 任务已存在
+        message = "任务历史记录已存在"
+    else:
+        message = "任务历史记录创建成功"
 
-        return ApiResponse.success(data=task, message=message)
-
-    except Exception as e:
-        logger.error(f"创建任务历史记录失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(data=task, message=message)
 
 
 @router.patch("/task-history/{task_id}")
+@handle_api_errors
 async def update_task_history(
     task_id: str,
     update_data: TaskHistoryUpdate,
@@ -295,44 +290,38 @@ async def update_task_history(
     Returns:
         更新后的任务历史记录
     """
-    try:
-        service = CeleryTaskHistoryService()
+    service = CeleryTaskHistoryService()
 
-        # 检查任务是否存在
-        existing_task = await service.get_task_by_id(task_id)
-        if not existing_task:
-            raise HTTPException(status_code=404, detail="任务历史记录不存在")
+    # 检查任务是否存在
+    existing_task = await service.get_task_by_id(task_id)
+    if not existing_task:
+        raise HTTPException(status_code=404, detail="任务历史记录不存在")
 
-        # 检查权限
-        if existing_task.get('user_id') != current_user.id:
-            raise HTTPException(status_code=403, detail="无权修改此任务记录")
+    # 检查权限
+    if existing_task.get('user_id') != current_user.id:
+        raise HTTPException(status_code=403, detail="无权修改此任务记录")
 
-        # 更新任务状态
-        updated_task = await service.update_task_status(
-            celery_task_id=task_id,
-            status=update_data.status,
-            progress=update_data.progress,
-            started_at=update_data.started_at,
-            completed_at=update_data.completed_at,
-            duration_ms=update_data.duration_ms,
-            result=update_data.result,
-            error=update_data.error,
-            worker=update_data.worker
-        )
+    # 更新任务状态
+    updated_task = await service.update_task_status(
+        celery_task_id=task_id,
+        status=update_data.status,
+        progress=update_data.progress,
+        started_at=update_data.started_at,
+        completed_at=update_data.completed_at,
+        duration_ms=update_data.duration_ms,
+        result=update_data.result,
+        error=update_data.error,
+        worker=update_data.worker
+    )
 
-        return ApiResponse.success(
-            data=updated_task,
-            message="任务历史记录更新成功"
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"更新任务历史记录失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(
+        data=updated_task,
+        message="任务历史记录更新成功"
+    )
 
 
 @router.get("/task-history")
+@handle_api_errors
 async def get_task_history_list(
     limit: int = 50,
     offset: int = 0,
@@ -352,26 +341,22 @@ async def get_task_history_list(
     Returns:
         任务历史列表和统计信息
     """
-    try:
-        service = CeleryTaskHistoryService()
+    service = CeleryTaskHistoryService()
 
-        # 使用组合查询方法，同时获取列表和统计
-        result = await service.get_task_list_with_statistics(
-            user_id=current_user.id,
-            limit=limit,
-            offset=offset,
-            status=status,
-            task_type=task_type
-        )
+    # 使用组合查询方法，同时获取列表和统计
+    result = await service.get_task_list_with_statistics(
+        user_id=current_user.id,
+        limit=limit,
+        offset=offset,
+        status=status,
+        task_type=task_type
+    )
 
-        return ApiResponse.success(data=result)
-
-    except Exception as e:
-        logger.error(f"获取任务历史列表失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(data=result)
 
 
 @router.get("/task-history/{task_id}")
+@handle_api_errors
 async def get_task_history_detail(
     task_id: str,
     current_user: User = Depends(get_current_active_user)
@@ -385,28 +370,22 @@ async def get_task_history_detail(
     Returns:
         任务历史详情
     """
-    try:
-        service = CeleryTaskHistoryService()
+    service = CeleryTaskHistoryService()
 
-        task = await service.get_task_by_id(task_id)
+    task = await service.get_task_by_id(task_id)
 
-        if not task:
-            raise HTTPException(status_code=404, detail="任务历史记录不存在")
+    if not task:
+        raise HTTPException(status_code=404, detail="任务历史记录不存在")
 
-        # 检查权限（可选，根据需求决定是否限制）
-        # if task.get('user_id') != current_user.id:
-        #     raise HTTPException(status_code=403, detail="无权查看此任务记录")
+    # 检查权限（可选，根据需求决定是否限制）
+    # if task.get('user_id') != current_user.id:
+    #     raise HTTPException(status_code=403, detail="无权查看此任务记录")
 
-        return ApiResponse.success(data=task)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"获取任务历史详情失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(data=task)
 
 
 @router.delete("/task-history/{task_id}")
+@handle_api_errors
 async def delete_task_history(
     task_id: str,
     current_user: User = Depends(get_current_active_user)
@@ -420,48 +399,42 @@ async def delete_task_history(
     Returns:
         删除结果
     """
-    try:
-        service = CeleryTaskHistoryService()
+    service = CeleryTaskHistoryService()
 
-        # 检查任务是否存在
-        task = await service.get_task_by_id(task_id)
-        if not task:
-            raise HTTPException(status_code=404, detail="任务历史记录不存在")
+    # 检查任务是否存在
+    task = await service.get_task_by_id(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务历史记录不存在")
 
-        # 检查权限
-        if task.get('user_id') != current_user.id:
-            raise HTTPException(status_code=403, detail="无权删除此任务记录")
+    # 检查权限
+    if task.get('user_id') != current_user.id:
+        raise HTTPException(status_code=403, detail="无权删除此任务记录")
 
-        # 若任务仍在运行，先撤销 Celery 任务（防止后台继续运行）
-        active_statuses = {'pending', 'running'}
-        if task.get('status') in active_statuses:
-            try:
-                celery_app.control.revoke(task_id, terminate=True)
-                logger.info(f"删除前撤销活动任务: {task_id[:8]}...")
-            except Exception as revoke_err:
-                logger.warning(f"撤销任务失败（继续删除记录）: {revoke_err}")
+    # 若任务仍在运行，先撤销 Celery 任务（防止后台继续运行）
+    active_statuses = {'pending', 'running'}
+    if task.get('status') in active_statuses:
+        try:
+            celery_app.control.revoke(task_id, terminate=True)
+            logger.info(f"删除前撤销活动任务: {task_id[:8]}...")
+        except Exception as revoke_err:
+            logger.warning(f"撤销任务失败（继续删除记录）: {revoke_err}")
 
-        # 删除任务记录
-        rows_deleted = await service.delete_task_history(
-            celery_task_id=task_id,
-            user_id=current_user.id
-        )
+    # 删除任务记录
+    rows_deleted = await service.delete_task_history(
+        celery_task_id=task_id,
+        user_id=current_user.id
+    )
 
-        if rows_deleted > 0:
-            message = "任务历史记录已删除"
-        else:
-            message = "未找到要删除的记录"
+    if rows_deleted > 0:
+        message = "任务历史记录已删除"
+    else:
+        message = "未找到要删除的记录"
 
-        return ApiResponse.success(message=message)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"删除任务历史记录失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(message=message)
 
 
 @router.post("/task-history/cleanup-stale")
+@handle_api_errors
 async def cleanup_stale_tasks(
     current_user: User = Depends(get_current_active_user)
 ):
@@ -474,42 +447,38 @@ async def cleanup_stale_tasks(
     Returns:
         清理结果
     """
-    try:
-        service = CeleryTaskHistoryService()
+    service = CeleryTaskHistoryService()
 
-        # 查找僵尸任务（10小时阈值，避免误杀全量历史同步等长任务）
-        stale_tasks = await service.get_stale_tasks(
-            user_id=current_user.id,
-            minutes=600
-        )
+    # 查找僵尸任务（10小时阈值，避免误杀全量历史同步等长任务）
+    stale_tasks = await service.get_stale_tasks(
+        user_id=current_user.id,
+        minutes=600
+    )
 
-        if not stale_tasks:
-            return ApiResponse.success(
-                data={'deleted_count': 0},
-                message="没有发现僵尸任务"
-            )
-
-        # 清理僵尸任务
-        deleted_count = await service.cleanup_stale_tasks(
-            user_id=current_user.id,
-            minutes=600
-        )
-
-        logger.info(f"清理了 {deleted_count} 个僵尸任务 (user_id={current_user.id})")
-
+    if not stale_tasks:
         return ApiResponse.success(
-            data={'deleted_count': deleted_count},
-            message=f"已清理 {deleted_count} 个僵尸任务"
+            data={'deleted_count': 0},
+            message="没有发现僵尸任务"
         )
 
-    except Exception as e:
-        logger.error(f"清理僵尸任务失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    # 清理僵尸任务
+    deleted_count = await service.cleanup_stale_tasks(
+        user_id=current_user.id,
+        minutes=600
+    )
+
+    logger.info(f"清理了 {deleted_count} 个僵尸任务 (user_id={current_user.id})")
+
+    return ApiResponse.success(
+        data={'deleted_count': deleted_count},
+        message=f"已清理 {deleted_count} 个僵尸任务"
+    )
 
 
 # ==================== 统计信息 ====================
 
 @router.get("/task-history/statistics/summary")
+@handle_api_errors
 async def get_task_statistics(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
@@ -525,17 +494,12 @@ async def get_task_statistics(
     Returns:
         统计信息
     """
-    try:
-        service = CeleryTaskHistoryService()
+    service = CeleryTaskHistoryService()
 
-        stats = await service.get_statistics(
-            user_id=current_user.id,
-            start_date=start_date,
-            end_date=end_date
-        )
+    stats = await service.get_statistics(
+        user_id=current_user.id,
+        start_date=start_date,
+        end_date=end_date
+    )
 
-        return ApiResponse.success(data=stats)
-
-    except Exception as e:
-        logger.error(f"获取任务统计失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(data=stats)

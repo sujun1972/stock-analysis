@@ -30,6 +30,7 @@ from app.services.prompt_template_service import get_prompt_template_service
 from app.core.exceptions import DataNotFoundError, ValidationError
 from app.core.dependencies import require_admin, get_current_active_user
 from app.models.user import User
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 
 router = APIRouter()
@@ -37,6 +38,7 @@ service = get_prompt_template_service()
 
 
 @router.get("/")
+@handle_api_errors
 def list_templates(
     business_type: Optional[str] = Query(None, description="业务类型"),
     is_active: Optional[bool] = Query(None, description="是否启用"),
@@ -66,6 +68,7 @@ def list_templates(
 
 
 @router.get("/{template_id}")
+@handle_api_errors
 def get_template(
     template_id: int,
     db: Session = Depends(get_db),
@@ -85,6 +88,7 @@ def get_template(
 
 
 @router.post("/", status_code=201)
+@handle_api_errors
 def create_template(
     template_data: PromptTemplateCreate,
     db: Session = Depends(get_db),
@@ -104,6 +108,7 @@ def create_template(
 
 
 @router.put("/{template_id}")
+@handle_api_errors
 def update_template(
     template_id: int,
     updates: PromptTemplateUpdate,
@@ -126,6 +131,7 @@ def update_template(
 
 
 @router.post("/{template_id}/versions", status_code=201)
+@handle_api_errors
 def create_version(
     template_id: int,
     version_data: PromptTemplateVersionCreate,
@@ -148,6 +154,7 @@ def create_version(
 
 
 @router.post("/{template_id}/activate")
+@handle_api_errors
 def activate_template(
     template_id: int,
     set_as_default: bool = Query(False, description="是否设为默认模板"),
@@ -171,6 +178,7 @@ def activate_template(
 
 
 @router.post("/{template_id}/deactivate")
+@handle_api_errors
 def deactivate_template(
     template_id: int,
     db: Session = Depends(get_db),
@@ -192,6 +200,7 @@ def deactivate_template(
 
 
 @router.delete("/{template_id}")
+@handle_api_errors
 def delete_template(
     template_id: int,
     db: Session = Depends(get_db),
@@ -210,6 +219,7 @@ def delete_template(
 
 
 @router.post("/{template_id}/preview")
+@handle_api_errors
 def preview_template(
     template_id: int,
     preview_request: PromptTemplatePreviewRequest,
@@ -234,6 +244,7 @@ def preview_template(
 
 
 @router.get("/{template_id}/statistics")
+@handle_api_errors
 def get_template_statistics(
     template_id: int,
     db: Session = Depends(get_db),
@@ -253,6 +264,7 @@ def get_template_statistics(
 
 
 @router.get("/{template_id}/history")
+@handle_api_errors
 def get_template_history(
     template_id: int,
     limit: int = Query(50, ge=1, le=200),
@@ -273,6 +285,7 @@ def get_template_history(
 
 
 @router.get("/business-types/all")
+@handle_api_errors
 def get_business_types(
     current_user: User = Depends(require_admin)
 ):
@@ -295,6 +308,7 @@ def _render_template(text: str, variables: dict) -> str:
 
 
 @router.get("/by-key/{template_key}")
+@handle_api_errors
 async def get_template_by_key(
     template_key: str,
     stock_name: Optional[str] = Query(None, description="股票名称，用于替换模板中的占位符"),
@@ -521,6 +535,7 @@ async def _get_or_generate_stock_data_collection(
 
 
 @router.put("/by-key/{template_key}")
+@handle_api_errors
 def update_template_by_key(
     template_key: str,
     updates: PromptTemplateUpdate,
@@ -546,6 +561,7 @@ def update_template_by_key(
 
 
 @router.delete("/by-key/{template_key}")
+@handle_api_errors
 def delete_template_by_key(
     template_key: str,
     db: Session = Depends(get_db),
@@ -567,6 +583,7 @@ def delete_template_by_key(
 
 
 @router.post("/by-key/{template_key}/activate")
+@handle_api_errors
 def activate_template_by_key(
     template_key: str,
     set_as_default: bool = Query(False, description="是否设为默认模板"),
@@ -593,6 +610,7 @@ def activate_template_by_key(
 
 
 @router.post("/by-key/{template_key}/deactivate")
+@handle_api_errors
 def deactivate_template_by_key(
     template_key: str,
     db: Session = Depends(get_db),
@@ -617,6 +635,7 @@ def deactivate_template_by_key(
 
 
 @router.post("/by-key/{template_key}/versions", status_code=201)
+@handle_api_errors
 def create_version_by_key(
     template_key: str,
     version_data: PromptTemplateVersionCreate,
@@ -642,6 +661,7 @@ def create_version_by_key(
 
 
 @router.post("/by-key/{template_key}/preview")
+@handle_api_errors
 def preview_template_by_key(
     template_key: str,
     preview_request: PromptTemplatePreviewRequest,
@@ -662,6 +682,7 @@ def preview_template_by_key(
 
 
 @router.get("/by-key/{template_key}/statistics")
+@handle_api_errors
 def get_template_statistics_by_key(
     template_key: str,
     db: Session = Depends(get_db),
@@ -681,6 +702,7 @@ def get_template_statistics_by_key(
 
 
 @router.get("/by-key/{template_key}/history")
+@handle_api_errors
 def get_template_history_by_key(
     template_key: str,
     limit: int = Query(50, ge=1, le=200),

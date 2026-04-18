@@ -7,11 +7,13 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.services.data_quality_service import DataQualityService
 from app.core.dependencies import get_current_user
+from app.api.error_handler import handle_api_errors
 
 router = APIRouter()
 
 
 @router.get("/daily-report")
+@handle_api_errors
 def get_daily_quality_report(
     trade_date: Optional[date] = Query(None, description="交易日期，默认最新交易日"),
     format: str = Query("json", description="输出格式: json或html"),
@@ -33,6 +35,7 @@ def get_daily_quality_report(
 
 
 @router.get("/weekly-report")
+@handle_api_errors
 def get_weekly_quality_report(
     start_date: Optional[date] = Query(None, description="开始日期，默认本周一"),
     end_date: Optional[date] = Query(None, description="结束日期，默认今天"),
@@ -55,6 +58,7 @@ def get_weekly_quality_report(
 
 
 @router.get("/real-time-metrics")
+@handle_api_errors
 def get_real_time_metrics(
     data_source: Optional[str] = Query(None, description="数据源名称"),
     db: Session = Depends(get_db),
@@ -94,6 +98,7 @@ def get_real_time_metrics(
 
 
 @router.get("/health-summary")
+@handle_api_errors
 def get_health_summary(
     db: Session = Depends(get_db),
     _: dict = Depends(get_current_user)
@@ -109,6 +114,7 @@ def get_health_summary(
 
 
 @router.get("/validation-history")
+@handle_api_errors
 def get_validation_history(
     data_source: str = Query(..., description="数据源名称"),
     days: int = Query(7, description="历史天数"),
@@ -144,6 +150,7 @@ def get_validation_history(
 
 
 @router.get("/quality-trends")
+@handle_api_errors
 def get_quality_trends(
     days: int = Query(30, description="趋势天数"),
     db: Session = Depends(get_db),
@@ -179,6 +186,7 @@ def get_quality_trends(
 
 
 @router.post("/trigger-validation")
+@handle_api_errors
 def trigger_validation(
     data_source: str,
     trade_date: Optional[date] = None,
@@ -197,19 +205,16 @@ def trigger_validation(
     """
     service = DataQualityService(db)
 
-    try:
-        result = service.validate_data_source(data_source, trade_date)
-        return {
-            "status": "success",
-            "data_source": data_source,
-            "trade_date": str(trade_date) if trade_date else "latest",
-            "validation_result": result
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+    result = service.validate_data_source(data_source, trade_date)
+    return {
+        "status": "success",
+        "data_source": data_source,
+        "trade_date": str(trade_date) if trade_date else "latest",
+        "validation_result": result
+    }
 
 @router.get("/alerts/active")
+@handle_api_errors
 def get_active_alerts(
     db: Session = Depends(get_db),
     _: dict = Depends(get_current_user)
@@ -227,6 +232,7 @@ def get_active_alerts(
 
 
 @router.post("/alerts/acknowledge/{alert_id}")
+@handle_api_errors
 def acknowledge_alert(
     alert_id: int,
     db: Session = Depends(get_db),
@@ -243,12 +249,9 @@ def acknowledge_alert(
     """
     service = DataQualityService(db)
 
-    try:
-        service.acknowledge_alert(alert_id)
-        return {
-            "status": "success",
-            "alert_id": alert_id,
-            "acknowledged_at": datetime.now().isoformat()
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    service.acknowledge_alert(alert_id)
+    return {
+        "status": "success",
+        "alert_id": alert_id,
+        "acknowledged_at": datetime.now().isoformat()
+    }

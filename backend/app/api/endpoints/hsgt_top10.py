@@ -4,11 +4,12 @@
 
 import asyncio
 from typing import Optional
-from fastapi import APIRouter, Query, Depends, HTTPException
+from fastapi import APIRouter, Query, Depends
 from loguru import logger
 
 from app.services.hsgt_top10_service import HsgtTop10Service
 from app.services import TaskHistoryHelper
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.models.user import User
 from app.core.dependencies import require_admin
@@ -17,6 +18,7 @@ router = APIRouter()
 
 
 @router.get("")
+@handle_api_errors
 async def get_hsgt_top10(
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
@@ -38,23 +40,19 @@ async def get_hsgt_top10(
     Returns:
         沪深股通十大成交股数据列表
     """
-    try:
-        service = HsgtTop10Service()
-        result = await service.get_hsgt_top10_data(
-            start_date=start_date,
-            end_date=end_date,
-            ts_code=ts_code,
-            market_type=market_type,
-            limit=limit,
-            offset=offset
-        )
-        return ApiResponse.success(data=result)
-    except Exception as e:
-        logger.error(f"查询沪深股通十大成交股数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    service = HsgtTop10Service()
+    result = await service.get_hsgt_top10_data(
+        start_date=start_date,
+        end_date=end_date,
+        ts_code=ts_code,
+        market_type=market_type,
+        limit=limit,
+        offset=offset
+    )
+    return ApiResponse.success(data=result)
 
 @router.get("/statistics")
+@handle_api_errors
 async def get_statistics(
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
@@ -71,20 +69,16 @@ async def get_statistics(
     Returns:
         统计信息
     """
-    try:
-        service = HsgtTop10Service()
-        result = await service.get_statistics(
-            start_date=start_date,
-            end_date=end_date,
-            market_type=market_type
-        )
-        return ApiResponse.success(data=result)
-    except Exception as e:
-        logger.error(f"获取统计信息失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    service = HsgtTop10Service()
+    result = await service.get_statistics(
+        start_date=start_date,
+        end_date=end_date,
+        market_type=market_type
+    )
+    return ApiResponse.success(data=result)
 
 @router.get("/latest")
+@handle_api_errors
 async def get_latest(
     market_type: Optional[str] = Query(None, description="市场类型 1:沪市 3:深市"),
     limit: int = Query(10, description="返回记录数限制")
@@ -99,19 +93,15 @@ async def get_latest(
     Returns:
         最新数据
     """
-    try:
-        service = HsgtTop10Service()
-        result = await service.get_latest_data(
-            market_type=market_type,
-            limit=limit
-        )
-        return ApiResponse.success(data=result)
-    except Exception as e:
-        logger.error(f"获取最新数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    service = HsgtTop10Service()
+    result = await service.get_latest_data(
+        market_type=market_type,
+        limit=limit
+    )
+    return ApiResponse.success(data=result)
 
 @router.get("/top")
+@handle_api_errors
 async def get_top_by_net_amount(
     trade_date: str = Query(..., description="交易日期，格式：YYYY-MM-DD"),
     market_type: Optional[str] = Query(None, description="市场类型 1:沪市 3:深市"),
@@ -128,20 +118,16 @@ async def get_top_by_net_amount(
     Returns:
         排名数据
     """
-    try:
-        service = HsgtTop10Service()
-        result = await service.get_top_by_net_amount(
-            trade_date=trade_date,
-            market_type=market_type,
-            limit=limit
-        )
-        return ApiResponse.success(data=result)
-    except Exception as e:
-        logger.error(f"获取排名数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    service = HsgtTop10Service()
+    result = await service.get_top_by_net_amount(
+        trade_date=trade_date,
+        market_type=market_type,
+        limit=limit
+    )
+    return ApiResponse.success(data=result)
 
 @router.post("/sync-async")
+@handle_api_errors
 async def sync_hsgt_top10_async(
     ts_code: Optional[str] = Query(None, description="股票代码"),
     trade_date: Optional[str] = Query(None, description="交易日期，格式：YYYY-MM-DD"),
@@ -167,56 +153,51 @@ async def sync_hsgt_top10_async(
     Returns:
         包含Celery任务ID和任务信息的响应
     """
-    try:
-        from app.tasks.hsgt_top10_tasks import sync_hsgt_top10_task
+    from app.tasks.hsgt_top10_tasks import sync_hsgt_top10_task
 
-        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD（Tushare格式）
-        trade_date_formatted = trade_date.replace('-', '') if trade_date else None
-        start_date_formatted = start_date.replace('-', '') if start_date else None
-        end_date_formatted = end_date.replace('-', '') if end_date else None
+    # 转换日期格式：YYYY-MM-DD -> YYYYMMDD（Tushare格式）
+    trade_date_formatted = trade_date.replace('-', '') if trade_date else None
+    start_date_formatted = start_date.replace('-', '') if start_date else None
+    end_date_formatted = end_date.replace('-', '') if end_date else None
 
-        # 提交Celery任务（异步执行）
-        celery_task = sync_hsgt_top10_task.apply_async(
-            kwargs={
-                'ts_code': ts_code,
-                'trade_date': trade_date_formatted,
-                'start_date': start_date_formatted,
-                'end_date': end_date_formatted,
-                'market_type': market_type
-            }
-        )
+    # 提交Celery任务（异步执行）
+    celery_task = sync_hsgt_top10_task.apply_async(
+        kwargs={
+            'ts_code': ts_code,
+            'trade_date': trade_date_formatted,
+            'start_date': start_date_formatted,
+            'end_date': end_date_formatted,
+            'market_type': market_type
+        }
+    )
 
-        # 使用 TaskHistoryHelper 创建任务历史记录
-        helper = TaskHistoryHelper()
-        task_data = await helper.create_task_record(
-            celery_task_id=celery_task.id,
-            task_name='tasks.sync_hsgt_top10',
-            display_name='沪深股通十大成交股',
-            task_type='data_sync',
-            user_id=current_user.id,
-            task_params={
-                'ts_code': ts_code,
-                'trade_date': trade_date_formatted,
-                'start_date': start_date_formatted,
-                'end_date': end_date_formatted,
-                'market_type': market_type
-            },
-            source='hsgt_top10_page'
-        )
+    # 使用 TaskHistoryHelper 创建任务历史记录
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name='tasks.sync_hsgt_top10',
+        display_name='沪深股通十大成交股',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={
+            'ts_code': ts_code,
+            'trade_date': trade_date_formatted,
+            'start_date': start_date_formatted,
+            'end_date': end_date_formatted,
+            'market_type': market_type
+        },
+        source='hsgt_top10_page'
+    )
 
-        logger.info(f"沪深股通十大成交股同步任务已提交: {celery_task.id}")
+    logger.info(f"沪深股通十大成交股同步任务已提交: {celery_task.id}")
 
-        return ApiResponse.success(
-            data=task_data,
-            message="任务已提交，正在后台执行"
-        )
-
-    except Exception as e:
-        logger.error(f"提交沪深股通十大成交股同步任务失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    return ApiResponse.success(
+        data=task_data,
+        message="任务已提交，正在后台执行"
+    )
 
 @router.post("/sync-full-history")
+@handle_api_errors
 async def sync_hsgt_top10_full_history(
     start_date: Optional[str] = Query(None, description="同步起始日期，格式：YYYY-MM-DD，不传则从 2015-01-01 开始"),
     concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
@@ -226,41 +207,36 @@ async def sync_hsgt_top10_full_history(
     全量历史同步：按月切片 + Redis 续继，覆盖指定起始日期至今所有数据。
     任务在后台异步执行，可通过任务面板查看进度。
     """
-    try:
-        from app.api.endpoints.sync_dashboard import release_stale_lock
-        await asyncio.to_thread(release_stale_lock, 'hsgt_top10')
-        from app.tasks.hsgt_top10_tasks import sync_hsgt_top10_full_history_task
-        from app.repositories.sync_config_repository import SyncConfigRepository
+    from app.api.endpoints.sync_dashboard import release_stale_lock
+    await asyncio.to_thread(release_stale_lock, 'hsgt_top10')
+    from app.tasks.hsgt_top10_tasks import sync_hsgt_top10_full_history_task
+    from app.repositories.sync_config_repository import SyncConfigRepository
 
-        # 未传并发数时，从 sync_configs 读取，兜底默认值
-        if concurrency is None:
-            sync_config_repo = SyncConfigRepository()
-            cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'hsgt_top10')
-            concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
+    # 未传并发数时，从 sync_configs 读取，兜底默认值
+    if concurrency is None:
+        sync_config_repo = SyncConfigRepository()
+        cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'hsgt_top10')
+        concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
 
-        start_date_formatted = start_date.replace('-', '') if start_date else None
-        celery_task = sync_hsgt_top10_full_history_task.apply_async(
-            kwargs={'start_date': start_date_formatted, 'concurrency': concurrency}
-        )
+    start_date_formatted = start_date.replace('-', '') if start_date else None
+    celery_task = sync_hsgt_top10_full_history_task.apply_async(
+        kwargs={'start_date': start_date_formatted, 'concurrency': concurrency}
+    )
 
-        helper = TaskHistoryHelper()
-        task_data = await helper.create_task_record(
-            celery_task_id=celery_task.id,
-            task_name='tasks.sync_hsgt_top10_full_history',
-            display_name='沪深股通十大成交股（全量历史）',
-            task_type='data_sync',
-            user_id=current_user.id,
-            task_params={'concurrency': concurrency},
-            source='hsgt_top10_page'
-        )
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name='tasks.sync_hsgt_top10_full_history',
+        display_name='沪深股通十大成交股（全量历史）',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={'concurrency': concurrency},
+        source='hsgt_top10_page'
+    )
 
-        logger.info(f"沪深股通十大成交股全量同步任务已提交: {celery_task.id}")
+    logger.info(f"沪深股通十大成交股全量同步任务已提交: {celery_task.id}")
 
-        return ApiResponse.success(
-            data=task_data,
-            message="全量同步任务已提交，正在后台按月切片执行"
-        )
-
-    except Exception as e:
-        logger.error(f"提交全量同步任务失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(
+        data=task_data,
+        message="全量同步任务已提交，正在后台按月切片执行"
+    )

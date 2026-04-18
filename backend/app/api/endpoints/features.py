@@ -23,6 +23,7 @@ from loguru import logger
 from app.core_adapters.data_adapter import DataAdapter
 from app.core_adapters.feature_adapter import FeatureAdapter
 from app.core.cache import cache
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.repositories.trading_calendar_repository import TradingCalendarRepository
 from app.services.analysis_cache_service import get_analysis_cache_service
@@ -38,6 +39,7 @@ analysis_cache = get_analysis_cache_service()
 
 
 @router.get("/{code}")
+@handle_api_errors
 async def get_features(
     code: str,
     start_date: Optional[str] = None,
@@ -218,6 +220,7 @@ async def get_features(
 
 
 @router.post("/calculate/{code}")
+@handle_api_errors
 async def calculate_features(
     code: str,
     start_date: Optional[str] = None,
@@ -299,6 +302,7 @@ async def calculate_features(
 
 
 @router.get("/names")
+@handle_api_errors
 async def get_feature_names():
     """
     获取所有可用的特征名称
@@ -337,6 +341,7 @@ async def get_feature_names():
 
 
 @router.post("/{code}/select")
+@handle_api_errors
 async def select_features(
     code: str,
     start_date: Optional[str] = None,

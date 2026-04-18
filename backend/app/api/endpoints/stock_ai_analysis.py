@@ -3,7 +3,6 @@
 支持保存分析结果（游资观点等多种类型）、查询最新版本、浏览历史版本
 """
 
-import json
 import time
 from typing import Optional
 
@@ -13,75 +12,17 @@ from pydantic import BaseModel, Field
 
 from app.core.dependencies import get_current_active_user
 from app.core.database import get_db
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.models.user import User
-from app.services.stock_ai_analysis_service import StockAiAnalysisService
+from app.services.stock_ai_analysis_service import (
+    StockAiAnalysisService,
+    extract_json_and_score as _extract_json_and_score,
+    JSON_ANALYSIS_TYPES as _JSON_ANALYSIS_TYPES,
+)
 from app.services.llm_call_logger import llm_call_logger
 from app.schemas.llm_call_log import BusinessType, CallStatus
 from sqlalchemy.orm import Session
-
-
-def _extract_json_and_score(ai_text: str) -> tuple[str, Optional[float]]:
-    """
-    从 AI 返回文本中：
-    1. 去掉 ```json ... ``` 代码块标识，只保留纯 JSON 内容
-    2. 尝试用 Pydantic 模型提取评分，失败降级为手动路径查找
-
-    返回 (cleaned_text, score_or_None)
-    """
-    from app.schemas.ai_analysis_result import StockExpertAnalysisResult
-    from app.services.ai_output_parser import extract_json_text, parse_ai_json
-
-    # 提取纯 JSON 文本
-    json_text = extract_json_text(ai_text)
-    cleaned = json_text if json_text else ai_text.strip()
-
-    # 优先：Pydantic 结构化解析 + 评分提取
-    parsed = parse_ai_json(ai_text, StockExpertAnalysisResult)
-    if parsed is not None:
-        score = parsed.extract_score()
-        if score is not None:
-            return cleaned, score
-
-    # 降级：手动路径查找
-    _SCORE_PATHS = [
-        ["final_score", "score"],   # 游资观点
-        ["comprehensive_score"],    # 中线专家 / 价值守望者 / CIO
-        ["score"],                  # CIO 简单结构兜底
-    ]
-
-    score: Optional[float] = None
-    try:
-        data = json.loads(cleaned)
-        for path in _SCORE_PATHS:
-            node = data
-            for key in path:
-                if not isinstance(node, dict):
-                    node = None
-                    break
-                node = node.get(key)
-            if node is not None:
-                try:
-                    candidate = float(node)
-                    if 0 <= candidate <= 10:
-                        score = candidate
-                        break
-                except (TypeError, ValueError):
-                    pass
-    except Exception:
-        pass
-
-    return cleaned, score
-
-
-# 需要走 JSON 清洗 + 评分提取的分析类型集合
-_JSON_ANALYSIS_TYPES = {
-    "hot_money_view",
-    "midline_industry_expert",
-    "longterm_value_watcher",
-    "cio_directive",
-    "macro_risk_expert",
-}
 
 router = APIRouter(prefix="/stock-ai-analysis", tags=["股票AI分析"])
 
@@ -310,6 +251,7 @@ async def _run_cio_agent_single(body, current_user, db, ai_service) -> dict:
 # ------------------------------------------------------------------
 
 @router.get("/list")
+@handle_api_errors
 async def list_analyses(
     ts_code: Optional[str] = Query(None, description="股票代码过滤"),
     analysis_type: Optional[str] = Query(None, description="分析类型过滤"),
@@ -337,6 +279,7 @@ async def list_analyses(
 
 
 @router.post("/generate")
+@handle_api_errors
 async def generate_analysis(
     body: GenerateAnalysisRequest,
     current_user: User = Depends(get_current_active_user),
@@ -455,6 +398,7 @@ async def generate_analysis(
 
 
 @router.post("/generate-multi")
+@handle_api_errors
 async def generate_multi_analysis(
     body: GenerateMultiRequest,
     current_user: User = Depends(get_current_active_user),
@@ -727,6 +671,7 @@ async def generate_multi_analysis(
 
 
 @router.post("/")
+@handle_api_errors
 async def save_analysis(
     body: SaveAnalysisRequest,
     current_user: User = Depends(get_current_active_user),
@@ -751,6 +696,7 @@ async def save_analysis(
 
 
 @router.get("/latest")
+@handle_api_errors
 async def get_latest(
     ts_code: str = Query(..., description="股票代码，如 000001.SZ"),
     analysis_type: str = Query(..., description="分析类型，如 hot_money_view"),
@@ -765,6 +711,7 @@ async def get_latest(
 
 
 @router.get("/history")
+@handle_api_errors
 async def get_history(
     ts_code: str = Query(..., description="股票代码，如 000001.SZ"),
     analysis_type: str = Query(..., description="分析类型，如 hot_money_view"),
@@ -779,6 +726,7 @@ async def get_history(
 
 
 @router.put("/{record_id}")
+@handle_api_errors
 async def update_analysis(
     record_id: int,
     body: UpdateAnalysisRequest,
@@ -803,6 +751,7 @@ async def update_analysis(
 
 
 @router.delete("/{record_id}")
+@handle_api_errors
 async def delete_analysis(
     record_id: int,
     current_user: User = Depends(get_current_active_user),

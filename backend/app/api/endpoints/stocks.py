@@ -20,6 +20,7 @@ from fastapi import APIRouter, Query, Depends
 from loguru import logger
 
 from app.core_adapters.data_adapter import DataAdapter
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.core.dependencies import require_admin
 from app.models.user import User
@@ -98,6 +99,7 @@ data_adapter = DataAdapter()
         }
     }
 )
+@handle_api_errors
 async def get_stock_list(
     market: Optional[str] = Query(None, description="市场类型筛选，如: 深圳主板、上海主板、创业板、科创板、北交所"),
     industry: Optional[str] = Query(None, description="行业筛选，如: 银行、医药、计算机"),
@@ -188,6 +190,7 @@ async def get_stock_list(
         }
     }
 )
+@handle_api_errors
 async def get_stock_codes(
     market: Optional[str] = Query(None, description="市场类型筛选，如: 深圳主板、上海主板、创业板、科创板、北交所"),
     industry: Optional[str] = Query(None, description="行业筛选，如: 银行、医药、计算机"),
@@ -326,6 +329,7 @@ async def get_stock_codes(
     description="合并 stock_realtime（实时价格）与 daily_basic（估值指标），返回行情卡片所需全部字段",
     tags=["股票管理"],
 )
+@handle_api_errors
 async def get_stock_quote_panel(code: str):
     """
     行情面板数据（无需认证）
@@ -348,6 +352,7 @@ async def get_stock_quote_panel(code: str):
     description="从 stock_basic 表返回含 Tushare 扩展字段的完整基础信息；若 fullname 为空则先触发同步再返回",
     tags=["股票管理"],
 )
+@handle_api_errors
 async def get_stock_basic_info(code: str):
     """
     获取股票完整基础信息（含 Tushare 扩展字段）
@@ -421,6 +426,7 @@ async def get_stock_basic_info(code: str):
         }
     }
 )
+@handle_api_errors
 async def get_stock_info(code: str):
     """
     获取单只股票详细信息
@@ -513,6 +519,7 @@ async def get_stock_info(code: str):
         }
     }
 )
+@handle_api_errors
 async def get_stock_daily_data(
     code: str,
     start_date: Optional[str] = Query(None, description="开始日期，格式: YYYY-MM-DD，默认为最近100个交易日"),
@@ -575,6 +582,7 @@ async def get_stock_daily_data(
 
 
 @router.post("/update")
+@handle_api_errors
 async def update_stock_list(
     current_user: User = Depends(require_admin)
 ):
@@ -659,6 +667,7 @@ async def update_stock_list(
         }
     }
 )
+@handle_api_errors
 async def get_minute_data(
     code: str,
     trade_date: Optional[str] = Query(None, description="交易日期，格式: YYYY-MM-DD，默认为今天"),

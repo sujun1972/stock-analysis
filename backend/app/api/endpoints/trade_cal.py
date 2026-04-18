@@ -6,6 +6,7 @@ from typing import Optional
 
 from app.services.trading_calendar_service import TradingCalendarService
 from app.services import TaskHistoryHelper
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.models.user import User
 from app.core.dependencies import require_admin
@@ -14,6 +15,7 @@ router = APIRouter()
 
 
 @router.get("")
+@handle_api_errors
 async def get_trade_calendar(
     exchange: str = Query('SSE', description="交易所代码（SSE/SZSE/CFFEX/SHFE/CZCE/DCE/INE）"),
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
@@ -36,6 +38,7 @@ async def get_trade_calendar(
 
 
 @router.get("/statistics")
+@handle_api_errors
 async def get_statistics(
     year: Optional[int] = Query(None, description="年份（默认当前年份）"),
     exchange: str = Query('SSE', description="交易所代码")
@@ -47,6 +50,7 @@ async def get_statistics(
 
 
 @router.get("/latest")
+@handle_api_errors
 async def get_latest(
     exchange: str = Query('SSE', description="交易所代码")
 ):
@@ -57,6 +61,7 @@ async def get_latest(
 
 
 @router.post("/sync-async")
+@handle_api_errors
 async def sync_async(
     exchange: Optional[str] = Query(None, description="交易所代码（可选，默认同步 SSE 和 SZSE）"),
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),

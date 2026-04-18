@@ -4,9 +4,10 @@
 
 import asyncio
 from typing import Optional
-from fastapi import APIRouter, Query, Depends, HTTPException
+from fastapi import APIRouter, Query, Depends
 from loguru import logger
 
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.services.suspend_service import SuspendService
 from app.services import TaskHistoryHelper
@@ -17,6 +18,7 @@ router = APIRouter()
 
 
 @router.get("")
+@handle_api_errors
 async def get_suspend_data(
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
@@ -39,30 +41,25 @@ async def get_suspend_data(
     Returns:
         停复牌数据列表（包含分页信息）
     """
-    try:
-        service = SuspendService()
+    service = SuspendService()
 
-        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD
-        start_date_formatted = start_date.replace('-', '') if start_date else None
-        end_date_formatted = end_date.replace('-', '') if end_date else None
+    # 转换日期格式：YYYY-MM-DD -> YYYYMMDD
+    start_date_formatted = start_date.replace('-', '') if start_date else None
+    end_date_formatted = end_date.replace('-', '') if end_date else None
 
-        result = await service.get_suspend_data(
-            start_date=start_date_formatted,
-            end_date=end_date_formatted,
-            ts_code=ts_code,
-            suspend_type=suspend_type,
-            limit=page_size,
-            page=page
-        )
+    result = await service.get_suspend_data(
+        start_date=start_date_formatted,
+        end_date=end_date_formatted,
+        ts_code=ts_code,
+        suspend_type=suspend_type,
+        limit=page_size,
+        page=page
+    )
 
-        return ApiResponse.success(data=result)
-
-    except Exception as e:
-        logger.error(f"查询停复牌数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    return ApiResponse.success(data=result)
 
 @router.get("/statistics")
+@handle_api_errors
 async def get_statistics(
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD")
@@ -77,26 +74,21 @@ async def get_statistics(
     Returns:
         统计信息
     """
-    try:
-        service = SuspendService()
+    service = SuspendService()
 
-        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD
-        start_date_formatted = start_date.replace('-', '') if start_date else None
-        end_date_formatted = end_date.replace('-', '') if end_date else None
+    # 转换日期格式：YYYY-MM-DD -> YYYYMMDD
+    start_date_formatted = start_date.replace('-', '') if start_date else None
+    end_date_formatted = end_date.replace('-', '') if end_date else None
 
-        stats = await service.get_statistics(
-            start_date=start_date_formatted,
-            end_date=end_date_formatted
-        )
+    stats = await service.get_statistics(
+        start_date=start_date_formatted,
+        end_date=end_date_formatted
+    )
 
-        return ApiResponse.success(data=stats)
-
-    except Exception as e:
-        logger.error(f"获取停复牌统计信息失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    return ApiResponse.success(data=stats)
 
 @router.get("/latest")
+@handle_api_errors
 async def get_latest():
     """
     获取最新的交易日期
@@ -104,18 +96,13 @@ async def get_latest():
     Returns:
         最新交易日期
     """
-    try:
-        service = SuspendService()
-        latest = await service.get_latest_trade_date()
+    service = SuspendService()
+    latest = await service.get_latest_trade_date()
 
-        return ApiResponse.success(data={"latest_trade_date": latest})
-
-    except Exception as e:
-        logger.error(f"获取最新交易日期失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    return ApiResponse.success(data={"latest_trade_date": latest})
 
 @router.post("/sync-async")
+@handle_api_errors
 async def sync_suspend_async(
     ts_code: Optional[str] = Query(None, description="股票代码（可输入多值，逗号分隔）"),
     trade_date: Optional[str] = Query(None, description="交易日期，格式：YYYY-MM-DD"),
@@ -141,56 +128,51 @@ async def sync_suspend_async(
     Returns:
         包含Celery任务ID和任务信息的响应
     """
-    try:
-        from app.tasks.suspend_tasks import sync_suspend_task
+    from app.tasks.suspend_tasks import sync_suspend_task
 
-        # 转换日期格式：YYYY-MM-DD -> YYYYMMDD（Tushare格式）
-        trade_date_formatted = trade_date.replace('-', '') if trade_date else None
-        start_date_formatted = start_date.replace('-', '') if start_date else None
-        end_date_formatted = end_date.replace('-', '') if end_date else None
+    # 转换日期格式：YYYY-MM-DD -> YYYYMMDD（Tushare格式）
+    trade_date_formatted = trade_date.replace('-', '') if trade_date else None
+    start_date_formatted = start_date.replace('-', '') if start_date else None
+    end_date_formatted = end_date.replace('-', '') if end_date else None
 
-        # 提交Celery任务（异步执行）
-        celery_task = sync_suspend_task.apply_async(
-            kwargs={
-                'ts_code': ts_code,
-                'trade_date': trade_date_formatted,
-                'start_date': start_date_formatted,
-                'end_date': end_date_formatted,
-                'suspend_type': suspend_type
-            }
-        )
+    # 提交Celery任务（异步执行）
+    celery_task = sync_suspend_task.apply_async(
+        kwargs={
+            'ts_code': ts_code,
+            'trade_date': trade_date_formatted,
+            'start_date': start_date_formatted,
+            'end_date': end_date_formatted,
+            'suspend_type': suspend_type
+        }
+    )
 
-        # 使用 TaskHistoryHelper 创建任务历史记录
-        helper = TaskHistoryHelper()
-        task_data = await helper.create_task_record(
-            celery_task_id=celery_task.id,
-            task_name='tasks.sync_suspend',
-            display_name='每日停复牌信息',
-            task_type='data_sync',
-            user_id=current_user.id,
-            task_params={
-                'ts_code': ts_code,
-                'trade_date': trade_date_formatted,
-                'start_date': start_date_formatted,
-                'end_date': end_date_formatted,
-                'suspend_type': suspend_type
-            },
-            source='suspend_page'
-        )
+    # 使用 TaskHistoryHelper 创建任务历史记录
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name='tasks.sync_suspend',
+        display_name='每日停复牌信息',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={
+            'ts_code': ts_code,
+            'trade_date': trade_date_formatted,
+            'start_date': start_date_formatted,
+            'end_date': end_date_formatted,
+            'suspend_type': suspend_type
+        },
+        source='suspend_page'
+    )
 
-        logger.info(f"停复牌信息同步任务已提交: {celery_task.id}")
+    logger.info(f"停复牌信息同步任务已提交: {celery_task.id}")
 
-        return ApiResponse.success(
-            data=task_data,
-            message="任务已提交，正在后台执行"
-        )
-
-    except Exception as e:
-        logger.error(f"提交停复牌信息同步任务失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    return ApiResponse.success(
+        data=task_data,
+        message="任务已提交，正在后台执行"
+    )
 
 @router.post("/sync-full-history")
+@handle_api_errors
 async def sync_suspend_full_history(
     concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),
     current_user: User = Depends(require_admin)
@@ -200,40 +182,35 @@ async def sync_suspend_full_history(
 
     按7天窗口拉取自2005年起的全市场停复牌记录，5并发，Redis续继。
     """
-    try:
-        from app.api.endpoints.sync_dashboard import release_stale_lock
-        await asyncio.to_thread(release_stale_lock, 'suspend')
-        from app.tasks.suspend_tasks import sync_suspend_full_history_task
-        from app.repositories.sync_config_repository import SyncConfigRepository
+    from app.api.endpoints.sync_dashboard import release_stale_lock
+    await asyncio.to_thread(release_stale_lock, 'suspend')
+    from app.tasks.suspend_tasks import sync_suspend_full_history_task
+    from app.repositories.sync_config_repository import SyncConfigRepository
 
-        # 未传并发数时，从 sync_configs 读取，兜底默认值
-        if concurrency is None:
-            sync_config_repo = SyncConfigRepository()
-            cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'suspend')
-            concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
+    # 未传并发数时，从 sync_configs 读取，兜底默认值
+    if concurrency is None:
+        sync_config_repo = SyncConfigRepository()
+        cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'suspend')
+        concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
 
-        celery_task = sync_suspend_full_history_task.apply_async(
-            kwargs={'concurrency': concurrency}
-        )
+    celery_task = sync_suspend_full_history_task.apply_async(
+        kwargs={'concurrency': concurrency}
+    )
 
-        helper = TaskHistoryHelper()
-        task_data = await helper.create_task_record(
-            celery_task_id=celery_task.id,
-            task_name='tasks.sync_suspend_full_history',
-            display_name='停复牌全量历史同步',
-            task_type='data_sync',
-            user_id=current_user.id,
-            task_params={'concurrency': concurrency},
-            source='suspend_page'
-        )
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name='tasks.sync_suspend_full_history',
+        display_name='停复牌全量历史同步',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={'concurrency': concurrency},
+        source='suspend_page'
+    )
 
-        logger.info(f"停复牌全量历史同步任务已提交: {celery_task.id}")
+    logger.info(f"停复牌全量历史同步任务已提交: {celery_task.id}")
 
-        return ApiResponse.success(
-            data=task_data,
-            message="任务已提交，正在后台执行"
-        )
-
-    except Exception as e:
-        logger.error(f"提交停复牌全量历史同步任务失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(
+        data=task_data,
+        message="任务已提交，正在后台执行"
+    )

@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.core.security import hash_password
 from app.core.dependencies import require_admin, require_super_admin
 from app.models.user import User, UserQuota, LoginHistory, UserActivityLog
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.schemas.user import (
     UserCreate,
@@ -27,6 +28,7 @@ router = APIRouter(prefix="/users", tags=["用户管理（Admin）"])
 
 
 @router.get("")
+@handle_api_errors
 async def list_users(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
@@ -136,6 +138,7 @@ async def list_users(
 
 
 @router.post("", response_model=UserWithQuota, status_code=status.HTTP_201_CREATED)
+@handle_api_errors
 async def create_user(
     user_data: UserCreate,
     db: Session = Depends(get_db),
@@ -192,6 +195,7 @@ async def create_user(
 
 
 @router.get("/{user_id}", response_model=UserWithQuota)
+@handle_api_errors
 async def get_user(
     user_id: int,
     db: Session = Depends(get_db),
@@ -215,6 +219,7 @@ async def get_user(
 
 
 @router.patch("/{user_id}", response_model=UserWithQuota)
+@handle_api_errors
 async def update_user(
     user_id: int,
     user_data: UserUpdate,
@@ -262,6 +267,7 @@ async def update_user(
 
 
 @router.delete("/{user_id}", response_model=MessageResponse)
+@handle_api_errors
 async def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
@@ -295,6 +301,7 @@ async def delete_user(
 
 
 @router.post("/{user_id}/reset-quota", response_model=MessageResponse)
+@handle_api_errors
 async def reset_user_quota(
     user_id: int,
     db: Session = Depends(get_db),
@@ -323,6 +330,7 @@ async def reset_user_quota(
 
 
 @router.patch("/{user_id}/quota", response_model=UserWithQuota)
+@handle_api_errors
 async def update_user_quota(
     user_id: int,
     quota_data: UserQuotaUpdate,
@@ -356,6 +364,7 @@ async def update_user_quota(
 
 
 @router.get("/{user_id}/login-history", response_model=List[LoginHistoryResponse])
+@handle_api_errors
 async def get_user_login_history(
     user_id: int,
     limit: int = Query(50, ge=1, le=200, description="返回记录数"),
@@ -389,6 +398,7 @@ async def get_user_login_history(
 
 
 @router.get("/{user_id}/activity-logs", response_model=List[ActivityLogResponse])
+@handle_api_errors
 async def get_user_activity_logs(
     user_id: int,
     limit: int = Query(50, ge=1, le=200, description="返回记录数"),

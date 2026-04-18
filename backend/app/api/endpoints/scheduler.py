@@ -108,15 +108,9 @@ async def get_scheduled_tasks(
     Returns:
         定时任务列表
     """
-    try:
-        service = ScheduledTaskService()
-        tasks = await service.get_all_tasks()
-        return ApiResponse.success(data=tasks)
-
-    except Exception as e:
-        logger.error(f"获取定时任务列表失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    service = ScheduledTaskService()
+    tasks = await service.get_all_tasks()
+    return ApiResponse.success(data=tasks)
 
 @router.get("/tasks/{task_id}")
 @handle_api_errors
@@ -141,9 +135,6 @@ async def get_scheduled_task(
     except QueryError as e:
         logger.error(f"获取定时任务详情失败: {e}")
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.error(f"获取定时任务详情失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/tasks")
@@ -176,9 +167,6 @@ async def create_scheduled_task(
     except ValidationError as e:
         logger.error(f"创建定时任务失败（验证错误）: {e}")
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"创建定时任务失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.put("/tasks/{task_id}")
@@ -219,9 +207,6 @@ async def update_scheduled_task(
     except QueryError as e:
         logger.error(f"更新定时任务失败（任务不存在）: {e}")
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.error(f"更新定时任务失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/tasks/{task_id}")
@@ -247,9 +232,6 @@ async def delete_scheduled_task(
     except QueryError as e:
         logger.error(f"删除定时任务失败（任务不存在）: {e}")
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.error(f"删除定时任务失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/tasks/{task_id}/toggle")
@@ -278,9 +260,6 @@ async def toggle_scheduled_task(
     except QueryError as e:
         logger.error(f"切换定时任务状态失败（任务不存在）: {e}")
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.error(f"切换定时任务状态失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/tasks/{task_id}/history")
@@ -300,15 +279,9 @@ async def get_task_execution_history(
     Returns:
         执行历史列表
     """
-    try:
-        service = ScheduledTaskService()
-        history = await service.get_task_execution_history(task_id, limit)
-        return ApiResponse.success(data=history)
-
-    except Exception as e:
-        logger.error(f"获取任务执行历史失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    service = ScheduledTaskService()
+    history = await service.get_task_execution_history(task_id, limit)
+    return ApiResponse.success(data=history)
 
 @router.get("/history/recent")
 @handle_api_errors
@@ -325,15 +298,9 @@ async def get_recent_execution_history(
     Returns:
         执行历史列表
     """
-    try:
-        service = ScheduledTaskService()
-        history = await service.get_recent_execution_history(limit)
-        return ApiResponse.success(data=history)
-
-    except Exception as e:
-        logger.error(f"获取最近执行历史失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    service = ScheduledTaskService()
+    history = await service.get_recent_execution_history(limit)
+    return ApiResponse.success(data=history)
 
 @router.post("/tasks/{task_id}/execute")
 @handle_api_errors
@@ -358,9 +325,6 @@ async def execute_scheduled_task(
     except QueryError as e:
         logger.error(f"执行定时任务失败（任务不存在）: {e}")
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.error(f"执行定时任务失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/tasks/{task_id}/status")
@@ -380,15 +344,9 @@ async def get_task_execution_status(
     Returns:
         任务执行状态
     """
-    try:
-        service = ScheduledTaskService()
-        status = await service.get_task_execution_status(task_id, celery_task_id)
-        return ApiResponse.success(data=status)
-
-    except Exception as e:
-        logger.error(f"获取任务执行状态失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    service = ScheduledTaskService()
+    status = await service.get_task_execution_status(task_id, celery_task_id)
+    return ApiResponse.success(data=status)
 
 @router.post("/validate-cron")
 @handle_api_errors
@@ -405,22 +363,17 @@ async def validate_cron(
     Returns:
         验证结果和下次执行时间
     """
-    try:
-        service = ScheduledTaskService()
-        result = await service.validate_and_get_next_run(cron_expression)
+    service = ScheduledTaskService()
+    result = await service.validate_and_get_next_run(cron_expression)
 
-        if not result['valid']:
-            return ApiResponse.error(
-                data=result,
-                message="无效的Cron表达式",
-                code=400
-            ).to_dict()
-
-        return ApiResponse.success(
+    if not result['valid']:
+        return ApiResponse.error(
             data=result,
-            message="Cron表达式验证成功"
+            message="无效的Cron表达式",
+            code=400
         ).to_dict()
 
-    except Exception as e:
-        logger.error(f"验证Cron表达式失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(
+        data=result,
+        message="Cron表达式验证成功"
+    ).to_dict()

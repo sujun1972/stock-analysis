@@ -1,8 +1,10 @@
 """股票AI分析结果 Service"""
+import json
 import asyncio
 from typing import Dict, List, Optional
 from loguru import logger
 from app.repositories.stock_ai_analysis_repository import StockAiAnalysisRepository
+from app.services.ai_output_parser import extract_json_text, parse_ai_json
 
 ALLOWED_ANALYSIS_TYPES = {
     "hot_money_view",
@@ -12,6 +14,68 @@ ALLOWED_ANALYSIS_TYPES = {
     "cio_directive",
     "macro_risk_expert",
 }
+
+# 需要走 JSON 清洗 + 评分提取的分析类型集合
+JSON_ANALYSIS_TYPES = {
+    "hot_money_view",
+    "midline_industry_expert",
+    "longterm_value_watcher",
+    "cio_directive",
+    "macro_risk_expert",
+}
+
+# 评分查找路径（优先级从高到低）
+_SCORE_PATHS = [
+    ["final_score", "score"],   # 游资观点
+    ["comprehensive_score"],    # 中线专家 / 价值守望者 / CIO
+    ["score"],                  # CIO 简单结构兜底
+]
+
+
+def extract_json_and_score(ai_text: str) -> tuple[str, Optional[float]]:
+    """
+    从 AI 返回文本中：
+    1. 去掉 ```json ... ``` 代码块标识，只保留纯 JSON 内容
+    2. 尝试用 Pydantic 模型提取评分，失败降级为手动路径查找
+
+    返回 (cleaned_text, score_or_None)
+    """
+    from app.schemas.ai_analysis_result import StockExpertAnalysisResult
+
+    # 提取纯 JSON 文本
+    json_text = extract_json_text(ai_text)
+    cleaned = json_text if json_text else ai_text.strip()
+
+    # 优先：Pydantic 结构化解析 + 评分提取
+    parsed = parse_ai_json(ai_text, StockExpertAnalysisResult)
+    if parsed is not None:
+        score = parsed.extract_score()
+        if score is not None:
+            return cleaned, score
+
+    # 降级：手动路径查找
+    score: Optional[float] = None
+    try:
+        data = json.loads(cleaned)
+        for path in _SCORE_PATHS:
+            node = data
+            for key in path:
+                if not isinstance(node, dict):
+                    node = None
+                    break
+                node = node.get(key)
+            if node is not None:
+                try:
+                    candidate = float(node)
+                    if 0 <= candidate <= 10:
+                        score = candidate
+                        break
+                except (TypeError, ValueError):
+                    pass
+    except Exception:
+        pass
+
+    return cleaned, score
 
 
 class StockAiAnalysisService:

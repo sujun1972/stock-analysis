@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta
 
 from app.core.database import get_db
 from app.core.dependencies import require_admin
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.services.notification_monitor import NotificationMonitor
 from app.services.notification_alert import NotificationAlert
@@ -19,6 +20,7 @@ router = APIRouter()
 
 
 @router.get("/statistics")
+@handle_api_errors
 def get_notification_statistics(
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
@@ -58,6 +60,7 @@ def get_notification_statistics(
 
 
 @router.get("/failures")
+@handle_api_errors
 def get_notification_failures(
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
@@ -97,6 +100,7 @@ def get_notification_failures(
 
 
 @router.get("/failure-reasons")
+@handle_api_errors
 def get_failure_reasons_summary(
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
@@ -134,6 +138,7 @@ def get_failure_reasons_summary(
 
 
 @router.get("/channel-performance")
+@handle_api_errors
 def get_channel_performance(
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
@@ -171,6 +176,7 @@ def get_channel_performance(
 
 
 @router.get("/daily-trend")
+@handle_api_errors
 def get_daily_trend(
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
@@ -210,6 +216,7 @@ def get_daily_trend(
 
 
 @router.get("/realtime")
+@handle_api_errors
 def get_realtime_stats(
     db: Session = Depends(get_db),
     current_admin = Depends(require_admin)
@@ -236,6 +243,7 @@ def get_realtime_stats(
 
 
 @router.get("/health-check")
+@handle_api_errors
 def health_check(
     db: Session = Depends(get_db),
     current_admin = Depends(require_admin)
@@ -262,6 +270,7 @@ def health_check(
 
 
 @router.post("/check-and-alert")
+@handle_api_errors
 def check_and_alert(
     db: Session = Depends(get_db),
     current_admin = Depends(require_admin)
@@ -289,6 +298,7 @@ def check_and_alert(
 
 
 @router.get("/failure-analysis")
+@handle_api_errors
 def get_failure_analysis_and_suggestions(
     days: int = Query(7, ge=1, le=90, description="分析天数"),
     db: Session = Depends(get_db),
@@ -316,6 +326,7 @@ def get_failure_analysis_and_suggestions(
 
 
 @router.get("/user-stats/{user_id}")
+@handle_api_errors
 def get_user_notification_stats(
     user_id: int,
     days: int = Query(30, ge=1, le=90, description="统计天数"),

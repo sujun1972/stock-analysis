@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, require_admin
 from app.models.user import User
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.repositories.strategy_repository import StrategyRepository
 from app.repositories.publish_review_repository import PublishReviewRepository
@@ -27,6 +28,7 @@ router = APIRouter(tags=["admin-strategy-review"])
     summary="获取待审核策略列表",
     status_code=status.HTTP_200_OK
 )
+@handle_api_errors
 async def get_pending_review_strategies(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -58,6 +60,7 @@ async def get_pending_review_strategies(
     summary="批准策略发布",
     status_code=status.HTTP_200_OK
 )
+@handle_api_errors
 async def approve_strategy(
     strategy_id: int,
     request: ApproveStrategyRequest,
@@ -132,6 +135,7 @@ async def approve_strategy(
     summary="拒绝策略发布",
     status_code=status.HTTP_200_OK
 )
+@handle_api_errors
 async def reject_strategy(
     strategy_id: int,
     request: RejectStrategyRequest,
@@ -201,6 +205,7 @@ async def reject_strategy(
     status_code=status.HTTP_200_OK,
     response_model=List[PublishReviewResponse]
 )
+@handle_api_errors
 async def get_strategy_review_history(
     strategy_id: int,
     db: Session = Depends(get_db),
@@ -233,6 +238,7 @@ async def get_strategy_review_history(
     summary="取消策略发布",
     status_code=status.HTTP_200_OK
 )
+@handle_api_errors
 async def unpublish_strategy(
     strategy_id: int,
     db: Session = Depends(get_db),

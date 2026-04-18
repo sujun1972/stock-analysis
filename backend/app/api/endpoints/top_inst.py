@@ -9,6 +9,7 @@ from datetime import date
 from app.services.top_inst_service import TopInstService
 from app.services import TaskHistoryHelper
 from app.services.stock_quote_cache import stock_quote_cache
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.models.user import User
 from app.core.dependencies import require_admin
@@ -17,6 +18,7 @@ router = APIRouter()
 
 
 @router.get("")
+@handle_api_errors
 async def get_top_inst(
     trade_date: Optional[date] = Query(None, description="交易日期（单日查询）"),
     start_date: Optional[date] = Query(None, description="开始日期"),
@@ -62,6 +64,7 @@ async def get_top_inst(
 
 
 @router.get("/statistics")
+@handle_api_errors
 async def get_statistics(
     trade_date: Optional[date] = Query(None, description="交易日期（单日查询）"),
     start_date: Optional[date] = Query(None, description="开始日期"),
@@ -92,6 +95,7 @@ async def get_statistics(
 
 
 @router.get("/latest")
+@handle_api_errors
 async def get_latest():
     """
     获取最新交易日的龙虎榜机构明细数据
@@ -106,6 +110,7 @@ async def get_latest():
 
 
 @router.post("/sync-async")
+@handle_api_errors
 async def sync_async(
     trade_date: Optional[date] = Query(None, description="交易日期（可选，默认为前一个交易日）"),
     ts_code: Optional[str] = Query(None, description="股票代码"),
@@ -166,6 +171,7 @@ async def sync_async(
 
 
 @router.post("/sync-full-history")
+@handle_api_errors
 async def sync_top_inst_full_history(
     start_date: Optional[str] = Query(None, description="起始日期，格式：YYYYMMDD 或 YYYY-MM-DD，不传则从最早历史开始"),
     concurrency: Optional[int] = Query(None, ge=1, le=20, description="并发数，不传则从 sync_configs 读取"),

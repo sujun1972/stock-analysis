@@ -5,13 +5,11 @@
 全量同步：独立端点 /sync-full-history
 """
 
-import asyncio
 from typing import Optional
 from fastapi import APIRouter, Query, Depends
 from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.services.forecast_service import ForecastService
-from app.services import TaskHistoryHelper
 from app.core.dependencies import require_admin
 from app.models.user import User
 
@@ -85,28 +83,13 @@ async def sync_forecast_async(
     从 sync_configs 读取 incremental_task_name，动态分发任务。
     不传日期参数，由 Service 层的 sync_incremental() 自动计算。
     """
-    from app.repositories.sync_config_repository import SyncConfigRepository
-
-    cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'forecast')
-    task_name = (cfg.get('incremental_task_name') or 'tasks.sync_forecast') if cfg else 'tasks.sync_forecast'
-
-    from app.celery_app import celery_app
-    celery_task = celery_app.send_task(task_name)
-
-    helper = TaskHistoryHelper()
-    task_data = await helper.create_task_record(
-        celery_task_id=celery_task.id,
-        task_name=task_name,
+    from app.api.sync_utils import dispatch_incremental_sync
+    return await dispatch_incremental_sync(
+        table_key='forecast',
         display_name='业绩预告增量同步',
-        task_type='data_sync',
+        fallback_task_name='tasks.sync_forecast',
         user_id=current_user.id,
-        task_params={},
-        source='forecast_page'
-    )
-
-    return ApiResponse.success(
-        data=task_data,
-        message="增量同步任务已提交，正在后台执行"
+        source='forecast_page',
     )
 
 
@@ -117,30 +100,13 @@ async def sync_forecast_full_history_async(
     current_user: User = Depends(require_admin)
 ):
     """触发全量历史业绩预告同步（可中断续继）"""
-    from app.api.endpoints.sync_dashboard import release_stale_lock
-    await asyncio.to_thread(release_stale_lock, 'forecast')
-    from app.repositories.sync_config_repository import SyncConfigRepository
-
-    if concurrency is None:
-        sync_config_repo = SyncConfigRepository()
-        cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'forecast')
-        concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
-
-    from app.celery_app import celery_app
-    celery_task = celery_app.send_task(
-        'tasks.sync_forecast_full_history',
-        kwargs={'concurrency': concurrency}
-    )
-
-    helper = TaskHistoryHelper()
-    task_data = await helper.create_task_record(
-        celery_task_id=celery_task.id,
-        task_name='tasks.sync_forecast_full_history',
+    from app.api.sync_utils import dispatch_full_history_sync
+    return await dispatch_full_history_sync(
+        table_key='forecast',
         display_name='业绩预告全量同步',
-        task_type='data_sync',
+        task_name='tasks.sync_forecast_full_history',
         user_id=current_user.id,
-        task_params={'concurrency': concurrency},
-        source='forecast_page'
+        source='forecast_page',
+        concurrency=concurrency,
+        default_concurrency=5,
     )
-
-    return ApiResponse.success(data=task_data, message="全量同步任务已提交")

@@ -86,6 +86,23 @@ async def get_items():
 
 ---
 
+## API 错误处理
+
+所有 API 端点必须使用 `@handle_api_errors` 装饰器，禁止手写 `try-except` + `HTTPException` 样板：
+
+```python
+from app.api.error_handler import handle_api_errors
+
+@router.get("/items")
+@handle_api_errors
+async def get_items():
+    return ApiResponse.success(data=await service.fetch())
+```
+
+装饰器统一处理 `ValueError`/`KeyError`/`PermissionError`/`APIError` 等异常并返回标准 `HTTPException`。同步端点用 `@handle_api_errors_sync`。
+
+---
+
 ## API 权限控制
 
 ```python
@@ -503,6 +520,40 @@ backend/app/scheduler/
 **`FULL_SYNC_REDIS_KEYS`（在 `sync_dashboard.py` 中维护）**：记录各表全量同步的 Redis Set key。新增支持全量续继的表时**必须**同步更新，否则同步配置页面无法查询/清除进度。
 
 **`release_stale_lock(table_key)`**：所有全量同步 API 端点在提交 Celery task 前必须调用，自动清除因任务 revoke 或 worker 崩溃留下的残留 Redis lock。
+
+### 同步端点公共分发器（`api/sync_utils.py`）
+
+无业务参数的标准同步端点（`POST /api/{table}/sync-async` 和 `/sync-full-history`）必须使用 `sync_utils` 的两个分发器，不再手写 `release_stale_lock` + `send_task` + `TaskHistoryHelper.create_task_record` 样板：
+
+```python
+from app.api.sync_utils import dispatch_incremental_sync, dispatch_full_history_sync
+
+@router.post("/sync-async")
+@handle_api_errors
+async def sync_async(current_user: User = Depends(require_admin)):
+    return await dispatch_incremental_sync(
+        table_key='daily_basic',
+        display_name='每日指标增量同步',
+        fallback_task_name='tasks.sync_daily_basic_incremental',
+        user_id=current_user.id,
+        source='daily_basic_page',
+    )
+
+@router.post("/sync-full-history")
+@handle_api_errors
+async def sync_full_history(concurrency: Optional[int] = Query(None), current_user: User = Depends(require_admin)):
+    return await dispatch_full_history_sync(
+        table_key='daily_basic',
+        display_name='每日指标全量历史同步',
+        task_name='tasks.sync_daily_basic_full_history',
+        user_id=current_user.id,
+        source='daily_basic_page',
+        concurrency=concurrency,
+        default_concurrency=8,
+    )
+```
+
+需要传业务参数（如 `ts_code`、`trade_date`）的端点仍保留手写实现（参考 `adj_factor.py`）。
 
 ---
 

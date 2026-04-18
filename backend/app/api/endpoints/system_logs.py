@@ -23,6 +23,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from loguru import logger
 
+from app.api.error_handler import handle_api_errors
 from app.schemas.system_logs import (
     SystemLogRecord,
     LogFileInfo,
@@ -110,6 +111,7 @@ def parse_log_record(line: str) -> Optional[SystemLogRecord]:
 
 
 @router.get("/files", response_model=ApiResponse, summary="获取日志文件列表")
+@handle_api_errors
 async def get_log_files(
     log_type: Optional[LogType] = Query(None, description="日志类型过滤"),
     current_user: User = Depends(require_admin)
@@ -121,58 +123,52 @@ async def get_log_files(
     - 返回文件名、类型、日期、大小等信息
     - 可按日志类型过滤
     """
-    try:
-        log_dir = get_log_directory()
-        files_info: List[LogFileInfo] = []
+    log_dir = get_log_directory()
+    files_info: List[LogFileInfo] = []
 
-        # 遍历日志文件
-        for file_path in log_dir.glob("*.json"):
-            filename = file_path.name
+    # 遍历日志文件
+    for file_path in log_dir.glob("*.json"):
+        filename = file_path.name
 
-            # 解析文件名: app_2026-02-09.json
-            parts = filename.replace(".json", "").split("_")
-            if len(parts) < 2:
-                continue
+        # 解析文件名: app_2026-02-09.json
+        parts = filename.replace(".json", "").split("_")
+        if len(parts) < 2:
+            continue
 
-            file_type = parts[0]
-            file_date = parts[1]
+        file_type = parts[0]
+        file_date = parts[1]
 
-            # 类型过滤
-            if log_type and file_type != log_type.value:
-                continue
+        # 类型过滤
+        if log_type and file_type != log_type.value:
+            continue
 
-            # 获取文件大小
-            size = file_path.stat().st_size
+        # 获取文件大小
+        size = file_path.stat().st_size
 
-            files_info.append(LogFileInfo(
-                filename=filename,
-                type=file_type,
-                date=file_date,
-                size=size,
-                size_human=format_size(size),
-                path=str(file_path.relative_to(settings.BASE_DIR))
-            ))
+        files_info.append(LogFileInfo(
+            filename=filename,
+            type=file_type,
+            date=file_date,
+            size=size,
+            size_human=format_size(size),
+            path=str(file_path.relative_to(settings.BASE_DIR))
+        ))
 
-        # 按日期降序排序
-        files_info.sort(key=lambda x: x.date, reverse=True)
+    # 按日期降序排序
+    files_info.sort(key=lambda x: x.date, reverse=True)
 
-        logger.bind(count=len(files_info)).info("查询日志文件列表成功")
+    logger.bind(count=len(files_info)).info("查询日志文件列表成功")
 
-        return ApiResponse.success(
-            data={
-                "files": [f.model_dump() for f in files_info]
-            },
-            message="获取日志文件列表成功"
-        ).to_dict()
-    except Exception as e:
-        logger.error(f"获取日志文件列表失败: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+    return ApiResponse.success(
+        data={
+            "files": [f.model_dump() for f in files_info]
+        },
+        message="获取日志文件列表成功"
+    ).to_dict()
 
 
 @router.get("/query", response_model=ApiResponse, summary="查询系统日志")
+@handle_api_errors
 async def query_system_logs(
     log_type: LogType = Query(LogType.APP, description="日志类型"),
     log_date: Optional[date] = Query(None, description="日志日期 (格式: YYYY-MM-DD)"),
@@ -198,96 +194,87 @@ async def query_system_logs(
     - module: 模块名称，如 "api", "core", "services"
     - search: 在日志消息中搜索关键词
     """
-    try:
-        log_dir = get_log_directory()
+    log_dir = get_log_directory()
 
-        # 确定要读取的日志文件
-        if log_date:
-            filename = f"{log_type.value}_{log_date.strftime('%Y-%m-%d')}.json"
-        else:
-            # 获取最新的日志文件
-            files = sorted(
-                log_dir.glob(f"{log_type.value}_*.json"),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True
-            )
-            if not files:
-                return ApiResponse.success(
-                    data={
-                        "total": 0,
-                        "page": page,
-                        "page_size": page_size,
-                        "logs": []
-                    },
-                    message="未找到日志文件"
-                ).to_dict()
-            filename = files[0].name
-
-        log_file = log_dir / filename
-        if not log_file.exists():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"日志文件不存在: {filename}"
-            )
-
-        logger.bind(file=filename, page=page).info("开始读取日志文件")
-
-        # 读取并解析日志
-        all_logs: List[SystemLogRecord] = []
-        with open(log_file, 'r', encoding='utf-8') as f:
-            for line in f:
-                if not line.strip():
-                    continue
-
-                record = parse_log_record(line)
-                if not record:
-                    continue
-
-                # 应用过滤条件
-                if level and record.level != level.value:
-                    continue
-
-                if module and record.module != module:
-                    continue
-
-                if search and search.lower() not in record.message.lower():
-                    continue
-
-                all_logs.append(record)
-
-        # 分页
-        total = len(all_logs)
-        start = (page - 1) * page_size
-        end = start + page_size
-        page_logs = all_logs[start:end]
-
-        logger.bind(
-            total=total,
-            page=page,
-            returned=len(page_logs)
-        ).info("查询系统日志成功")
-
-        return ApiResponse.success(
-            data={
-                "total": total,
-                "page": page,
-                "page_size": page_size,
-                "logs": [log.model_dump() for log in page_logs]
-            },
-            message="查询系统日志成功"
-        ).to_dict()
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"查询系统日志失败: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"查询日志失败: {str(e)}"
+    # 确定要读取的日志文件
+    if log_date:
+        filename = f"{log_type.value}_{log_date.strftime('%Y-%m-%d')}.json"
+    else:
+        # 获取最新的日志文件
+        files = sorted(
+            log_dir.glob(f"{log_type.value}_*.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True
         )
+        if not files:
+            return ApiResponse.success(
+                data={
+                    "total": 0,
+                    "page": page,
+                    "page_size": page_size,
+                    "logs": []
+                },
+                message="未找到日志文件"
+            ).to_dict()
+        filename = files[0].name
+
+    log_file = log_dir / filename
+    if not log_file.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"日志文件不存在: {filename}"
+        )
+
+    logger.bind(file=filename, page=page).info("开始读取日志文件")
+
+    # 读取并解析日志
+    all_logs: List[SystemLogRecord] = []
+    with open(log_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            if not line.strip():
+                continue
+
+            record = parse_log_record(line)
+            if not record:
+                continue
+
+            # 应用过滤条件
+            if level and record.level != level.value:
+                continue
+
+            if module and record.module != module:
+                continue
+
+            if search and search.lower() not in record.message.lower():
+                continue
+
+            all_logs.append(record)
+
+    # 分页
+    total = len(all_logs)
+    start = (page - 1) * page_size
+    end = start + page_size
+    page_logs = all_logs[start:end]
+
+    logger.bind(
+        total=total,
+        page=page,
+        returned=len(page_logs)
+    ).info("查询系统日志成功")
+
+    return ApiResponse.success(
+        data={
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "logs": [log.model_dump() for log in page_logs]
+        },
+        message="查询系统日志成功"
+    ).to_dict()
 
 
 @router.get("/statistics", response_model=ApiResponse, summary="获取日志统计信息")
+@handle_api_errors
 async def get_log_statistics(
     log_type: LogType = Query(LogType.APP, description="日志类型"),
     log_date: Optional[date] = Query(None, description="日志日期"),
@@ -299,87 +286,77 @@ async def get_log_statistics(
     - 仅管理员可访问
     - 统计日志总数、各级别分布、模块分布等
     """
-    try:
-        log_dir = get_log_directory()
+    log_dir = get_log_directory()
 
-        # 确定要读取的日志文件
-        if log_date:
-            filename = f"{log_type.value}_{log_date.strftime('%Y-%m-%d')}.json"
-        else:
-            files = sorted(
-                log_dir.glob(f"{log_type.value}_*.json"),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True
-            )
-            if not files:
-                return ApiResponse.success(
-                    data={
-                        "total_logs": 0,
-                        "by_level": {},
-                        "by_module": {},
-                        "error_count": 0,
-                        "warning_count": 0
-                    },
-                    message="未找到日志文件"
-                ).to_dict()
-            filename = files[0].name
-
-        log_file = log_dir / filename
-        if not log_file.exists():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"日志文件不存在: {filename}"
-            )
-
-        # 统计数据
-        total_logs = 0
-        by_level: dict = {}
-        by_module: dict = {}
-        error_count = 0
-        warning_count = 0
-
-        with open(log_file, 'r', encoding='utf-8') as f:
-            for line in f:
-                if not line.strip():
-                    continue
-
-                record = parse_log_record(line)
-                if not record:
-                    continue
-
-                total_logs += 1
-
-                # 按级别统计
-                by_level[record.level] = by_level.get(record.level, 0) + 1
-
-                # 按模块统计
-                if record.module:
-                    by_module[record.module] = by_module.get(record.module, 0) + 1
-
-                # 错误和警告计数
-                if record.level == "ERROR" or record.level == "CRITICAL":
-                    error_count += 1
-                elif record.level == "WARNING":
-                    warning_count += 1
-
-        logger.bind(total=total_logs).info("生成日志统计信息成功")
-
-        return ApiResponse.success(
-            data={
-                "total_logs": total_logs,
-                "by_level": by_level,
-                "by_module": dict(sorted(by_module.items(), key=lambda x: x[1], reverse=True)[:10]),  # Top 10模块
-                "error_count": error_count,
-                "warning_count": warning_count
-            },
-            message="生成日志统计信息成功"
-        ).to_dict()
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"获取日志统计失败: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"统计失败: {str(e)}"
+    # 确定要读取的日志文件
+    if log_date:
+        filename = f"{log_type.value}_{log_date.strftime('%Y-%m-%d')}.json"
+    else:
+        files = sorted(
+            log_dir.glob(f"{log_type.value}_*.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True
         )
+        if not files:
+            return ApiResponse.success(
+                data={
+                    "total_logs": 0,
+                    "by_level": {},
+                    "by_module": {},
+                    "error_count": 0,
+                    "warning_count": 0
+                },
+                message="未找到日志文件"
+            ).to_dict()
+        filename = files[0].name
+
+    log_file = log_dir / filename
+    if not log_file.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"日志文件不存在: {filename}"
+        )
+
+    # 统计数据
+    total_logs = 0
+    by_level: dict = {}
+    by_module: dict = {}
+    error_count = 0
+    warning_count = 0
+
+    with open(log_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            if not line.strip():
+                continue
+
+            record = parse_log_record(line)
+            if not record:
+                continue
+
+            total_logs += 1
+
+            # 按级别统计
+            by_level[record.level] = by_level.get(record.level, 0) + 1
+
+            # 按模块统计
+            if record.module:
+                by_module[record.module] = by_module.get(record.module, 0) + 1
+
+            # 错误和警告计数
+            if record.level == "ERROR" or record.level == "CRITICAL":
+                error_count += 1
+            elif record.level == "WARNING":
+                warning_count += 1
+
+    logger.bind(total=total_logs).info("生成日志统计信息成功")
+
+    return ApiResponse.success(
+        data={
+            "total_logs": total_logs,
+            "by_level": by_level,
+            "by_module": dict(sorted(by_module.items(), key=lambda x: x[1], reverse=True)[:10]),  # Top 10模块
+            "error_count": error_count,
+            "warning_count": warning_count
+        },
+        message="生成日志统计信息成功"
+    ).to_dict()

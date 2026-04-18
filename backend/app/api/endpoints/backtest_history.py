@@ -6,8 +6,8 @@
 import asyncio
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException, status
-from loguru import logger
 
+from app.api.error_handler import handle_api_errors
 from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.models.api_response import ApiResponse
@@ -17,6 +17,7 @@ router = APIRouter(tags=["回测历史"])
 
 
 @router.get("")
+@handle_api_errors
 async def get_user_backtest_history(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
@@ -29,28 +30,21 @@ async def get_user_backtest_history(
 
     支持分页、状态筛选和策略筛选
     """
-    try:
-        service = BacktestHistoryService()
-        result = await asyncio.to_thread(
-            service.get_user_history,
-            username=current_user.username,
-            page=page,
-            page_size=page_size,
-            status_filter=status_filter,
-            strategy_id=strategy_id
-        )
+    service = BacktestHistoryService()
+    result = await asyncio.to_thread(
+        service.get_user_history,
+        username=current_user.username,
+        page=page,
+        page_size=page_size,
+        status_filter=status_filter,
+        strategy_id=strategy_id
+    )
 
-        return ApiResponse.success(data=result)
-
-    except Exception as e:
-        logger.error(f"获取回测历史失败: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取回测历史失败: {str(e)}"
-        )
+    return ApiResponse.success(data=result)
 
 
 @router.get("/{execution_id}")
+@handle_api_errors
 async def get_backtest_detail(
     execution_id: int,
     current_user: User = Depends(get_current_user)
@@ -60,16 +54,13 @@ async def get_backtest_detail(
 
     只能查看自己的回测记录
     """
+    service = BacktestHistoryService()
     try:
-        service = BacktestHistoryService()
         detail = await asyncio.to_thread(
             service.get_backtest_detail,
             execution_id=execution_id,
             username=current_user.username
         )
-
-        return ApiResponse.success(data=detail)
-
     except ValueError as e:
         error_msg = str(e)
         if "不存在" in error_msg:
@@ -84,18 +75,11 @@ async def get_backtest_detail(
             )
         raise
 
-    except HTTPException:
-        raise
-
-    except Exception as e:
-        logger.error(f"获取回测详情失败: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取回测详情失败: {str(e)}"
-        )
+    return ApiResponse.success(data=detail)
 
 
 @router.delete("/{execution_id}")
+@handle_api_errors
 async def delete_backtest_record(
     execution_id: int,
     current_user: User = Depends(get_current_user)
@@ -105,16 +89,13 @@ async def delete_backtest_record(
 
     只能删除自己的回测记录
     """
+    service = BacktestHistoryService()
     try:
-        service = BacktestHistoryService()
         await asyncio.to_thread(
             service.delete_backtest_record,
             execution_id=execution_id,
             username=current_user.username
         )
-
-        return ApiResponse.success(message="回测记录已删除")
-
     except ValueError as e:
         error_msg = str(e)
         if "不存在" in error_msg:
@@ -129,12 +110,4 @@ async def delete_backtest_record(
             )
         raise
 
-    except HTTPException:
-        raise
-
-    except Exception as e:
-        logger.error(f"删除回测记录失败: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"删除回测记录失败: {str(e)}"
-        )
+    return ApiResponse.success(message="回测记录已删除")

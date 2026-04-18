@@ -13,7 +13,6 @@ from app.core.dependencies import require_admin
 from app.models.user import User
 from app.services.disclosure_date_service import DisclosureDateService
 from app.models.api_response import ApiResponse
-from app.services import TaskHistoryHelper
 
 router = APIRouter()
 
@@ -95,28 +94,13 @@ async def sync_disclosure_date_async(
     从 sync_configs 读取 incremental_task_name，动态分发任务。
     不传日期参数，由 Service 层的 sync_incremental() 自动计算。
     """
-    from app.repositories.sync_config_repository import SyncConfigRepository
-
-    cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'disclosure_date')
-    task_name = (cfg.get('incremental_task_name') or 'tasks.sync_disclosure_date') if cfg else 'tasks.sync_disclosure_date'
-
-    from app.celery_app import celery_app
-    celery_task = celery_app.send_task(task_name)
-
-    helper = TaskHistoryHelper()
-    task_data = await helper.create_task_record(
-        celery_task_id=celery_task.id,
-        task_name=task_name,
+    from app.api.sync_utils import dispatch_incremental_sync
+    return await dispatch_incremental_sync(
+        table_key='disclosure_date',
         display_name='财报披露计划增量同步',
-        task_type='data_sync',
+        fallback_task_name='tasks.sync_disclosure_date',
         user_id=current_user.id,
-        task_params={},
-        source='disclosure_date_page'
-    )
-
-    return ApiResponse.success(
-        data=task_data,
-        message="增量同步任务已提交，正在后台执行"
+        source='disclosure_date_page',
     )
 
 
@@ -127,30 +111,13 @@ async def sync_disclosure_date_full_history_async(
     current_user: User = Depends(require_admin)
 ):
     """触发全量历史财报披露计划同步（可中断续继）"""
-    from app.api.endpoints.sync_dashboard import release_stale_lock
-    await asyncio.to_thread(release_stale_lock, 'disclosure_date')
-    from app.repositories.sync_config_repository import SyncConfigRepository
-
-    if concurrency is None:
-        sync_config_repo = SyncConfigRepository()
-        cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'disclosure_date')
-        concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
-
-    from app.celery_app import celery_app
-    celery_task = celery_app.send_task(
-        'tasks.sync_disclosure_date_full_history',
-        kwargs={'concurrency': concurrency}
-    )
-
-    helper = TaskHistoryHelper()
-    task_data = await helper.create_task_record(
-        celery_task_id=celery_task.id,
-        task_name='tasks.sync_disclosure_date_full_history',
+    from app.api.sync_utils import dispatch_full_history_sync
+    return await dispatch_full_history_sync(
+        table_key='disclosure_date',
         display_name='财报披露计划全量同步',
-        task_type='data_sync',
+        task_name='tasks.sync_disclosure_date_full_history',
         user_id=current_user.id,
-        task_params={'concurrency': concurrency},
-        source='disclosure_date_page'
+        source='disclosure_date_page',
+        concurrency=concurrency,
+        default_concurrency=5,
     )
-
-    return ApiResponse.success(data=task_data, message="全量同步任务已提交")

@@ -18,6 +18,7 @@ from loguru import logger
 from typing import Optional
 import os
 
+from app.api.error_handler import handle_api_errors
 from src.premarket.fetcher import PremarketDataFetcher
 from src.database.connection_pool_manager import ConnectionPoolManager
 from app.services.premarket_analysis_service import premarket_analysis_service
@@ -44,6 +45,7 @@ def get_pool_manager():
 
 
 @router.post("/sync")
+@handle_api_errors
 async def sync_premarket_data(
     date: Optional[str] = Query(None, description="交易日期(YYYY-MM-DD)，默认今天"),
     current_user: User = Depends(get_current_user)
@@ -61,39 +63,35 @@ async def sync_premarket_data(
 
     **返回**: 同步结果和数据统计
     """
-    try:
-        if not date:
-            date = datetime.now().strftime('%Y-%m-%d')
+    if not date:
+        date = datetime.now().strftime('%Y-%m-%d')
 
-        logger.info(f"用户 {current_user.username} 请求同步 {date} 的盘前数据")
+    logger.info(f"用户 {current_user.username} 请求同步 {date} 的盘前数据")
 
-        pool_manager = get_pool_manager()
-        fetcher = PremarketDataFetcher(pool_manager)
+    pool_manager = get_pool_manager()
+    fetcher = PremarketDataFetcher(pool_manager)
 
-        result = fetcher.sync_premarket_data(date)
+    result = fetcher.sync_premarket_data(date)
 
-        if result.success:
-            return ApiResponse.success(
-                data={
-                    "trade_date": result.trade_date,
-                    "is_trading_day": result.is_trading_day,
-                    "synced_tables": result.synced_tables,
-                    "details": result.details
-                },
-                message="盘前数据同步成功" if result.is_trading_day else f"{date}非交易日，已跳过"
-            ).to_dict()
-        else:
-            return ApiResponse.error(
-                message=result.error or "同步失败",
-                code=400
-            ).to_dict()
-
-    except Exception as e:
-        logger.error(f"同步盘前数据失败: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"同步失败: {str(e)}")
+    if result.success:
+        return ApiResponse.success(
+            data={
+                "trade_date": result.trade_date,
+                "is_trading_day": result.is_trading_day,
+                "synced_tables": result.synced_tables,
+                "details": result.details
+            },
+            message="盘前数据同步成功" if result.is_trading_day else f"{date}非交易日，已跳过"
+        ).to_dict()
+    else:
+        return ApiResponse.error(
+            message=result.error or "同步失败",
+            code=400
+        ).to_dict()
 
 
 @router.post("/collision-analysis/generate")
+@handle_api_errors
 async def generate_collision_analysis(
     date: Optional[str] = Query(None, description="交易日期(YYYY-MM-DD)，默认今天"),
     provider: str = Query("deepseek", description="AI提供商"),
@@ -119,35 +117,31 @@ async def generate_collision_analysis(
 
     **返回**: 完整的碰撞分析结果
     """
-    try:
-        if not date:
-            date = datetime.now().strftime('%Y-%m-%d')
+    if not date:
+        date = datetime.now().strftime('%Y-%m-%d')
 
-        logger.info(f"用户 {current_user.username} 请求生成 {date} 的碰撞分析（provider={provider}）")
+    logger.info(f"用户 {current_user.username} 请求生成 {date} 的碰撞分析（provider={provider}）")
 
-        result = await premarket_analysis_service.generate_collision_analysis(
-            trade_date=date,
-            provider=provider,
-            model=model
-        )
+    result = await premarket_analysis_service.generate_collision_analysis(
+        trade_date=date,
+        provider=provider,
+        model=model
+    )
 
-        if result.get("success"):
-            return ApiResponse.success(
-                data=result,
-                message="碰撞分析生成成功"
-            ).to_dict()
-        else:
-            return ApiResponse.error(
-                message=result.get("error", "生成失败"),
-                code=400
-            ).to_dict()
-
-    except Exception as e:
-        logger.error(f"生成碰撞分析失败: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"生成失败: {str(e)}")
+    if result.get("success"):
+        return ApiResponse.success(
+            data=result,
+            message="碰撞分析生成成功"
+        ).to_dict()
+    else:
+        return ApiResponse.error(
+            message=result.get("error", "生成失败"),
+            code=400
+        ).to_dict()
 
 
 @router.get("/collision-analysis/{date}")
+@handle_api_errors
 async def get_collision_analysis(
     date: str,
     current_user: User = Depends(get_current_user)
@@ -165,25 +159,19 @@ async def get_collision_analysis(
     - action_command: 行动指令
     - AI元信息（provider、tokens、耗时）
     """
-    try:
-        result = premarket_analysis_service.get_collision_analysis(date)
+    result = premarket_analysis_service.get_collision_analysis(date)
 
-        if result:
-            return ApiResponse.success(
-                data=result,
-                message="查询成功"
-            ).to_dict()
-        else:
-            raise HTTPException(status_code=404, detail=f"{date} 无碰撞分析数据")
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"查询碰撞分析失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
+    if result:
+        return ApiResponse.success(
+            data=result,
+            message="查询成功"
+        ).to_dict()
+    else:
+        raise HTTPException(status_code=404, detail=f"{date} 无碰撞分析数据")
 
 
 @router.get("/overnight-data/{date}")
+@handle_api_errors
 async def get_overnight_data(
     date: str,
     current_user: User = Depends(get_current_user)
@@ -200,86 +188,80 @@ async def get_overnight_data(
     - 美元兑人民币（资金流向）
     - 美股三大指数（参考）
     """
-    try:
-        pool_manager = get_pool_manager()
-        conn = pool_manager.get_connection()
-        cursor = conn.cursor()
+    pool_manager = get_pool_manager()
+    conn = pool_manager.get_connection()
+    cursor = conn.cursor()
 
-        cursor.execute("""
-            SELECT
-                trade_date, a50_close, a50_change,
-                china_concept_close, china_concept_change,
-                wti_crude_close, wti_crude_change,
-                comex_gold_close, comex_gold_change,
-                lme_copper_close, lme_copper_change,
-                usdcnh_close, usdcnh_change,
-                sp500_close, sp500_change,
-                nasdaq_close, nasdaq_change,
-                dow_close, dow_change,
-                fetch_time
-            FROM overnight_market_data
-            WHERE trade_date = %s
-        """, (date,))
+    cursor.execute("""
+        SELECT
+            trade_date, a50_close, a50_change,
+            china_concept_close, china_concept_change,
+            wti_crude_close, wti_crude_change,
+            comex_gold_close, comex_gold_change,
+            lme_copper_close, lme_copper_change,
+            usdcnh_close, usdcnh_change,
+            sp500_close, sp500_change,
+            nasdaq_close, nasdaq_change,
+            dow_close, dow_change,
+            fetch_time
+        FROM overnight_market_data
+        WHERE trade_date = %s
+    """, (date,))
 
-        row = cursor.fetchone()
-        cursor.close()
-        pool_manager.release_connection(conn)
+    row = cursor.fetchone()
+    cursor.close()
+    pool_manager.release_connection(conn)
 
-        if row:
-            return ApiResponse.success(
-                data={
-                    "trade_date": str(row[0]),
-                    "a50": {
-                        "close": float(row[1]) if row[1] else 0,
-                        "change": float(row[2]) if row[2] else 0
-                    },
-                    "china_concept": {
-                        "close": float(row[3]) if row[3] else 0,
-                        "change": float(row[4]) if row[4] else 0
-                    },
-                    "wti_crude": {
-                        "close": float(row[5]) if row[5] else 0,
-                        "change": float(row[6]) if row[6] else 0
-                    },
-                    "comex_gold": {
-                        "close": float(row[7]) if row[7] else 0,
-                        "change": float(row[8]) if row[8] else 0
-                    },
-                    "lme_copper": {
-                        "close": float(row[9]) if row[9] else 0,
-                        "change": float(row[10]) if row[10] else 0
-                    },
-                    "usdcnh": {
-                        "close": float(row[11]) if row[11] else 0,
-                        "change": float(row[12]) if row[12] else 0
-                    },
-                    "sp500": {
-                        "close": float(row[13]) if row[13] else 0,
-                        "change": float(row[14]) if row[14] else 0
-                    },
-                    "nasdaq": {
-                        "close": float(row[15]) if row[15] else 0,
-                        "change": float(row[16]) if row[16] else 0
-                    },
-                    "dow": {
-                        "close": float(row[17]) if row[17] else 0,
-                        "change": float(row[18]) if row[18] else 0
-                    },
-                    "fetch_time": str(row[19]) if row[19] else None
+    if row:
+        return ApiResponse.success(
+            data={
+                "trade_date": str(row[0]),
+                "a50": {
+                    "close": float(row[1]) if row[1] else 0,
+                    "change": float(row[2]) if row[2] else 0
                 },
-                message="查询成功"
-            ).to_dict()
-        else:
-            raise HTTPException(status_code=404, detail=f"{date} 无外盘数据")
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"查询外盘数据失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
+                "china_concept": {
+                    "close": float(row[3]) if row[3] else 0,
+                    "change": float(row[4]) if row[4] else 0
+                },
+                "wti_crude": {
+                    "close": float(row[5]) if row[5] else 0,
+                    "change": float(row[6]) if row[6] else 0
+                },
+                "comex_gold": {
+                    "close": float(row[7]) if row[7] else 0,
+                    "change": float(row[8]) if row[8] else 0
+                },
+                "lme_copper": {
+                    "close": float(row[9]) if row[9] else 0,
+                    "change": float(row[10]) if row[10] else 0
+                },
+                "usdcnh": {
+                    "close": float(row[11]) if row[11] else 0,
+                    "change": float(row[12]) if row[12] else 0
+                },
+                "sp500": {
+                    "close": float(row[13]) if row[13] else 0,
+                    "change": float(row[14]) if row[14] else 0
+                },
+                "nasdaq": {
+                    "close": float(row[15]) if row[15] else 0,
+                    "change": float(row[16]) if row[16] else 0
+                },
+                "dow": {
+                    "close": float(row[17]) if row[17] else 0,
+                    "change": float(row[18]) if row[18] else 0
+                },
+                "fetch_time": str(row[19]) if row[19] else None
+            },
+            message="查询成功"
+        ).to_dict()
+    else:
+        raise HTTPException(status_code=404, detail=f"{date} 无外盘数据")
 
 
 @router.get("/news/{date}")
+@handle_api_errors
 async def get_premarket_news(
     date: str,
     importance: Optional[str] = Query(None, description="重要性级别过滤: critical/high/medium"),
@@ -297,60 +279,56 @@ async def get_premarket_news(
 
     **返回**: 新闻列表（最多50条）
     """
-    try:
-        pool_manager = get_pool_manager()
-        conn = pool_manager.get_connection()
-        cursor = conn.cursor()
+    pool_manager = get_pool_manager()
+    conn = pool_manager.get_connection()
+    cursor = conn.cursor()
 
-        sql = """
-            SELECT
-                id, trade_date, news_time, source, title,
-                content, keywords, importance_level, created_at
-            FROM premarket_news_flash
-            WHERE trade_date = %s
-        """
+    sql = """
+        SELECT
+            id, trade_date, news_time, source, title,
+            content, keywords, importance_level, created_at
+        FROM premarket_news_flash
+        WHERE trade_date = %s
+    """
 
-        params = [date]
+    params = [date]
 
-        if importance:
-            sql += " AND importance_level = %s"
-            params.append(importance)
+    if importance:
+        sql += " AND importance_level = %s"
+        params.append(importance)
 
-        sql += " ORDER BY news_time DESC LIMIT 50"
+    sql += " ORDER BY news_time DESC LIMIT 50"
 
-        cursor.execute(sql, params)
-        rows = cursor.fetchall()
-        cursor.close()
-        pool_manager.release_connection(conn)
+    cursor.execute(sql, params)
+    rows = cursor.fetchall()
+    cursor.close()
+    pool_manager.release_connection(conn)
 
-        news_list = []
-        for row in rows:
-            news_list.append({
-                "id": row[0],
-                "trade_date": str(row[1]),
-                "news_time": str(row[2]),
-                "source": row[3],
-                "title": row[4],
-                "content": row[5],
-                "keywords": row[6],
-                "importance_level": row[7],
-                "created_at": str(row[8]) if row[8] else None
-            })
+    news_list = []
+    for row in rows:
+        news_list.append({
+            "id": row[0],
+            "trade_date": str(row[1]),
+            "news_time": str(row[2]),
+            "source": row[3],
+            "title": row[4],
+            "content": row[5],
+            "keywords": row[6],
+            "importance_level": row[7],
+            "created_at": str(row[8]) if row[8] else None
+        })
 
-        return ApiResponse.success(
-            data={
-                "count": len(news_list),
-                "news": news_list
-            },
-            message="查询成功"
-        ).to_dict()
-
-    except Exception as e:
-        logger.error(f"查询盘前新闻失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
+    return ApiResponse.success(
+        data={
+            "count": len(news_list),
+            "news": news_list
+        },
+        message="查询成功"
+    ).to_dict()
 
 
 @router.get("/history")
+@handle_api_errors
 async def get_analysis_history(
     limit: int = Query(10, description="返回记录数", ge=1, le=100),
     current_user: User = Depends(get_current_user)
@@ -370,43 +348,38 @@ async def get_analysis_history(
 
     **用途**: 用于回溯历史建议，评估准确性
     """
-    try:
-        pool_manager = get_pool_manager()
-        conn = pool_manager.get_connection()
-        cursor = conn.cursor()
+    pool_manager = get_pool_manager()
+    conn = pool_manager.get_connection()
+    cursor = conn.cursor()
 
-        cursor.execute("""
-            SELECT
-                trade_date, action_command, status,
-                ai_provider, ai_model, tokens_used,
-                generation_time, created_at
-            FROM premarket_collision_analysis
-            ORDER BY trade_date DESC
-            LIMIT %s
-        """, (limit,))
+    cursor.execute("""
+        SELECT
+            trade_date, action_command, status,
+            ai_provider, ai_model, tokens_used,
+            generation_time, created_at
+        FROM premarket_collision_analysis
+        ORDER BY trade_date DESC
+        LIMIT %s
+    """, (limit,))
 
-        rows = cursor.fetchall()
-        cursor.close()
-        pool_manager.release_connection(conn)
+    rows = cursor.fetchall()
+    cursor.close()
+    pool_manager.release_connection(conn)
 
-        history = []
-        for row in rows:
-            history.append({
-                "trade_date": str(row[0]),
-                "action_command": row[1],
-                "status": row[2],
-                "ai_provider": row[3],
-                "ai_model": row[4],
-                "tokens_used": row[5],
-                "generation_time": float(row[6]) if row[6] else 0,
-                "created_at": str(row[7]) if row[7] else None
-            })
+    history = []
+    for row in rows:
+        history.append({
+            "trade_date": str(row[0]),
+            "action_command": row[1],
+            "status": row[2],
+            "ai_provider": row[3],
+            "ai_model": row[4],
+            "tokens_used": row[5],
+            "generation_time": float(row[6]) if row[6] else 0,
+            "created_at": str(row[7]) if row[7] else None
+        })
 
-        return ApiResponse.success(
-            data=history,
-            message="查询成功"
-        ).to_dict()
-
-    except Exception as e:
-        logger.error(f"查询历史记录失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
+    return ApiResponse.success(
+        data=history,
+        message="查询成功"
+    ).to_dict()

@@ -102,9 +102,6 @@ async def generate_strategy(
             provider_used=request.provider or "unknown",
             error_message=str(e),
         )
-    except Exception as e:
-        logger.error(f"策略生成异常: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"策略生成失败: {str(e)}")
 
 
 # ============ AI配置管理端点 (Admin) ============
@@ -433,9 +430,6 @@ async def async_generate_strategy(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"提交AI策略生成任务失败: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"任务提交失败: {str(e)}")
 
 
 @router.get("/status/{task_id}")
@@ -453,48 +447,42 @@ async def get_task_status(task_id: str, current_user: User = Depends(get_current
         - SUCCESS: 成功（包含完整结果）
         - FAILURE: 失败（包含错误信息）
     """
-    try:
-        task = AsyncResult(task_id, app=celery_app)
+    task = AsyncResult(task_id, app=celery_app)
 
-        data = {
-            "task_id": task_id,
-            "status": task.state
-        }
-        message = ""
+    data = {
+        "task_id": task_id,
+        "status": task.state
+    }
+    message = ""
 
-        if task.state == 'PENDING':
-            message = "任务排队中，等待AI服务..."
+    if task.state == 'PENDING':
+        message = "任务排队中，等待AI服务..."
 
-        elif task.state == 'PROGRESS':
-            # 返回进度信息（只返回状态文字，不返回具体进度百分比）
-            info = task.info or {}
-            message = info.get('status', 'AI策略生成进行中...')
+    elif task.state == 'PROGRESS':
+        # 返回进度信息（只返回状态文字，不返回具体进度百分比）
+        info = task.info or {}
+        message = info.get('status', 'AI策略生成进行中...')
 
-        elif task.state == 'SUCCESS':
-            # 返回完整结果
-            result = task.result
-            data["strategy_code"] = result.get('strategy_code')
-            data["strategy_metadata"] = result.get('strategy_metadata')
-            data["tokens_used"] = result.get('tokens_used')
-            data["generation_time"] = result.get('generation_time')
-            data["provider_used"] = result.get('provider_used')
-            message = "策略生成成功"
+    elif task.state == 'SUCCESS':
+        # 返回完整结果
+        result = task.result
+        data["strategy_code"] = result.get('strategy_code')
+        data["strategy_metadata"] = result.get('strategy_metadata')
+        data["tokens_used"] = result.get('tokens_used')
+        data["generation_time"] = result.get('generation_time')
+        data["provider_used"] = result.get('provider_used')
+        message = "策略生成成功"
 
-        elif task.state == 'FAILURE':
-            # 返回错误信息
-            error = str(task.info) if task.info else "未知错误"
-            data["error"] = error
-            message = f"策略生成失败: {error}"
+    elif task.state == 'FAILURE':
+        # 返回错误信息
+        error = str(task.info) if task.info else "未知错误"
+        data["error"] = error
+        message = f"策略生成失败: {error}"
 
-        else:
-            message = f"未知状态: {task.state}"
+    else:
+        message = f"未知状态: {task.state}"
 
-        return ApiResponse.success(data=data, message=message)
-
-    except Exception as e:
-        logger.error(f"查询任务状态失败 [task_id={task_id}]: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"查询状态失败: {str(e)}")
-
+    return ApiResponse.success(data=data, message=message)
 
 @router.delete("/cancel/{task_id}")
 @handle_api_errors
@@ -508,20 +496,15 @@ async def cancel_task(task_id: str, current_user: User = Depends(get_current_act
     Returns:
         {"message": "任务已取消", "task_id": "..."}
     """
-    try:
-        task = AsyncResult(task_id, app=celery_app)
+    task = AsyncResult(task_id, app=celery_app)
 
-        if task.state in ['PENDING', 'PROGRESS']:
-            task.revoke(terminate=True)
-            logger.info(f"AI策略生成任务已取消 [task_id={task_id}]")
-            return ApiResponse.success(data={"task_id": task_id}, message="任务已取消")
-        else:
-            return ApiResponse.error(
-                message=f"任务当前状态为 {task.state}，无法取消",
-                code=400,
-                data={"task_id": task_id, "state": task.state}
-            )
-
-    except Exception as e:
-        logger.error(f"取消任务失败 [task_id={task_id}]: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"取消任务失败: {str(e)}")
+    if task.state in ['PENDING', 'PROGRESS']:
+        task.revoke(terminate=True)
+        logger.info(f"AI策略生成任务已取消 [task_id={task_id}]")
+        return ApiResponse.success(data={"task_id": task_id}, message="任务已取消")
+    else:
+        return ApiResponse.error(
+            message=f"任务当前状态为 {task.state}，无法取消",
+            code=400,
+            data={"task_id": task_id, "state": task.state}
+        )

@@ -19,6 +19,7 @@ from fastapi import APIRouter, Query
 
 from app.core_adapters.data_adapter import DataAdapter
 from app.core_adapters.market_adapter import MarketAdapter
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.repositories.stock_realtime_repository import StockRealtimeRepository
 
@@ -30,6 +31,7 @@ data_adapter = DataAdapter()
 
 
 @router.get("/status")
+@handle_api_errors
 async def get_market_status():
     """
     获取当前市场状态
@@ -88,6 +90,7 @@ async def get_market_status():
 
 
 @router.get("/trading-info")
+@handle_api_errors
 async def get_trading_info():
     """
     获取交易时段信息
@@ -158,6 +161,7 @@ async def get_trading_info():
 
 
 @router.get("/refresh-check")
+@handle_api_errors
 async def check_refresh_needed(
     codes: Optional[List[str]] = Query(None, description="股票代码列表（可选）"),
     force: bool = Query(False, description="是否强制刷新"),
@@ -223,6 +227,7 @@ async def check_refresh_needed(
 
 
 @router.get("/next-session")
+@handle_api_errors
 async def get_next_session():
     """
     获取下一个交易时段

@@ -5,13 +5,11 @@
 全量同步：独立端点 /sync-full-history
 """
 
-import asyncio
 from fastapi import APIRouter, Query, Depends
 from typing import Optional
 from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.services.balancesheet_service import BalancesheetService
-from app.services import TaskHistoryHelper
 from app.core.dependencies import require_admin
 from app.models.user import User
 
@@ -85,28 +83,13 @@ async def sync_balancesheet_async(
     从 sync_configs 读取 incremental_task_name，动态分发任务。
     不传日期参数，由 Service 层的 sync_incremental() 自动计算。
     """
-    from app.repositories.sync_config_repository import SyncConfigRepository
-
-    cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'balancesheet')
-    task_name = (cfg.get('incremental_task_name') or 'tasks.sync_balancesheet') if cfg else 'tasks.sync_balancesheet'
-
-    from app.celery_app import celery_app
-    celery_task = celery_app.send_task(task_name)
-
-    helper = TaskHistoryHelper()
-    task_data = await helper.create_task_record(
-        celery_task_id=celery_task.id,
-        task_name=task_name,
+    from app.api.sync_utils import dispatch_incremental_sync
+    return await dispatch_incremental_sync(
+        table_key='balancesheet',
         display_name='资产负债表增量同步',
-        task_type='data_sync',
+        fallback_task_name='tasks.sync_balancesheet',
         user_id=current_user.id,
-        task_params={},
-        source='balancesheet_page'
-    )
-
-    return ApiResponse.success(
-        data=task_data,
-        message="增量同步任务已提交，正在后台执行"
+        source='balancesheet_page',
     )
 
 
@@ -122,30 +105,13 @@ async def sync_balancesheet_full_history_async(
     逐只同步全部上市股票的资产负债表数据。
     中断后再次触发会自动从断点继续，跳过已同步完成的股票。
     """
-    from app.api.endpoints.sync_dashboard import release_stale_lock
-    await asyncio.to_thread(release_stale_lock, 'balancesheet')
-    from app.repositories.sync_config_repository import SyncConfigRepository
-
-    if concurrency is None:
-        sync_config_repo = SyncConfigRepository()
-        cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'balancesheet')
-        concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
-
-    from app.celery_app import celery_app
-    celery_task = celery_app.send_task(
-        'tasks.sync_balancesheet_full_history',
-        kwargs={'concurrency': concurrency}
-    )
-
-    helper = TaskHistoryHelper()
-    task_data = await helper.create_task_record(
-        celery_task_id=celery_task.id,
-        task_name='tasks.sync_balancesheet_full_history',
+    from app.api.sync_utils import dispatch_full_history_sync
+    return await dispatch_full_history_sync(
+        table_key='balancesheet',
         display_name='资产负债表全量历史同步',
-        task_type='data_sync',
+        task_name='tasks.sync_balancesheet_full_history',
         user_id=current_user.id,
-        task_params={'concurrency': concurrency},
-        source='balancesheet_page'
+        source='balancesheet_page',
+        concurrency=concurrency,
+        default_concurrency=5,
     )
-
-    return ApiResponse.success(data=task_data, message="全量同步任务已提交")

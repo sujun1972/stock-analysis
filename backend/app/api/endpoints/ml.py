@@ -415,9 +415,6 @@ async def list_models(
     except DatabaseError as e:
         logger.exception(f"数据库查询失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取模型列表失败: {str(e)}")
-    except Exception as e:
-        logger.exception(f"未预期的错误: {e}")
-        raise HTTPException(status_code=500, detail=f"获取模型列表失败: {str(e)}")
 
 
 @router.get("/features/available")
@@ -561,6 +558,3 @@ async def get_feature_snapshot(
         raise HTTPException(status_code=404, detail=str(e))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.exception(f"未预期的错误: {e}")
-        raise HTTPException(status_code=500, detail=str(e))

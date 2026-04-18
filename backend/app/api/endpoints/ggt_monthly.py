@@ -4,11 +4,12 @@
 
 import asyncio
 from typing import Optional
-from fastapi import APIRouter, Query, Depends, HTTPException
+from fastapi import APIRouter, Query, Depends
 from loguru import logger
 
 from app.services.ggt_monthly_service import GgtMonthlyService
 from app.services import TaskHistoryHelper
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.models.user import User
 from app.core.dependencies import require_admin
@@ -17,6 +18,7 @@ router = APIRouter()
 
 
 @router.get("")
+@handle_api_errors
 async def get_ggt_monthly(
     start_month: Optional[str] = Query(None, description="开始月度，格式：YYYY-MM"),
     end_month: Optional[str] = Query(None, description="结束月度，格式：YYYY-MM"),
@@ -35,21 +37,17 @@ async def get_ggt_monthly(
     Returns:
         港股通每月成交统计数据列表
     """
-    try:
-        service = GgtMonthlyService()
-        result = await service.get_data(
-            start_month=start_month,
-            end_month=end_month,
-            limit=limit,
-            offset=offset
-        )
-        return ApiResponse.success(data=result)
-    except Exception as e:
-        logger.error(f"查询港股通每月成交统计数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    service = GgtMonthlyService()
+    result = await service.get_data(
+        start_month=start_month,
+        end_month=end_month,
+        limit=limit,
+        offset=offset
+    )
+    return ApiResponse.success(data=result)
 
 @router.get("/statistics")
+@handle_api_errors
 async def get_statistics(
     start_month: Optional[str] = Query(None, description="开始月度，格式：YYYY-MM"),
     end_month: Optional[str] = Query(None, description="结束月度，格式：YYYY-MM")
@@ -64,25 +62,21 @@ async def get_statistics(
     Returns:
         统计信息
     """
-    try:
-        service = GgtMonthlyService()
-        # 转换月度格式
-        start_month_fmt = start_month.replace('-', '') if start_month else None
-        end_month_fmt = end_month.replace('-', '') if end_month else None
+    service = GgtMonthlyService()
+    # 转换月度格式
+    start_month_fmt = start_month.replace('-', '') if start_month else None
+    end_month_fmt = end_month.replace('-', '') if end_month else None
 
-        # 获取统计信息
-        result = await asyncio.to_thread(
-            service.ggt_monthly_repo.get_statistics,
-            start_month=start_month_fmt,
-            end_month=end_month_fmt
-        )
-        return ApiResponse.success(data=result)
-    except Exception as e:
-        logger.error(f"获取统计信息失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    # 获取统计信息
+    result = await asyncio.to_thread(
+        service.ggt_monthly_repo.get_statistics,
+        start_month=start_month_fmt,
+        end_month=end_month_fmt
+    )
+    return ApiResponse.success(data=result)
 
 @router.get("/latest")
+@handle_api_errors
 async def get_latest():
     """
     获取最新港股通每月成交统计数据
@@ -90,16 +84,12 @@ async def get_latest():
     Returns:
         最新数据
     """
-    try:
-        service = GgtMonthlyService()
-        result = await service.get_latest_data()
-        return ApiResponse.success(data=result)
-    except Exception as e:
-        logger.error(f"获取最新数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    service = GgtMonthlyService()
+    result = await service.get_latest_data()
+    return ApiResponse.success(data=result)
 
 @router.post("/sync-async")
+@handle_api_errors
 async def sync_ggt_monthly_async(
     month: Optional[str] = Query(None, description="月度，格式：YYYY-MM，支持多月逗号分隔"),
     start_month: Optional[str] = Query(None, description="开始月度，格式：YYYY-MM"),
@@ -121,52 +111,47 @@ async def sync_ggt_monthly_async(
     Returns:
         包含Celery任务ID和任务信息的响应
     """
-    try:
-        from app.tasks.ggt_monthly_tasks import sync_ggt_monthly_task
+    from app.tasks.ggt_monthly_tasks import sync_ggt_monthly_task
 
-        # 转换月度格式：YYYY-MM -> YYYYMM（Tushare格式）
-        month_formatted = month.replace('-', '') if month else None
-        start_month_formatted = start_month.replace('-', '') if start_month else None
-        end_month_formatted = end_month.replace('-', '') if end_month else None
+    # 转换月度格式：YYYY-MM -> YYYYMM（Tushare格式）
+    month_formatted = month.replace('-', '') if month else None
+    start_month_formatted = start_month.replace('-', '') if start_month else None
+    end_month_formatted = end_month.replace('-', '') if end_month else None
 
-        # 提交Celery任务（异步执行）
-        celery_task = sync_ggt_monthly_task.apply_async(
-            kwargs={
-                'month': month_formatted,
-                'start_month': start_month_formatted,
-                'end_month': end_month_formatted
-            }
-        )
+    # 提交Celery任务（异步执行）
+    celery_task = sync_ggt_monthly_task.apply_async(
+        kwargs={
+            'month': month_formatted,
+            'start_month': start_month_formatted,
+            'end_month': end_month_formatted
+        }
+    )
 
-        # 使用 TaskHistoryHelper 创建任务历史记录
-        helper = TaskHistoryHelper()
-        task_data = await helper.create_task_record(
-            celery_task_id=celery_task.id,
-            task_name='tasks.sync_ggt_monthly',
-            display_name='港股通每月成交统计',
-            task_type='data_sync',
-            user_id=current_user.id,
-            task_params={
-                'month': month_formatted,
-                'start_month': start_month_formatted,
-                'end_month': end_month_formatted
-            },
-            source='ggt_monthly_page'
-        )
+    # 使用 TaskHistoryHelper 创建任务历史记录
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name='tasks.sync_ggt_monthly',
+        display_name='港股通每月成交统计',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={
+            'month': month_formatted,
+            'start_month': start_month_formatted,
+            'end_month': end_month_formatted
+        },
+        source='ggt_monthly_page'
+    )
 
-        logger.info(f"港股通每月成交统计同步任务已提交: {celery_task.id}")
+    logger.info(f"港股通每月成交统计同步任务已提交: {celery_task.id}")
 
-        return ApiResponse.success(
-            data=task_data,
-            message="任务已提交，正在后台执行"
-        )
-
-    except Exception as e:
-        logger.error(f"提交港股通每月成交统计同步任务失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    return ApiResponse.success(
+        data=task_data,
+        message="任务已提交，正在后台执行"
+    )
 
 @router.post("/sync-full-history")
+@handle_api_errors
 async def sync_ggt_monthly_full_history(
     current_user: User = Depends(require_admin)
 ):
@@ -178,28 +163,23 @@ async def sync_ggt_monthly_full_history(
     Returns:
         包含 Celery 任务 ID 和任务信息的响应
     """
-    try:
-        from app.api.endpoints.sync_dashboard import release_stale_lock
-        await asyncio.to_thread(release_stale_lock, 'ggt_monthly')
+    from app.api.endpoints.sync_dashboard import release_stale_lock
+    await asyncio.to_thread(release_stale_lock, 'ggt_monthly')
 
-        from app.tasks.ggt_monthly_tasks import sync_ggt_monthly_full_history_task
+    from app.tasks.ggt_monthly_tasks import sync_ggt_monthly_full_history_task
 
-        celery_task = sync_ggt_monthly_full_history_task.apply_async(kwargs={})
+    celery_task = sync_ggt_monthly_full_history_task.apply_async(kwargs={})
 
-        helper = TaskHistoryHelper()
-        task_data = await helper.create_task_record(
-            celery_task_id=celery_task.id,
-            task_name='tasks.sync_ggt_monthly_full_history',
-            display_name='港股通每月成交统计（全量历史）',
-            task_type='data_sync',
-            user_id=current_user.id,
-            task_params={},
-            source='ggt_monthly_page'
-        )
+    helper = TaskHistoryHelper()
+    task_data = await helper.create_task_record(
+        celery_task_id=celery_task.id,
+        task_name='tasks.sync_ggt_monthly_full_history',
+        display_name='港股通每月成交统计（全量历史）',
+        task_type='data_sync',
+        user_id=current_user.id,
+        task_params={},
+        source='ggt_monthly_page'
+    )
 
-        logger.info(f"港股通每月成交统计全量同步任务已提交: {celery_task.id}")
-        return ApiResponse.success(data=task_data, message="全量同步任务已提交")
-
-    except Exception as e:
-        logger.error(f"提交港股通每月成交统计全量同步任务失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    logger.info(f"港股通每月成交统计全量同步任务已提交: {celery_task.id}")
+    return ApiResponse.success(data=task_data, message="全量同步任务已提交")

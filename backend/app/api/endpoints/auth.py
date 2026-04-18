@@ -29,12 +29,14 @@ from app.schemas.auth import (
     MessageResponse
 )
 from app.schemas.user import UserResponse
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
+@handle_api_errors
 async def register(
     user_data: RegisterRequest,
     db: Session = Depends(get_db)
@@ -91,6 +93,7 @@ async def register(
 
 
 @router.post("/login")
+@handle_api_errors
 async def login(
     login_data: LoginRequest,
     request: Request,
@@ -207,6 +210,7 @@ async def login(
 
 
 @router.post("/refresh")
+@handle_api_errors
 async def refresh_token(
     refresh_data: RefreshTokenRequest,
     db: Session = Depends(get_db)
@@ -291,6 +295,7 @@ async def refresh_token(
 
 
 @router.post("/logout")
+@handle_api_errors
 async def logout(
     refresh_data: RefreshTokenRequest,
     current_user: User = Depends(get_current_active_user),
@@ -320,6 +325,7 @@ async def logout(
 
 
 @router.get("/me")
+@handle_api_errors
 async def get_current_user_info(
     current_user: User = Depends(get_current_active_user)
 ):
@@ -335,6 +341,7 @@ async def get_current_user_info(
 
 
 @router.post("/verify-email/{token}")
+@handle_api_errors
 async def verify_email(token: str, db: Session = Depends(get_db)):
     """
     验证邮箱（预留接口，需要邮件服务支持）
@@ -351,6 +358,7 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
 
 
 @router.post("/forgot-password")
+@handle_api_errors
 async def forgot_password(email: str, db: Session = Depends(get_db)):
     """
     忘记密码（预留接口，需要邮件服务支持）
@@ -368,6 +376,7 @@ async def forgot_password(email: str, db: Session = Depends(get_db)):
 
 
 @router.post("/reset-password")
+@handle_api_errors
 async def reset_password(
     token: str,
     new_password: str,

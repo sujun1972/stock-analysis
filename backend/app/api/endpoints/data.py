@@ -19,6 +19,7 @@ from loguru import logger
 
 from app.core.exceptions import DataNotFoundError, DataSyncError, ExternalAPIError
 from app.core_adapters.data_adapter import DataAdapter
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.services.concurrent_data_service import ConcurrentDataService
 from app.middleware.rate_limiter import limiter, normal_limit
@@ -37,6 +38,7 @@ concurrent_service = ConcurrentDataService(max_concurrent=50)
 
 @router.get("/daily/{code}")
 @limiter.limit("100/minute")  # 应用限流：每分钟100次请求
+@handle_api_errors
 async def get_daily_data(
     request: Request,
     code: str,
@@ -140,6 +142,7 @@ async def get_daily_data(
 
 
 @router.post("/download")
+@handle_api_errors
 async def download_data(
     codes: Optional[List[str]] = Query(None, description="股票代码列表（不指定则下载全部）"),
     start_date: Optional[date] = Query(None, description="开始日期"),
@@ -276,6 +279,7 @@ async def download_data(
 
 
 @router.get("/minute/{code}")
+@handle_api_errors
 async def get_minute_data(
     code: str,
     trade_date: Optional[date] = Query(None, description="交易日期"),
@@ -376,6 +380,7 @@ async def get_minute_data(
 
 
 @router.get("/check/{code}")
+@handle_api_errors
 async def check_data_integrity(
     code: str,
     start_date: Optional[date] = Query(None, description="开始日期"),
@@ -433,6 +438,7 @@ async def check_data_integrity(
 
 
 @router.post("/batch/daily")
+@handle_api_errors
 async def get_batch_daily_data(
     codes: List[str] = Query(..., description="股票代码列表", min_items=1, max_items=100),
     start_date: Optional[date] = Query(None, description="开始日期"),
@@ -525,6 +531,7 @@ async def get_batch_daily_data(
 
 
 @router.post("/batch/download")
+@handle_api_errors
 async def batch_download_data(
     codes: List[str] = Query(..., description="股票代码列表", min_items=1, max_items=500),
     start_date: Optional[date] = Query(None, description="开始日期"),

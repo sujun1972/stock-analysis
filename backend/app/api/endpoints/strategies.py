@@ -111,33 +111,25 @@ async def validate_code(
             }
         }
     """
-    try:
-        sanitizer = CodeSanitizer()
-        result = sanitizer.sanitize(request.code, strict_mode=request.strict_mode)
+    sanitizer = CodeSanitizer()
+    result = sanitizer.sanitize(request.code, strict_mode=request.strict_mode)
 
-        validation_result = {
-            "is_valid": result.get("safe", False),
-            "status": "passed" if result.get("safe") else "failed",
-            "risk_level": result.get("risk_level", "medium"),
-            "errors": result.get("errors", []),
-            "warnings": result.get("warnings", []),
-            "security_issues": result.get("security_issues", []),
-        }
+    validation_result = {
+        "is_valid": result.get("safe", False),
+        "status": "passed" if result.get("safe") else "failed",
+        "risk_level": result.get("risk_level", "medium"),
+        "errors": result.get("errors", []),
+        "warnings": result.get("warnings", []),
+        "security_issues": result.get("security_issues", []),
+    }
 
-        logger.info(
-            f"验证策略代码: valid={validation_result['is_valid']}, "
-            f"status={validation_result['status']}, "
-            f"risk_level={validation_result['risk_level']}"
-        )
+    logger.info(
+        f"验证策略代码: valid={validation_result['is_valid']}, "
+        f"status={validation_result['status']}, "
+        f"risk_level={validation_result['risk_level']}"
+    )
 
-        return ApiResponse.success(data=validation_result, message="代码验证完成")
-
-    except Exception as e:
-        logger.error(f"代码验证失败: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"代码验证失败: {str(e)}",
-        )
+    return ApiResponse.success(data=validation_result, message="代码验证完成")
 
 
 @router.post("", summary="创建策略", status_code=status.HTTP_201_CREATED)
@@ -687,6 +679,3 @@ async def run_stock_selection(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"运行选股策略失败: strategy_id={strategy_id}, error={e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"选股策略执行失败: {str(e)}")

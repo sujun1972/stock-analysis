@@ -19,12 +19,14 @@ from app.schemas.user import (
     LoginHistoryResponse
 )
 from app.schemas.auth import MessageResponse
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 
 router = APIRouter(prefix="/profile", tags=["个人资料"])
 
 
 @router.get("")
+@handle_api_errors
 async def get_my_profile(
     current_user: User = Depends(get_current_active_user)
 ):
@@ -40,6 +42,7 @@ async def get_my_profile(
 
 
 @router.patch("")
+@handle_api_errors
 async def update_my_profile(
     profile_data: UserUpdate,
     current_user: User = Depends(get_current_active_user),
@@ -89,6 +92,7 @@ async def update_my_profile(
 
 
 @router.post("/change-password")
+@handle_api_errors
 async def change_password(
     password_data: PasswordChange,
     current_user: User = Depends(get_current_active_user),
@@ -118,6 +122,7 @@ async def change_password(
 
 
 @router.get("/quota")
+@handle_api_errors
 async def get_my_quota(
     current_user: User = Depends(get_current_active_user)
 ):
@@ -150,6 +155,7 @@ async def get_my_quota(
 
 
 @router.get("/activity")
+@handle_api_errors
 async def get_my_activity(
     limit: int = Query(50, ge=1, le=200, description="返回记录数"),
     action_type: str = Query(None, description="操作类型筛选"),
@@ -179,6 +185,7 @@ async def get_my_activity(
 
 
 @router.get("/login-history")
+@handle_api_errors
 async def get_my_login_history(
     limit: int = Query(20, ge=1, le=100, description="返回记录数"),
     current_user: User = Depends(get_current_active_user),

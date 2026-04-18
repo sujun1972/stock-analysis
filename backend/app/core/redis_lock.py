@@ -74,6 +74,8 @@ class RedisLock:
                         break
 
                     # 等待一小段时间后重试
+                    # 注意: 这是同步上下文管理器，仅在 Celery 任务中使用（blocking=False）。
+                    # 若需在 async 上下文中使用阻塞锁，应包装在 asyncio.to_thread() 中。
                     time.sleep(0.5)
             else:
                 # 非阻塞模式：尝试一次

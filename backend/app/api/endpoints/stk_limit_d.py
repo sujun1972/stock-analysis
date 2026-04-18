@@ -8,11 +8,9 @@
 import asyncio
 from typing import Optional
 from fastapi import APIRouter, Query, Depends
-from loguru import logger
 
 from app.api.error_handler import handle_api_errors
 from app.services.stk_limit_d_service import StkLimitDService
-from app.services import TaskHistoryHelper
 from app.models.user import User
 from app.core.dependencies import require_admin, get_current_user
 from app.models.api_response import ApiResponse
@@ -90,30 +88,13 @@ async def sync_stk_limit_d_async(
     从 sync_configs 读取 incremental_task_name，动态分发任务。
     不传日期参数，由 Service 层的 get_suggested_start_date() 自动计算。
     """
-    from app.repositories.sync_config_repository import SyncConfigRepository
-
-    cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, 'stk_limit_d')
-    task_name = (cfg.get('incremental_task_name') or 'tasks.sync_stk_limit_d_incremental') if cfg else 'tasks.sync_stk_limit_d_incremental'
-
-    from app.celery_app import celery_app
-    celery_task = celery_app.send_task(task_name)
-
-    helper = TaskHistoryHelper()
-    task_data = await helper.create_task_record(
-        celery_task_id=celery_task.id,
-        task_name=task_name,
+    from app.api.sync_utils import dispatch_incremental_sync
+    return await dispatch_incremental_sync(
+        table_key='stk_limit_d',
         display_name='每日涨跌停价格增量同步',
-        task_type='data_sync',
+        fallback_task_name='tasks.sync_stk_limit_d_incremental',
         user_id=current_user.id,
-        task_params={},
-        source='stk_limit_d_page'
-    )
-
-    logger.info(f"每日涨跌停价格增量同步任务已提交: {celery_task.id}")
-
-    return ApiResponse.success(
-        data=task_data,
-        message="增量同步任务已提交，正在后台执行"
+        source='stk_limit_d_page',
     )
 
 
@@ -157,30 +138,14 @@ async def sync_stk_limit_d_full_history(
     从2021年1月1日起，逐只同步全部上市股票的涨跌停价格数据。
     中断后再次触发会自动从断点继续，跳过已同步完成的股票。
     """
-    from app.api.endpoints.sync_dashboard import release_stale_lock
-    await asyncio.to_thread(release_stale_lock, 'stk_limit_d')
-    from app.repositories.sync_config_repository import SyncConfigRepository
-
-    if concurrency is None:
-        sync_config_repo = SyncConfigRepository()
-        cfg = await asyncio.to_thread(sync_config_repo.get_by_table_key, 'stk_limit_d')
-        concurrency = (cfg.get('full_sync_concurrency') or 3) if cfg else 3
-
-    from app.celery_app import celery_app
-    celery_task = celery_app.send_task(
-        'tasks.sync_stk_limit_d_full_history',
-        kwargs={'concurrency': concurrency}
-    )
-
-    helper = TaskHistoryHelper()
-    task_data = await helper.create_task_record(
-        celery_task_id=celery_task.id,
-        task_name='tasks.sync_stk_limit_d_full_history',
+    from app.api.sync_utils import dispatch_full_history_sync
+    return await dispatch_full_history_sync(
+        table_key='stk_limit_d',
         display_name='每日涨跌停价格全量历史同步',
-        task_type='data_sync',
+        task_name='tasks.sync_stk_limit_d_full_history',
         user_id=current_user.id,
-        task_params={'start_date': '20210101', 'scope': 'all_listed', 'concurrency': concurrency},
-        source='stk_limit_d_page'
+        source='stk_limit_d_page',
+        concurrency=concurrency,
+        default_concurrency=3,
+        extra_task_params={'start_date': '20210101', 'scope': 'all_listed'},
     )
-
-    return ApiResponse.success(data=task_data, message="全量同步任务已提交")

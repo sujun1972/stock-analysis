@@ -60,57 +60,44 @@ async def create_batch(request: BatchCreateRequest, current_user: User = Depends
 
     可以使用预定义模板或自定义参数空间
     """
-    try:
-        # 获取参数空间
-        if request.param_space:
-            param_space = request.param_space
-        elif request.template:
-            templates = {
-                "minimal_test": ParameterSpaceTemplates.minimal_test(),
-                "small_grid": ParameterSpaceTemplates.small_grid(),
-                "medium_grid": ParameterSpaceTemplates.medium_grid(),
-                "large_random": ParameterSpaceTemplates.large_random(),
-            }
-            param_space = templates.get(request.template)
-            if not param_space:
-                raise HTTPException(status_code=400, detail=f"未知模板: {request.template}")
-        else:
-            raise HTTPException(status_code=400, detail="必须提供param_space或template")
+    # 获取参数空间
+    if request.param_space:
+        param_space = request.param_space
+    elif request.template:
+        templates = {
+            "minimal_test": ParameterSpaceTemplates.minimal_test(),
+            "small_grid": ParameterSpaceTemplates.small_grid(),
+            "medium_grid": ParameterSpaceTemplates.medium_grid(),
+            "large_random": ParameterSpaceTemplates.large_random(),
+        }
+        param_space = templates.get(request.template)
+        if not param_space:
+            raise HTTPException(status_code=400, detail=f"未知模板: {request.template}")
+    else:
+        raise HTTPException(status_code=400, detail="必须提供param_space或template")
 
-        # 创建批次
-        batch_id = await experiment_service.create_batch(
-            batch_name=request.batch_name,
-            param_space=param_space,
-            strategy=request.strategy,
-            max_experiments=request.max_experiments,
-            description=request.description,
-            config=request.config,
-            tags=request.tags,
-        )
+    # 创建批次
+    batch_id = await experiment_service.create_batch(
+        batch_name=request.batch_name,
+        param_space=param_space,
+        strategy=request.strategy,
+        max_experiments=request.max_experiments,
+        description=request.description,
+        config=request.config,
+        tags=request.tags,
+    )
 
-        return ApiResponse.success(message="批次创建成功", data={"batch_id": batch_id})
-
-    except Exception as e:
-        logger.error(f"创建批次失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    return ApiResponse.success(message="批次创建成功", data={"batch_id": batch_id})
 
 @router.get("/batch/{batch_id}")
 @handle_api_errors
 async def get_batch_info(batch_id: int, current_user: User = Depends(get_current_active_user)):
     """获取批次详细信息"""
-    try:
-        info = await experiment_service.get_batch_info(batch_id)
-        if not info:
-            raise HTTPException(status_code=404, detail="批次不存在")
+    info = await experiment_service.get_batch_info(batch_id)
+    if not info:
+        raise HTTPException(status_code=404, detail="批次不存在")
 
-        return ApiResponse.success(data=info)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"获取批次信息失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(data=info)
 
 
 @router.get("/batches")
@@ -122,49 +109,37 @@ async def list_batches(
     current_user: User = Depends(get_current_active_user)
 ):
     """列出所有批次"""
-    try:
-        offset = (page - 1) * limit
+    offset = (page - 1) * limit
 
-        # 使用 Repository 查询批次
-        batches = await asyncio.to_thread(
-            batch_repo.find_batches_with_stats, status=status, limit=limit, offset=offset
-        )
+    # 使用 Repository 查询批次
+    batches = await asyncio.to_thread(
+        batch_repo.find_batches_with_stats, status=status, limit=limit, offset=offset
+    )
 
-        # 获取总数
-        total = await asyncio.to_thread(batch_repo.count_batches, status=status)
+    # 获取总数
+    total = await asyncio.to_thread(batch_repo.count_batches, status=status)
 
-        return ApiResponse.success(
-            data={
-                "batches": batches,
-                "pagination": {
-                    "page": page,
-                    "limit": limit,
-                    "total": total,
-                    "pages": (total + limit - 1) // limit,
-                },
+    return ApiResponse.success(
+        data={
+            "batches": batches,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": (total + limit - 1) // limit,
             },
-            message="列出批次成功"
-        ).to_dict()
-
-    except Exception as e:
-        logger.error(f"列出批次失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+        },
+        message="列出批次成功"
+    ).to_dict()
 
 @router.delete("/batch/{batch_id}")
 @handle_api_errors
 async def delete_batch(batch_id: int, current_user: User = Depends(get_current_active_user)):
     """删除批次（级联删除所有实验）"""
-    try:
-        # 使用 Repository 删除批次
-        result = await asyncio.to_thread(batch_repo.delete_batch_cascade, batch_id)
+    # 使用 Repository 删除批次
+    result = await asyncio.to_thread(batch_repo.delete_batch_cascade, batch_id)
 
-        return ApiResponse.success(message=f"批次 {batch_id} 已删除", data=result)
-
-    except Exception as e:
-        logger.error(f"删除批次失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    return ApiResponse.success(message=f"批次 {batch_id} 已删除", data=result)
 
 # ==================== 批次执行 ====================
 
@@ -178,18 +153,12 @@ async def start_batch(
     current_user: User = Depends(get_current_active_user)
 ):
     """启动批次（后台任务）"""
-    try:
-        max_workers = request.max_workers if request else None
+    max_workers = request.max_workers if request else None
 
-        # 在后台运行批次（不阻塞HTTP响应）
-        background_tasks.add_task(experiment_service.run_batch, batch_id, max_workers)
+    # 在后台运行批次（不阻塞HTTP响应）
+    background_tasks.add_task(experiment_service.run_batch, batch_id, max_workers)
 
-        return ApiResponse.success(message=f"批次 {batch_id} 已启动，正在后台运行")
-
-    except Exception as e:
-        logger.error(f"启动批次失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    return ApiResponse.success(message=f"批次 {batch_id} 已启动，正在后台运行")
 
 @router.post("/batch/{batch_id}/pause")
 @handle_api_errors
@@ -202,22 +171,16 @@ async def pause_batch(batch_id: int, current_user: User = Depends(get_current_ac
 @handle_api_errors
 async def cancel_batch(batch_id: int, current_user: User = Depends(get_current_active_user)):
     """取消批次"""
-    try:
-        # 更新批次状态为 'cancelled'
-        await asyncio.to_thread(batch_repo.update_batch_status, batch_id, "cancelled")
+    # 更新批次状态为 'cancelled'
+    await asyncio.to_thread(batch_repo.update_batch_status, batch_id, "cancelled")
 
-        # 取消所有pending的实验 - 使用 'skipped' 状态（experiments 表的约束只允许 skipped，不允许 cancelled）
-        query = (
-            "UPDATE experiments SET status = 'skipped' WHERE batch_id = %s AND status = 'pending'"
-        )
-        await asyncio.to_thread(experiment_repo.execute_update, query, (batch_id,))
+    # 取消所有pending的实验 - 使用 'skipped' 状态（experiments 表的约束只允许 skipped，不允许 cancelled）
+    query = (
+        "UPDATE experiments SET status = 'skipped' WHERE batch_id = %s AND status = 'pending'"
+    )
+    await asyncio.to_thread(experiment_repo.execute_update, query, (batch_id,))
 
-        return ApiResponse.success(message=f"批次 {batch_id} 已取消")
-
-    except Exception as e:
-        logger.error(f"取消批次失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    return ApiResponse.success(message=f"批次 {batch_id} 已取消")
 
 # ==================== 实验查询 ====================
 
@@ -231,21 +194,15 @@ async def list_experiments(
     current_user: User = Depends(get_current_active_user)
 ):
     """列出批次下的实验"""
-    try:
-        # 使用 Repository 查询实验
-        experiments = await asyncio.to_thread(
-            experiment_repo.find_experiments_by_batch, batch_id=batch_id, status=status, limit=limit
-        )
+    # 使用 Repository 查询实验
+    experiments = await asyncio.to_thread(
+        experiment_repo.find_experiments_by_batch, batch_id=batch_id, status=status, limit=limit
+    )
 
-        return ApiResponse.success(
-            data={"batch_id": batch_id, "experiments": experiments, "count": len(experiments)},
-            message="列出实验成功"
-        ).to_dict()
-
-    except Exception as e:
-        logger.error(f"列出实验失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    return ApiResponse.success(
+        data={"batch_id": batch_id, "experiments": experiments, "count": len(experiments)},
+        message="列出实验成功"
+    ).to_dict()
 
 @router.get("/batch/{batch_id}/top-models")
 @handle_api_errors
@@ -260,60 +217,42 @@ async def get_top_models(
     current_user: User = Depends(get_current_active_user)
 ):
     """获取Top模型"""
-    try:
-        ranker = ModelRanker()
-        models = ranker.filter_models(
-            batch_id=batch_id,
-            min_sharpe=min_sharpe,
-            max_drawdown=max_drawdown,
-            min_annual_return=min_annual_return,
-            min_win_rate=min_win_rate,
-            min_ic=min_ic,
-            top_n=top_n,
-        )
+    ranker = ModelRanker()
+    models = ranker.filter_models(
+        batch_id=batch_id,
+        min_sharpe=min_sharpe,
+        max_drawdown=max_drawdown,
+        min_annual_return=min_annual_return,
+        min_win_rate=min_win_rate,
+        min_ic=min_ic,
+        top_n=top_n,
+    )
 
-        return ApiResponse.success(
-            data={"batch_id": batch_id, "models": models, "count": len(models)},
-            message="获取Top模型成功"
-        ).to_dict()
-
-    except Exception as e:
-        logger.error(f"获取Top模型失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    return ApiResponse.success(
+        data={"batch_id": batch_id, "models": models, "count": len(models)},
+        message="获取Top模型成功"
+    ).to_dict()
 
 @router.get("/batch/{batch_id}/report")
 @handle_api_errors
 async def generate_report(batch_id: int, current_user: User = Depends(get_current_active_user)):
     """生成实验报告"""
-    try:
-        ranker = ModelRanker()
-        report = ranker.generate_report(batch_id)
+    ranker = ModelRanker()
+    report = ranker.generate_report(batch_id)
 
-        return ApiResponse.success(data=report)
-
-    except Exception as e:
-        logger.error(f"生成报告失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    return ApiResponse.success(data=report)
 
 @router.get("/batch/{batch_id}/parameter-importance")
 @handle_api_errors
 async def get_parameter_importance(batch_id: int, current_user: User = Depends(get_current_active_user)):
     """获取参数重要性分析"""
-    try:
-        ranker = ModelRanker()
-        importance = ranker.analyze_parameter_importance(batch_id)
+    ranker = ModelRanker()
+    importance = ranker.analyze_parameter_importance(batch_id)
 
-        return ApiResponse.success(
-            data={"batch_id": batch_id, "parameter_importance": importance},
-            message="参数重要性分析成功"
-        ).to_dict()
-
-    except Exception as e:
-        logger.error(f"参数重要性分析失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    return ApiResponse.success(
+        data={"batch_id": batch_id, "parameter_importance": importance},
+        message="参数重要性分析成功"
+    ).to_dict()
 
 # ==================== 实时监控 ====================
 
@@ -403,20 +342,13 @@ async def get_experiment_detail(experiment_id: int, current_user: User = Depends
 
     - **experiment_id**: 实验ID
     """
-    try:
-        # 使用 Repository 查询实验详情
-        experiment = await asyncio.to_thread(experiment_repo.get_experiment_detail, experiment_id)
+    # 使用 Repository 查询实验详情
+    experiment = await asyncio.to_thread(experiment_repo.get_experiment_detail, experiment_id)
 
-        if not experiment:
-            raise HTTPException(status_code=404, detail=f"实验不存在: {experiment_id}")
+    if not experiment:
+        raise HTTPException(status_code=404, detail=f"实验不存在: {experiment_id}")
 
-        return ApiResponse.success(data=experiment)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"获取实验详情失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(data=experiment)
 
 
 @router.delete("/{experiment_id}")
@@ -427,23 +359,16 @@ async def delete_experiment(experiment_id: int, current_user: User = Depends(get
 
     - **experiment_id**: 实验ID
     """
-    try:
-        # 检查实验是否存在
-        experiment = await asyncio.to_thread(experiment_repo.get_experiment_detail, experiment_id)
+    # 检查实验是否存在
+    experiment = await asyncio.to_thread(experiment_repo.get_experiment_detail, experiment_id)
 
-        if not experiment:
-            raise HTTPException(status_code=404, detail=f"实验不存在: {experiment_id}")
+    if not experiment:
+        raise HTTPException(status_code=404, detail=f"实验不存在: {experiment_id}")
 
-        # 删除实验
-        await asyncio.to_thread(experiment_repo.delete_experiment, experiment_id)
+    # 删除实验
+    await asyncio.to_thread(experiment_repo.delete_experiment, experiment_id)
 
-        return ApiResponse.success(message=f"实验 {experiment_id} 已删除")
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"删除实验失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return ApiResponse.success(message=f"实验 {experiment_id} 已删除")
 
 
 # ==================== 实验详情 ====================

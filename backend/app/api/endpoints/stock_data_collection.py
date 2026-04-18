@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from app.core.dependencies import get_current_active_user
+from app.api.error_handler import handle_api_errors
 from app.models.api_response import ApiResponse
 from app.models.user import User
 from app.services.stock_data_collection_service import StockDataCollectionService
@@ -25,6 +26,7 @@ class CollectRequest(BaseModel):
 
 
 @router.post("/collect")
+@handle_api_errors
 async def collect_stock_data(
     body: CollectRequest,
     _: User = Depends(get_current_active_user),
