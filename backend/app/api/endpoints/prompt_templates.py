@@ -307,6 +307,11 @@ def _render_template(text: str, variables: dict) -> str:
     return re.sub(r'\{\{\s*(\w+)\s*\}\}', replacer, text)
 
 
+# CIO 综合决策模板的专家输出占位符。键名与 cio_directive_v1 模板的 {{ var }} 一一对应。
+# /generate-multi 端点负责把三位专家的完整 analysis_text 按这些键注入。
+EXPERT_OUTPUT_PLACEHOLDERS = ("hot_money_summary", "midline_summary", "longterm_summary")
+
+
 @router.get("/by-key/{template_key}")
 @handle_api_errors
 async def get_template_by_key(
@@ -358,6 +363,7 @@ async def build_stock_prompt(
     created_by: Optional[int],
     db,
     allow_generate_data_collection: bool = False,
+    expert_outputs: Optional[dict] = None,
 ) -> dict:
     """
     构建股票分析完整提示词（供 get_template_by_key 端点和 generate 端点共用）。
@@ -365,6 +371,12 @@ async def build_stock_prompt(
     allow_generate_data_collection:
       - False（默认）：获取模板预览时，仅读取已有数据收集记录填充占位符，无则留空
       - True：生成分析时，若无今日数据收集记录则自动触发生成
+
+    expert_outputs:
+      - CIO 综合决策场景下，由调用方注入的其他专家完整分析文本，
+        key 为占位符名（如 "hot_money_summary" / "midline_summary" / "longterm_summary"），
+        value 为完整文本（不截断）。模板中未声明的占位符不渲染。
+        未提供（默认 None）时，CIO 模板中相关占位符会渲染为"未提供"提示。
 
     返回：
     {
@@ -452,6 +464,14 @@ async def build_stock_prompt(
             variables["stock_data_collection"] = stock_data_text
             # 记录数据采集对应的交易日，供 generate 端点使用
             variables["_dc_trade_date"] = dc_trade_date
+
+    # CIO 综合决策场景：把三位专家的完整文本注入对应占位符（不截断）。
+    # 调用方未提供时填默认提示，避免 LLM 看到原始 {{ ... }} 占位符语法。
+    for k in EXPERT_OUTPUT_PLACEHOLDERS:
+        if expert_outputs and expert_outputs.get(k):
+            variables[k] = expert_outputs[k]
+        else:
+            variables[k] = "（本次未提供该专家结论）"
 
     system_prompt = data.get("system_prompt") or ""
     user_prompt = data.get("user_prompt_template") or ""

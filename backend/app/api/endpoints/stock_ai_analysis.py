@@ -136,6 +136,14 @@ _DEFAULT_TEMPLATE_KEYS = {
     "macro_risk_expert": "macro_risk_expert_v1",
 }
 
+# CIO 综合决策时，前置专家 analysis_type → CIO 模板占位符的映射。
+# value 必须落在 prompt_templates.EXPERT_OUTPUT_PLACEHOLDERS 集合中。
+_EXPERT_TYPE_TO_CIO_PLACEHOLDER = {
+    "hot_money_view": "hot_money_summary",
+    "midline_industry_expert": "midline_summary",
+    "longterm_value_watcher": "longterm_summary",
+}
+
 
 class GenerateMultiRequest(BaseModel):
     ts_code: str = Field(..., description="股票代码，如 000001.SZ")
@@ -157,50 +165,85 @@ class GenerateMultiRequest(BaseModel):
 # CIO Agent 辅助函数
 # ------------------------------------------------------------------
 
-async def _run_cio_agent_single(body, current_user, db, ai_service) -> dict:
-    """当 /generate 端点的 analysis_type == "cio_directive" 时走 Agent 路径。"""
-    from app.api.endpoints.prompt_templates import build_stock_prompt
-    from app.services.cio_agent_service import CIOAgentService
+async def _prepare_cio_prompt(
+    body, current_user, db, ai_service,
+    expert_outputs: Optional[dict] = None,
+) -> dict:
+    """
+    渲染 CIO 模板并准备 Agent 调用参数。
 
-    # 获取 CIO 推荐的 provider 配置
-    cio_template_key = _DEFAULT_TEMPLATE_KEYS.get("cio_directive", "cio_directive_v1")
-    try:
-        cio_prompt_data = await build_stock_prompt(
-            template_key=cio_template_key,
-            stock_name=body.stock_name,
-            stock_code=body.stock_code,
-            ts_code=body.ts_code,
-            created_by=current_user.id,
-            db=db,
-            allow_generate_data_collection=False,
-        )
-    except Exception as e:
-        logger.error(f"[generate_analysis/cio_agent] 获取模板配置失败: {e}", exc_info=True)
-        return ApiResponse.error(message=f"获取 CIO 模板配置失败: {e}", code=500).to_dict()
+    把 build_stock_prompt 渲染、provider 配置组装、system+user 拼接三步集中。
+    expert_outputs 为 None 时，CIO 模板中的专家占位符会被渲染为"未提供"提示
+    （由 build_stock_prompt 内部处理）。
+
+    Returns:
+        {
+            "system_prompt": str, "user_prompt": str, "full_prompt": str,
+            "provider_name": str, "provider_config": dict, "trade_date": str | None,
+        }
+    """
+    from app.api.endpoints.prompt_templates import build_stock_prompt
+
+    cio_prompt_data = await build_stock_prompt(
+        template_key=_DEFAULT_TEMPLATE_KEYS["cio_directive"],
+        stock_name=body.stock_name,
+        stock_code=body.stock_code,
+        ts_code=body.ts_code,
+        created_by=current_user.id,
+        db=db,
+        allow_generate_data_collection=False,
+        expert_outputs=expert_outputs,
+    )
 
     provider_name = cio_prompt_data["recommended_provider"]
     provider_config = ai_service.get_provider_config(provider_name)
     provider_config["temperature"] = cio_prompt_data["recommended_temperature"]
     provider_config["max_tokens"] = cio_prompt_data["recommended_max_tokens"]
 
-    # LLM 调用日志
+    system_prompt = cio_prompt_data["system_prompt"]
+    user_prompt = cio_prompt_data["user_prompt"]
+    full_prompt = f"{system_prompt}\n\n{user_prompt}".strip() if system_prompt else user_prompt
+
+    return {
+        "system_prompt": system_prompt,
+        "user_prompt": user_prompt,
+        "full_prompt": full_prompt,
+        "provider_name": provider_name,
+        "provider_config": provider_config,
+        "trade_date": cio_prompt_data.get("trade_date"),
+    }
+
+
+async def _run_cio_agent_single(body, current_user, db, ai_service) -> dict:
+    """当 /generate 端点的 analysis_type == "cio_directive" 时走 Agent 路径。
+
+    单 CIO 路径无其他专家输出，CIO 模板中的专家占位符渲染为"未提供"提示，
+    Agent 完全依靠工具自查。如需注入专家输出请走 /generate-multi。
+    """
+    from app.services.cio_agent_service import CIOAgentService
+
+    try:
+        prep = await _prepare_cio_prompt(body, current_user, db, ai_service)
+    except Exception as e:
+        logger.error(f"[generate_analysis/cio_agent] 渲染模板失败: {e}", exc_info=True)
+        return ApiResponse.error(message=f"渲染 CIO 模板失败: {e}", code=500).to_dict()
+
     call_id, start_time_log = _log_llm_start(
-        db, provider_name, provider_config,
-        prompt_text=f"[CIO Agent] ts_code={body.ts_code}, standalone=true",
+        db, prep["provider_name"], prep["provider_config"],
+        prompt_text=prep["full_prompt"],
         caller_function="generate_analysis",
         ts_code=body.ts_code, user_id=current_user.id,
         analysis_type="cio_directive", agent_mode=True,
     )
 
-    # 运行 CIO Agent（无专家摘要，Agent 自主查询全部数据）
     try:
-        cio_agent = CIOAgentService()
-        agent_result = await cio_agent.run_agent(
+        agent_result = await CIOAgentService().run_agent(
             ts_code=body.ts_code,
             stock_name=body.stock_name,
-            expert_summaries=None,
-            provider=provider_name,
-            provider_config=provider_config,
+            system_prompt=prep["system_prompt"],
+            user_prompt=prep["user_prompt"],
+            provider=prep["provider_name"],
+            provider_config=prep["provider_config"],
         )
     except Exception as e:
         logger.error(f"[generate_analysis/cio_agent] Agent 执行失败: {e}", exc_info=True)
@@ -212,22 +255,19 @@ async def _run_cio_agent_single(body, current_user, db, ai_service) -> dict:
     generation_time = agent_result["generation_time"]
     _log_llm_success(db, call_id, start_time_log, ai_text, tokens_used)
 
-    # 清理 JSON + 提取评分
     ai_text, extracted_score = _extract_json_and_score(ai_text)
 
-    # 保存
-    trade_date = cio_prompt_data.get("trade_date")
     try:
         result = await StockAiAnalysisService().save_analysis(
             ts_code=body.ts_code,
             analysis_type="cio_directive",
             analysis_text=ai_text,
             score=extracted_score,
-            prompt_text=f"[CIO Agent] tools={[t['tool'] for t in agent_result.get('tool_calls', [])]}",
-            ai_provider=provider_name,
-            ai_model=provider_config.get("model_name"),
+            prompt_text=prep["full_prompt"],
+            ai_provider=prep["provider_name"],
+            ai_model=prep["provider_config"].get("model_name"),
             created_by=current_user.id,
-            trade_date=trade_date,
+            trade_date=prep["trade_date"],
         )
     except ValueError as e:
         return ApiResponse.bad_request(message=str(e)).to_dict()
@@ -570,49 +610,32 @@ async def generate_multi_analysis(
         try:
             from app.services.cio_agent_service import CIOAgentService
 
-            # 构建专家摘要供 Agent 参考
-            expert_summaries = [
-                {
-                    "analysis_type": r["analysis_type"],
-                    "score": r.get("score"),
-                    "text_preview": r.get("analysis_text", "")[:500],
-                }
+            # 把每个完成的专家完整 analysis_text（不截断）按映射注入 CIO 模板占位符
+            expert_outputs = {
+                placeholder: (r.get("analysis_text") or "")
                 for r in results
-            ]
+                if (placeholder := _EXPERT_TYPE_TO_CIO_PLACEHOLDER.get(r["analysis_type"]))
+            }
 
-            # 获取 CIO 推荐的 provider 配置
-            cio_template_key = _DEFAULT_TEMPLATE_KEYS["cio_directive"]
-            cio_prompt_data = await build_stock_prompt(
-                template_key=cio_template_key,
-                stock_name=body.stock_name,
-                stock_code=body.stock_code,
-                ts_code=body.ts_code,
-                created_by=current_user.id,
-                db=db,
-                allow_generate_data_collection=False,
+            prep = await _prepare_cio_prompt(
+                body, current_user, db, ai_service, expert_outputs=expert_outputs,
             )
 
-            provider_name = cio_prompt_data["recommended_provider"]
-            provider_config = ai_service.get_provider_config(provider_name)
-            provider_config["temperature"] = cio_prompt_data["recommended_temperature"]
-            provider_config["max_tokens"] = cio_prompt_data["recommended_max_tokens"]
-
             cio_call_id, cio_start_time_log = _log_llm_start(
-                db, provider_name, provider_config,
-                prompt_text=f"[CIO Agent] ts_code={body.ts_code}, experts={[r['analysis_type'] for r in results]}",
+                db, prep["provider_name"], prep["provider_config"],
+                prompt_text=prep["full_prompt"],
                 caller_function="generate_multi_analysis",
                 ts_code=body.ts_code, user_id=current_user.id,
                 analysis_type="cio_directive", agent_mode=True,
             )
 
-            # 运行 CIO Agent
-            cio_agent = CIOAgentService()
-            agent_result = await cio_agent.run_agent(
+            agent_result = await CIOAgentService().run_agent(
                 ts_code=body.ts_code,
                 stock_name=body.stock_name,
-                expert_summaries=expert_summaries,
-                provider=provider_name,
-                provider_config=provider_config,
+                system_prompt=prep["system_prompt"],
+                user_prompt=prep["user_prompt"],
+                provider=prep["provider_name"],
+                provider_config=prep["provider_config"],
             )
 
             cio_text = agent_result["content"]
@@ -627,9 +650,9 @@ async def generate_multi_analysis(
                 analysis_type="cio_directive",
                 analysis_text=cio_text,
                 score=cio_score,
-                prompt_text=f"[CIO Agent] tools={[t['tool'] for t in agent_result.get('tool_calls', [])]}",
-                ai_provider=provider_name,
-                ai_model=provider_config.get("model_name"),
+                prompt_text=prep["full_prompt"],
+                ai_provider=prep["provider_name"],
+                ai_model=prep["provider_config"].get("model_name"),
                 created_by=current_user.id,
                 trade_date=trade_date,
             )
