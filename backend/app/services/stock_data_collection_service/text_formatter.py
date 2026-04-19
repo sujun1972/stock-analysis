@@ -231,6 +231,21 @@ def _format_basic_market(lines: list, basic: Dict, financial: Dict = None):
         else:
             lines.append(f"| 加权平均成本 | {fmt(weight_avg)} 元 |")
 
+    # 概念板块：DC 日频题材归属，反映市场题材炒作线索（Tushare industry 字段静态且粗糙）
+    concepts = basic.get('concept_boards') or []
+    if concepts:
+        lines.append("")
+        lines.append("**所属概念板块（按近5日累计涨幅 TOP8，已过滤短期盘口标签噪音）：**")
+        lines.append("")
+        lines.append("| 概念板块 | 最新一日涨跌 | 近5日累计涨跌 |")
+        lines.append("|----------|-------------|---------------|")
+        for c in concepts:
+            pct_1d = c.get('pct_1d')
+            cum_5d = c.get('cum_5d')
+            pct_1d_str = f"{pct_1d:+.2f}%" if pct_1d is not None else 'N/A'
+            cum_5d_str = f"{cum_5d:+.2f}%" if cum_5d is not None else 'N/A'
+            lines.append(f"| {c.get('name', '')} | {pct_1d_str} | {cum_5d_str} |")
+
     ind_5d = basic.get('industry_5d', [])
     if ind_5d:
         lines.append("")

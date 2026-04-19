@@ -157,6 +157,13 @@ async def get_basic_market(ts_code: str, pure_code: str) -> Dict:
         result['industry_board_name'] = industry_bk.get('name', '')
         result['industry_5d'] = await _get_board_pct_5d(industry_bk['ts_code'])
 
+    # 所属概念板块 + 概念板块近5日涨幅 TOP3（A 股题材炒作的核心线索）
+    # Tushare 的 stock_basic.industry 字段静态且粗糙（如"铝"），DC 概念板块日频更新，
+    # 能反映真实题材归属（锂电池/储能/华为概念等）。
+    concept_info = await _get_concept_boards_with_perf(ts_code)
+    if concept_info:
+        result['concept_boards'] = concept_info
+
     # 当日大盘指数（上证/深证）涨跌幅 — 用于个股相对强度对比
     market_index = await _get_market_index_today()
     if market_index:
@@ -229,6 +236,94 @@ async def _get_board_pct_5d(board_ts_code: str) -> list:
         ]
     except Exception as e:
         logger.warning(f"查询板块近5日涨跌幅失败: {e}")
+        return []
+
+
+# DC 概念板块中属于"短期炒作标签"的噪音词，不代表真实题材归属，应过滤
+# （如"昨日涨停"、"昨日连板"等是 DC 按盘口特征动态打的标签）
+_CONCEPT_NOISE_KEYWORDS = (
+    '昨日', '今日', '热股', '多板', '涨停', '连板', '炸板', '触板',
+    '换手', '振幅', '打板', '融资融券', '深股通', '沪股通',
+)
+
+
+def _is_noise_concept(name: str) -> bool:
+    """判断概念板块名是否为短期炒作/通道类噪音标签。"""
+    if not name:
+        return True
+    return any(kw in name for kw in _CONCEPT_NOISE_KEYWORDS)
+
+
+async def _get_concept_boards_with_perf(ts_code: str, top_n: int = 8) -> list:
+    """拉取股票所属概念板块，并按"最新一日 + 近5日累计"涨跌幅排序返回 TOP N。
+
+    概念板块是 A 股题材炒作的直接载体，比 Tushare 静态 industry 字段更能反映
+    近期资金关注的题材线索。同时过滤"昨日涨停/昨日连板"等短期标签噪音。
+    """
+    try:
+        from app.repositories.dc_member_repository import DcMemberRepository
+        from app.repositories.dc_daily_repository import DcDailyRepository
+
+        boards = await asyncio.to_thread(
+            DcMemberRepository().get_boards_by_con_code,
+            ts_code, '概念板块', 50,
+        )
+        # 过滤噪音 + 去重（同义板块如"锂电池"/"锂电池概念"归一，保留其一）
+        def _dedup_key(name: str) -> str:
+            for suffix in ('概念', '板块'):
+                if name.endswith(suffix) and len(name) > len(suffix):
+                    return name[:-len(suffix)]
+            return name
+
+        seen_keys = set()
+        real_boards = []
+        for b in boards:
+            name = b.get('name', '')
+            if _is_noise_concept(name):
+                continue
+            key = _dedup_key(name)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            real_boards.append(b)
+
+        if not real_boards:
+            return []
+
+        today = datetime.now()
+        start = (today - timedelta(days=14)).strftime('%Y%m%d')
+        end = today.strftime('%Y%m%d')
+        dc_daily_repo = DcDailyRepository()
+
+        async def _fetch_perf(board):
+            rows = await asyncio.to_thread(
+                dc_daily_repo.get_by_date_range,
+                start, end, board['ts_code'], 5,
+            )
+            rows = rows or []
+            pct_1d = safe_float(rows[0].get('pct_change')) if rows else None
+            cum_5d = None
+            if rows:
+                cum = 1.0
+                for r in rows:
+                    p = safe_float(r.get('pct_change')) or 0
+                    cum *= (1 + p / 100)
+                cum_5d = round((cum - 1) * 100, 2)
+            latest_date = str(rows[0].get('trade_date', ''))[:8] if rows else ''
+            return {
+                'name': board['name'],
+                'ts_code': board['ts_code'],
+                'pct_1d': pct_1d,
+                'cum_5d': cum_5d,
+                'latest_date': latest_date,
+            }
+
+        perfs = await asyncio.gather(*[_fetch_perf(b) for b in real_boards])
+        # 按近5日累计涨幅降序（无数据的排最后）
+        perfs.sort(key=lambda x: (x['cum_5d'] is None, -(x['cum_5d'] or 0)))
+        return perfs[:top_n]
+    except Exception as e:
+        logger.warning(f"查询概念板块业绩失败 ({ts_code}): {e}")
         return []
 
 

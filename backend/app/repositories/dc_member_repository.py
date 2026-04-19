@@ -411,6 +411,43 @@ class DcMemberRepository(BaseRepository):
             logger.warning(f"查询行业板块失败 ({con_code}): {e}")
             return None
 
+    def get_boards_by_con_code(self, con_code: str,
+                                idx_type: Optional[str] = None,
+                                limit: int = 50) -> List[Dict]:
+        """
+        查询股票所属的全部板块（行业+概念+地域），返回去重后的板块列表。
+
+        Args:
+            con_code: 成分股 ts_code，如 '002824.SZ'
+            idx_type: 可选板块类型过滤（'行业板块'/'概念板块'/'地域板块'）
+            limit: 返回上限
+
+        Returns:
+            [{'ts_code': 'BK0574.DC', 'name': '锂电池', 'idx_type': '概念板块'}, ...]
+        """
+        try:
+            conditions = ['dm.con_code = %s']
+            params: list = [con_code]
+            if idx_type:
+                conditions.append('di.idx_type = %s')
+                params.append(idx_type)
+            params.append(limit)
+            query = f"""
+                SELECT DISTINCT di.ts_code, di.name, di.idx_type
+                FROM dc_member dm
+                JOIN dc_index di ON dm.ts_code = di.ts_code
+                WHERE {' AND '.join(conditions)}
+                LIMIT %s
+            """
+            result = self.execute_query(query, tuple(params))
+            return [
+                {'ts_code': r[0], 'name': r[1], 'idx_type': r[2]}
+                for r in result
+            ]
+        except Exception as e:
+            logger.warning(f"查询股票所属板块失败 ({con_code}): {e}")
+            return []
+
     def delete_by_date_range(
         self,
         start_date: str,
