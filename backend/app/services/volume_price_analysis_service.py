@@ -19,13 +19,18 @@ class VolumePriceAnalysisService:
     """量价动能分析服务（纯计算，无 IO）。"""
 
     @classmethod
-    def analyze(cls, df: pd.DataFrame, trend_context: str = '') -> Optional[Dict[str, Any]]:
+    def analyze(cls, df: pd.DataFrame, trend_context: str = '',
+                limit_map: Optional[Dict[str, Dict[str, Any]]] = None) -> Optional[Dict[str, Any]]:
         """对日线 DataFrame 进行量价结构分析。
 
         Args:
             df: 日线 DataFrame，需含 close/volume/pct_change/turnover/high/low，
                 index 为日期，按时间升序排列。
             trend_context: MA 趋势上下文（如"多头趋势"），用于动态调整分析提示话术。
+            limit_map: 涨跌停标记字典，key 为 'YYYY-MM-DD'，value 为
+                {'limit_type': 'U'/'D'/'Z', 'limit_times': int, 'open_times': int, 'fd_amount': float}。
+                涨停/跌停/炸板日的 K 线语义与普通量价完全不同，需单独标注，避免被误读为
+                "温和放量长阳/长阴"。
 
         Returns:
             量价分析结果字典，数据不足时返回 None。
@@ -62,7 +67,7 @@ class VolumePriceAnalysisService:
         result['vol_5d_mean'] = round(vol_5d_mean) if vol_5d_mean > 0 else None
 
         # ---- 短线视角：近5日量价推演 ----
-        daily_detail = cls._build_daily_detail(df, vol_5d_mean)
+        daily_detail = cls._build_daily_detail(df, vol_5d_mean, limit_map=limit_map)
         result['daily_detail'] = daily_detail
 
         # ---- 近5日量价背离系数 ----
@@ -78,20 +83,15 @@ class VolumePriceAnalysisService:
                 down_vol += vol_val
         if down_vol > 0:
             vp_ratio = round(up_vol / down_vol, 2)
-            if vp_ratio > 1.3:
-                vp_ratio_desc = f'上涨日总量/下跌日总量 = {vp_ratio}（上涨日量能占优）'
-            elif vp_ratio < 0.7:
-                vp_ratio_desc = f'上涨日总量/下跌日总量 = {vp_ratio}（下跌日量能占优）'
-            else:
-                vp_ratio_desc = f'上涨日总量/下跌日总量 = {vp_ratio}（多空量能接近，势均力敌）'
+            vp_ratio_desc = f'近5日上涨日总量/下跌日总量 = {vp_ratio}'
         elif up_vol > 0:
-            vp_ratio_desc = '近5日仅有上涨放量，无下跌对手盘'
+            vp_ratio_desc = '近5日仅有上涨日成交，无下跌日'
         else:
             vp_ratio_desc = None
         result['vp_ratio_desc'] = vp_ratio_desc
 
         # ---- 中长线视角 ----
-        mid_long = cls._analyze_mid_long(df, vol_5d_mean)
+        mid_long = cls._analyze_mid_long(df, vol_5d_mean, limit_map=limit_map)
         result['mid_long'] = mid_long
 
         # ---- 动态分析提示 ----
@@ -105,7 +105,9 @@ class VolumePriceAnalysisService:
 
     @classmethod
     def _build_daily_detail(cls, df: pd.DataFrame,
-                            vol_5d_mean: float) -> List[Dict[str, Any]]:
+                            vol_5d_mean: float,
+                            limit_map: Optional[Dict[str, Dict[str, Any]]] = None
+                            ) -> List[Dict[str, Any]]:
         """构建近5日逐日量价数据，含量比和形态定性。"""
         recent = df.tail(5)
         details = []
@@ -121,8 +123,9 @@ class VolumePriceAnalysisService:
             # 量价相对表现（文字描述）
             vol_desc = cls._describe_vol_ratio(vol_ratio)
 
-            # 形态定性
-            pattern = cls._classify_pattern(pct, vol_ratio)
+            # 形态定性（涨停/跌停/炸板优先）
+            limit_info = (limit_map or {}).get(date_str)
+            pattern = cls._classify_pattern(pct, vol_ratio, limit_info=limit_info)
 
             details.append({
                 'date': date_str,
@@ -137,29 +140,60 @@ class VolumePriceAnalysisService:
 
     @staticmethod
     def _describe_vol_ratio(ratio: Optional[float]) -> str:
-        """根据量比描述成交量相对水平。"""
+        """量比相对 5 日均量的中性档位描述。"""
         if ratio is None:
             return 'N/A'
         if ratio >= 2.0:
-            return f'巨量 ({ratio}x)'
+            return f'≥2.0x ({ratio}x)'
         if ratio >= 1.5:
-            return f'显著放量 ({ratio}x)'
+            return f'1.5~2.0x ({ratio}x)'
         if ratio >= 1.1:
-            return f'略超均量 ({ratio}x)'
+            return f'1.1~1.5x ({ratio}x)'
         if ratio >= 0.8:
-            return f'接近均量 ({ratio}x)'
+            return f'0.8~1.1x ({ratio}x)'
         if ratio >= 0.5:
-            return f'明显缩量 ({ratio}x)'
-        return f'极度缩量 ({ratio}x)'
+            return f'0.5~0.8x ({ratio}x)'
+        return f'<0.5x ({ratio}x)'
 
     @staticmethod
-    def _classify_pattern(pct: float, vol_ratio: Optional[float]) -> str:
+    def _classify_pattern(pct: float, vol_ratio: Optional[float],
+                          limit_info: Optional[Dict[str, Any]] = None) -> str:
         """根据涨跌幅和量比进行量价形态定性。
 
         使用涨跌幅分档 + 量比分档的组合，输出精确的复合标签。
+        涨停/跌停/炸板日有专属语义（量能受封板限制，不能套用普通量价逻辑）。
         """
         if vol_ratio is None:
             return '数据不足'
+
+        # ---- 涨跌停优先识别 ----
+        # 涨停日量能"低"是因封板后无卖单可成交，普通"温和放量长阳"标签会严重误导。
+        # 炸板日（Z）则相反：开板后剧烈分歧 → 量能必然放大。
+        if limit_info:
+            ltype = limit_info.get('limit_type')
+            ltimes = limit_info.get('limit_times')
+            otimes = limit_info.get('open_times')
+            ltimes_int = int(ltimes) if ltimes is not None else None
+            otimes_int = int(otimes) if otimes is not None else 0
+
+            if ltype == 'U':  # 涨停封板
+                board_label = (
+                    f'{ltimes_int}连板' if ltimes_int and ltimes_int >= 2
+                    else '首板'
+                )
+                if otimes_int == 0:
+                    return f'涨停（{board_label}，开板0次，全天封板，量比{vol_ratio}x）'
+                return (
+                    f'涨停（{board_label}，开板{otimes_int}次后封板，量比{vol_ratio}x）'
+                )
+            if ltype == 'D':  # 跌停
+                if otimes_int == 0:
+                    return f'跌停（开板0次，全天封板，量比{vol_ratio}x）'
+                return f'跌停（开板{otimes_int}次后封板，量比{vol_ratio}x）'
+            if ltype == 'Z':  # 炸板（盘中触及涨停后回落）
+                return (
+                    f'盘中触及涨停后回落（炸板，pct{pct:+.1f}%，量比{vol_ratio}x）'
+                )
 
         # 涨跌幅分档
         big_up = pct > 5
@@ -175,58 +209,50 @@ class VolumePriceAnalysisService:
         light = vol_ratio < 0.7
         normal = not heavy and not light
 
-        # 大涨 (>5%)
+        # 形态标签：仅做"涨跌幅档位 + 量能档位"的组合事实描述，不下结论性词语
         if big_up:
             if heavy:
-                return f'放量长阳（涨{pct:.1f}%，量比{vol_ratio}x）'
+                return f'大涨放量（涨{pct:.1f}%，量比{vol_ratio}x）'
             if normal:
-                return f'温和放量长阳（涨{pct:.1f}%，量价配合健康）'
-            return f'缩量长阳（涨{pct:.1f}%，上方压力有限但追涨需谨慎）'
-        # 中涨 (2%-5%)
+                return f'大涨常量（涨{pct:.1f}%，量比{vol_ratio}x）'
+            return f'大涨缩量（涨{pct:.1f}%，量比{vol_ratio}x）'
         if mid_up:
             if heavy:
-                return '显著放量上涨'
+                return f'中涨放量（涨{pct:.1f}%，量比{vol_ratio}x）'
             if normal:
-                return '温和放量上涨（量价配合健康）'
-            return '缩量上涨（上方压力有限但动能不足）'
-        # 小涨 (0.3%-2%)
+                return f'中涨常量（涨{pct:.1f}%，量比{vol_ratio}x）'
+            return f'中涨缩量（涨{pct:.1f}%，量比{vol_ratio}x）'
         if small_up:
             if heavy:
-                return '放量微涨（多空换手充分，关注后续方向）'
+                return f'小涨放量（涨{pct:.1f}%，量比{vol_ratio}x）'
             if light:
-                if vol_ratio < 0.5:
-                    return '地量微涨（抛压枯竭）'
-                return '缩量微涨（惜售格局）'
-            return '温和换手上涨（平稳过渡）'
-        # 大跌 (<-5%)
+                return f'小涨缩量（涨{pct:.1f}%，量比{vol_ratio}x）'
+            return f'小涨常量（涨{pct:.1f}%，量比{vol_ratio}x）'
         if big_down:
             if heavy:
-                return f'放量长阴（跌{pct:.1f}%量比{vol_ratio}x，恐慌性抛售）'
+                return f'大跌放量（跌{pct:.1f}%，量比{vol_ratio}x）'
             if normal:
-                return f'温和放量长阴（跌{pct:.1f}%，空头主导）'
-            return f'缩量长阴（跌{pct:.1f}%，阴跌格局）'
-        # 中跌 (-5%~-2%)
+                return f'大跌常量（跌{pct:.1f}%，量比{vol_ratio}x）'
+            return f'大跌缩量（跌{pct:.1f}%，量比{vol_ratio}x）'
         if mid_down:
             if heavy:
-                return '放量下跌（量比1.5x+）'
+                return f'中跌放量（跌{pct:.1f}%，量比{vol_ratio}x）'
             if normal:
-                return '温和放量下跌（抛压释放）'
-            return '缩量下跌（正常调整）'
-        # 小跌 (-2%~-0.3%)
+                return f'中跌常量（跌{pct:.1f}%，量比{vol_ratio}x）'
+            return f'中跌缩量（跌{pct:.1f}%，量比{vol_ratio}x）'
         if small_down:
             if heavy:
-                return '放量微跌（多空分歧，量大但跌幅有限）'
+                return f'小跌放量（跌{pct:.1f}%，量比{vol_ratio}x）'
             if light:
-                return '缩量下跌（寻底阶段）'
-            return '缩量下跌（正常调整）'
-        # 平盘
+                return f'小跌缩量（跌{pct:.1f}%，量比{vol_ratio}x）'
+            return f'小跌常量（跌{pct:.1f}%，量比{vol_ratio}x）'
         if flat:
             if heavy:
-                return '放量滞涨（多空分歧严重）'
+                return f'平盘放量（pct{pct:+.1f}%，量比{vol_ratio}x）'
             if light:
-                return '缩量横盘（多空观望）'
-            return '温和换手（平稳过渡）'
-        return '温和换手（平稳过渡）'
+                return f'平盘缩量（pct{pct:+.1f}%，量比{vol_ratio}x）'
+            return f'平盘常量（pct{pct:+.1f}%，量比{vol_ratio}x）'
+        return f'平盘常量（pct{pct:+.1f}%，量比{vol_ratio}x）'
 
     # ------------------------------------------------------------------
     # 中长线：全局筹码与资金行为结构
@@ -234,7 +260,9 @@ class VolumePriceAnalysisService:
 
     @classmethod
     def _analyze_mid_long(cls, df: pd.DataFrame,
-                          vol_5d_mean: float) -> Dict[str, Any]:
+                          vol_5d_mean: float,
+                          limit_map: Optional[Dict[str, Dict[str, Any]]] = None
+                          ) -> Dict[str, Any]:
         """分析60日量价结构特征。"""
         result: Dict[str, Any] = {}
 
@@ -253,7 +281,7 @@ class VolumePriceAnalysisService:
 
         # ---- 核心量价异动 ----
         result['key_anomalies'] = cls._detect_key_anomalies(
-            recent_60, vol_5d_mean
+            recent_60, vol_5d_mean, limit_map=limit_map
         )
 
         return result
@@ -275,32 +303,17 @@ class VolumePriceAnalysisService:
         down_days = int(down_mask.sum())
 
         if up_vol == 0 and down_vol == 0:
-            return '近期无明显涨跌，横盘整理'
+            return f'涨跌幅均在 ±0.3% 内，无明显涨跌（涨{up_days}日/跌{down_days}日）'
 
-        # 量价配合判断
         if up_vol > 0 and down_vol > 0:
             ratio = up_vol / down_vol
-            if ratio > 1.3:
-                if up_days > down_days:
-                    return (
-                        f'上涨放量、下跌缩量（上涨日均量/下跌日均量={ratio:.1f}x，'
-                        f'涨{up_days}日/跌{down_days}日）'
-                    )
-                else:
-                    return (
-                        f'上涨日放量但上涨天数偏少（涨{up_days}日/跌{down_days}日，'
-                        f'上涨日均量/下跌日均量={ratio:.1f}x）'
-                    )
-            elif ratio < 0.7:
-                return (
-                    f'上涨缩量、下跌放量（上涨日均量/下跌日均量={ratio:.1f}x）'
-                )
-            else:
-                return '上涨与下跌日均量接近，多空势均力敌，方向待选择'
-
+            return (
+                f'上涨日均量/下跌日均量={ratio:.2f}x，'
+                f'涨{up_days}日/跌{down_days}日'
+            )
         if up_vol > 0:
-            return '下跌日极少，整体偏多'
-        return '上涨日极少，整体偏空'
+            return f'仅有上涨日成交（涨{up_days}日，无下跌日）'
+        return f'仅有下跌日成交（跌{down_days}日，无上涨日）'
 
     @staticmethod
     def _detect_volume_pressure(df: pd.DataFrame,
@@ -317,31 +330,35 @@ class VolumePriceAnalysisService:
         avg_vol = float(volume_60.mean())
 
         if max_vol > avg_vol * 2.5:
-            # 有显著天量
+            date_str = str(max_vol_idx)[:10]
+            ratio_to_avg = round(max_vol / avg_vol, 1)
             if max_vol_close > current_close:
                 pct_away = round((max_vol_close - current_close) / current_close * 100, 1)
-                date_str = str(max_vol_idx)[:10]
                 return (
-                    f'上方存在历史天量密集区（{date_str}，价格约{round(max_vol_close, 2)}），'
-                    f'距当前价 +{pct_away}%'
+                    f'60日最大成交量={ratio_to_avg}x 日均量，对应日={date_str}，'
+                    f'当日收盘={round(max_vol_close, 2)}（高于当前价 +{pct_away}%）'
                 )
             else:
-                return '历史天量位置已在当前价下方，上方暂无重大历史抛压阻力'
+                pct_away = round((current_close - max_vol_close) / current_close * 100, 1)
+                return (
+                    f'60日最大成交量={ratio_to_avg}x 日均量，对应日={date_str}，'
+                    f'当日收盘={round(max_vol_close, 2)}（低于当前价 -{pct_away}%）'
+                )
         else:
-            return '近期无显著天量柱，历史抛压不明显'
+            return f'60日最大成交量 ≤ 2.5x 日均量，无显著天量柱'
 
     @classmethod
     def _detect_key_anomalies(cls, recent_60: pd.DataFrame,
-                              vol_5d_mean: float) -> List[str]:
-        """检测核心量价异动事件。"""
+                              vol_5d_mean: float,
+                              limit_map: Optional[Dict[str, Dict[str, Any]]] = None
+                              ) -> List[str]:
+        """检测核心量价异动事件（含涨停/跌停/炸板事件）。"""
         anomalies = []
 
         if vol_5d_mean <= 0:
             return anomalies
 
         volume = recent_60['volume'].astype(float)
-        pct = recent_60['pct_change'].astype(float)
-        close = recent_60['close'].astype(float)
 
         # 检测近10日内的显著量价事件
         recent_10 = recent_60.tail(10)
@@ -349,8 +366,29 @@ class VolumePriceAnalysisService:
             vol = float(row.get('volume', 0) or 0)
             p = float(row.get('pct_change', 0) or 0)
             ratio = vol / vol_5d_mean
-
             date_str = str(idx)[:10]
+
+            # 涨停/跌停/炸板事件优先标注
+            linfo = (limit_map or {}).get(date_str)
+            if linfo:
+                ltype = linfo.get('limit_type')
+                ltimes = linfo.get('limit_times')
+                otimes = int(linfo.get('open_times') or 0)
+                ltimes_int = int(ltimes) if ltimes is not None else None
+                if ltype == 'U':
+                    board_label = f'{ltimes_int}连板' if ltimes_int and ltimes_int >= 2 else '首板'
+                    suffix = '一字/秒板' if otimes == 0 else (f'开板{otimes}次后封板')
+                    anomalies.append(f'{date_str} 涨停（{board_label}，{suffix}，量比{ratio:.1f}x）')
+                    continue
+                if ltype == 'D':
+                    suffix = '一字/秒板' if otimes == 0 else (f'开板{otimes}次后封死')
+                    anomalies.append(f'{date_str} 跌停（{suffix}，量比{ratio:.1f}x）')
+                    continue
+                if ltype == 'Z':
+                    anomalies.append(
+                        f'{date_str} 炸板（盘中触及涨停未封住，pct{p:+.1f}%，量比{ratio:.1f}x）'
+                    )
+                    continue
 
             if ratio >= 2.0 and p > 2:
                 anomalies.append(f'{date_str} 倍量阳线（量比{ratio:.1f}x, +{p:.1f}%）')

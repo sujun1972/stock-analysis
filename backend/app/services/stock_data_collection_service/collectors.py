@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 
 from loguru import logger
 
-from .formatters import safe_float
+from .formatters import days_since, format_date_dashed, quantile, safe_float
 
 
 # ------------------------------------------------------------------
@@ -97,24 +97,27 @@ async def get_basic_market(ts_code: str, pure_code: str) -> Dict:
             result['exchange_note'] = result['exchange_note'].replace('±10%', '±20%')
 
     # 财务指标（最新一期）
+    # days_since_end 用于告知 AI 该报告期距今多久（季报快照容易被当作即时基本面误用）
     if fina_data:
         latest_fina = fina_data[0]
+        end_date_str = str(latest_fina.get('end_date') or '')
         result['fina'] = {
-            'end_date': latest_fina.get('end_date', ''),
+            'end_date': end_date_str,
+            'days_since_end': days_since(end_date_str, today.date()),
             'roe': safe_float(latest_fina.get('roe')),
             'grossprofit_margin': safe_float(latest_fina.get('grossprofit_margin')),
             'netprofit_yoy': safe_float(latest_fina.get('netprofit_yoy')),
             'or_yoy': safe_float(latest_fina.get('or_yoy')),
         }
 
-    # PE-TTM 近3年估值分位
+    # PE-TTM 近3年估值分位 + PE Band（高/中/低位估值通道）
     if pe_history and result.get('pe_ttm') is not None:
-        pe_values = [
+        pe_values = sorted([
             safe_float(r.get('pe_ttm'))
             for r in pe_history
             if safe_float(r.get('pe_ttm')) is not None
             and safe_float(r.get('pe_ttm')) > 0
-        ]
+        ])
         if len(pe_values) >= 30:
             current_pe = result['pe_ttm']
             if current_pe and current_pe > 0:
@@ -123,11 +126,41 @@ async def get_basic_market(ts_code: str, pure_code: str) -> Dict:
                 result['pe_percentile_3y'] = percentile
                 result['pe_sample_count'] = len(pe_values)
 
+                # 估值档位中性标签（仅描述分位区间，不做高/低估判断，由 AI 自行解读）
+                if percentile >= 95:
+                    band_label = '≥95%分位区间'
+                elif percentile >= 80:
+                    band_label = '80~95%分位区间'
+                elif percentile >= 60:
+                    band_label = '60~80%分位区间'
+                elif percentile >= 40:
+                    band_label = '40~60%分位区间'
+                elif percentile >= 20:
+                    band_label = '20~40%分位区间'
+                else:
+                    band_label = '<20%分位区间'
+                result['pe_band_label'] = band_label
+
+                # PE Band 通道数值（10/50/90 分位 = 估值通道下/中/上轨）
+                result['pe_band'] = {
+                    'p10': quantile(pe_values, 0.10),
+                    'p50': quantile(pe_values, 0.50),
+                    'p90': quantile(pe_values, 0.90),
+                    'p99': quantile(pe_values, 0.99),
+                    'min': round(pe_values[0], 2),
+                    'max': round(pe_values[-1], 2),
+                }
+
     # 东财行业板块及近5交易日涨跌幅
     industry_bk = await _get_industry_board(ts_code)
     if industry_bk:
         result['industry_board_name'] = industry_bk.get('name', '')
         result['industry_5d'] = await _get_board_pct_5d(industry_bk['ts_code'])
+
+    # 当日大盘指数（上证/深证）涨跌幅 — 用于个股相对强度对比
+    market_index = await _get_market_index_today()
+    if market_index:
+        result['market_index'] = market_index
 
     if cyq_data:
         c = cyq_data[0]
@@ -199,6 +232,33 @@ async def _get_board_pct_5d(board_ts_code: str) -> list:
         return []
 
 
+async def _get_market_index_today() -> Optional[Dict[str, Any]]:
+    """从 moneyflow_mkt_dc 获取最近一个交易日上证/深证收盘 + 涨跌幅，
+    用于和个股涨跌幅做相对强度对比（个股 - 大盘 = 相对强弱）。"""
+    try:
+        from app.repositories.moneyflow_mkt_dc_repository import MoneyflowMktDcRepository
+        today = datetime.now()
+        start = (today - timedelta(days=14)).strftime('%Y%m%d')
+        end = today.strftime('%Y%m%d')
+        rows = await asyncio.to_thread(
+            MoneyflowMktDcRepository().get_by_date_range,
+            start, end, 1, 0,
+        )
+        if not rows:
+            return None
+        r = rows[0]
+        return {
+            'trade_date': str(r.get('trade_date', ''))[:8],
+            'close_sh': safe_float(r.get('close_sh')),
+            'pct_change_sh': safe_float(r.get('pct_change_sh')),
+            'close_sz': safe_float(r.get('close_sz')),
+            'pct_change_sz': safe_float(r.get('pct_change_sz')),
+        }
+    except Exception as e:
+        logger.warning(f"查询大盘指数失败: {e}")
+        return None
+
+
 # ------------------------------------------------------------------
 # 二、资金流向
 # ------------------------------------------------------------------
@@ -233,30 +293,80 @@ async def get_capital_flow(ts_code: str, pure_code: str) -> Dict:
     result: Dict[str, Any] = {}
 
     if flow_data:
+        # 东方财富个股资金流向口径：
+        #   buy_elg_amount = 超大单（>=100万元）净额
+        #   buy_lg_amount  = 大单（20~100万元）净额
+        #   buy_md_amount  = 中单（4~20万元）净额
+        #   buy_sm_amount  = 小单（<4万元）净额
+        #   net_amount     = 主力净额 = 超大单净额 + 大单净额（即 elg + lg）
+        # 单位：万元（DC 原始单位即为万元）
         net_amounts = [safe_float(r.get('net_amount')) or 0 for r in flow_data]
         result['net_1d'] = net_amounts[0] if net_amounts else None
         result['net_5d'] = sum(net_amounts[:5])
         result['net_10d'] = sum(net_amounts[:10])
+        result['flow_caliber'] = (
+            '主力净额 = 超大单(≥100万元)净额 + 大单(20~100万元)净额；'
+            '不含中单(4~20万元)与小单(<4万元)；单位：万元'
+        )
         result['flow_detail'] = [
             {
                 'trade_date': str(r.get('trade_date', ''))[:8],
                 'net_amount': safe_float(r.get('net_amount')) or 0,
+                'net_elg': safe_float(r.get('buy_elg_amount')) or 0,
+                'net_lg': safe_float(r.get('buy_lg_amount')) or 0,
+                'net_md': safe_float(r.get('buy_md_amount')) or 0,
+                'net_sm': safe_float(r.get('buy_sm_amount')) or 0,
                 'pct_change': safe_float(r.get('pct_change')) or 0,
             }
             for r in flow_data[:5]
         ]
 
+        # 资金 vs 价格 累计对比（5 日 / 10 日）：用复合涨幅（连乘）算累计涨幅
+        # 仅做事实陈述：累计净额 + 累计涨幅 + 是否同向。AI 自行判断"背离"含义
+        def _cumulative_pct(rows):
+            cum = 1.0
+            for r in rows:
+                p = safe_float(r.get('pct_change')) or 0
+                cum *= (1 + p / 100)
+            return round((cum - 1) * 100, 2)
+        if flow_data:
+            cum_5d_pct = _cumulative_pct(flow_data[:5]) if len(flow_data) >= 5 else None
+            cum_10d_pct = _cumulative_pct(flow_data[:10]) if len(flow_data) >= 10 else None
+            net_5d = result['net_5d']
+            net_10d = result['net_10d']
+            result['flow_vs_price'] = {
+                'cum_pct_5d': cum_5d_pct,
+                'cum_pct_10d': cum_10d_pct,
+                'net_5d': net_5d,
+                'net_10d': net_10d,
+                'same_direction_5d': (
+                    None if cum_5d_pct is None
+                    else (cum_5d_pct >= 0) == (net_5d >= 0)
+                ),
+                'same_direction_10d': (
+                    None if cum_10d_pct is None
+                    else (cum_10d_pct >= 0) == (net_10d >= 0)
+                ),
+            }
+
     if hk_data:
         latest_hk = hk_data[0]
+        latest_date_str = format_date_dashed(latest_hk.get('trade_date'))
         result['hk_hold'] = {
-            'trade_date': str(latest_hk.get('trade_date', ''))[:10],
+            'trade_date': latest_date_str,
             'vol': latest_hk.get('vol'),
             'ratio': safe_float(latest_hk.get('ratio')),
+            # days_lag：北向持股部分股票为季报频次，告知 AI 该快照距今多久，避免把过期数据当即时持仓
+            'days_lag': days_since(latest_date_str, today.date()),
         }
+        # 与上一期对比时取 hk_data[1]（已按 trade_date desc 排序），
+        # 确保是真正的"上一期环比"，而非窗口最末记录（可能跨年）
         if len(hk_data) > 1:
-            prev_vol = safe_float(hk_data[-1].get('vol')) or 0
+            prev_record = hk_data[1]
+            prev_vol = safe_float(prev_record.get('vol')) or 0
             curr_vol = safe_float(latest_hk.get('vol')) or 0
             result['hk_hold']['prev_vol'] = prev_vol
+            result['hk_hold']['prev_date'] = format_date_dashed(prev_record.get('trade_date'))
             result['hk_hold']['vol_change_pct'] = (
                 round((curr_vol - prev_vol) / prev_vol * 100, 2) if prev_vol else None
             )
@@ -361,6 +471,12 @@ async def get_shareholder_info(ts_code: str) -> Dict:
             nums_list[i]['qoq_pct'] = round((curr - prev) / prev * 100, 2) if prev else None
         result['holder_nums'] = nums_list
 
+        # 最新一条股东人数距今天数：超过 60 天（≈一个季度）由 text_formatter 触发滞后提示
+        if nums_list:
+            lag = days_since(nums_list[0].get('end_date'), today.date())
+            if lag is not None:
+                result['holder_nums_days_lag'] = lag
+
     if reductions:
         result['reductions'] = [
             {
@@ -400,16 +516,18 @@ async def get_financial_reports(ts_code: str) -> Dict:
 
     today = datetime.now()
     end_yyyymmdd = today.strftime('%Y%m%d')
-    start_365d = (today - timedelta(days=365)).strftime('%Y%m%d')
+    # 业绩预告/快报：拉近 24 个月，覆盖至少 2 个同期报告，便于做同比/环比定性。
+    # 多数公司年内仅 1-2 次预告，12 个月窗口经常只剩 1 条无法对比。
+    start_24m = (today - timedelta(days=730)).strftime('%Y%m%d')
 
     disclosures, forecasts, express_list = await asyncio.gather(
         asyncio.to_thread(DisclosureDateRepository().get_by_ts_code, ts_code, 8),
         asyncio.to_thread(
             ForecastRepository().get_by_date_range,
-            start_365d, end_yyyymmdd, ts_code, None, None, 5
+            start_24m, end_yyyymmdd, ts_code, None, None, 8
         ),
         asyncio.to_thread(
-            ExpressRepository().get_by_code, ts_code, start_365d, end_yyyymmdd, 5
+            ExpressRepository().get_by_code, ts_code, start_24m, end_yyyymmdd, 8
         ),
     )
 
@@ -441,6 +559,47 @@ async def get_financial_reports(ts_code: str) -> Dict:
             }
             for r in forecasts
         ]
+
+        # 最新一份预告：计算 Forward PE 区间（中值/下限/上限），判断股价是否已透支预期
+        # net_profit_min/max 单位：万元；total_mv 单位：万元 → 直接相除即为 PE 倍数
+        latest = result['forecasts'][0]
+        np_min = latest.get('net_profit_min')
+        np_max = latest.get('net_profit_max')
+        if np_min and np_max and np_min > 0 and np_max > 0:
+            try:
+                from app.repositories.daily_basic_repository import DailyBasicRepository
+                start_30 = (today - timedelta(days=30)).strftime('%Y%m%d')
+                basic_rows = await asyncio.to_thread(
+                    DailyBasicRepository().get_by_code_and_date_range,
+                    ts_code, start_30, end_yyyymmdd, 1
+                )
+                total_mv = (
+                    safe_float(basic_rows[0].get('total_mv'))
+                    if basic_rows else None
+                )
+                pe_ttm = (
+                    safe_float(basic_rows[0].get('pe_ttm'))
+                    if basic_rows else None
+                )
+                if total_mv and total_mv > 0:
+                    np_mid = (np_min + np_max) / 2
+                    fwd_pe_low = round(total_mv / np_max, 2)   # 用最高净利得到最低 PE
+                    fwd_pe_high = round(total_mv / np_min, 2)  # 用最低净利得到最高 PE
+                    fwd_pe_mid = round(total_mv / np_mid, 2)
+                    result['forecast_forward_pe'] = {
+                        'forecast_ann_date': latest.get('ann_date'),
+                        'forecast_end_date': latest.get('end_date'),
+                        'np_min_yi': round(np_min / 10000, 2),  # 万元 → 亿元
+                        'np_max_yi': round(np_max / 10000, 2),
+                        'np_mid_yi': round(np_mid / 10000, 2),
+                        'total_mv_yi': round(total_mv / 10000, 2),
+                        'forward_pe_low': fwd_pe_low,    # 最乐观（按预告净利上限）
+                        'forward_pe_mid': fwd_pe_mid,    # 中值
+                        'forward_pe_high': fwd_pe_high,  # 最保守（按预告净利下限）
+                        'current_pe_ttm': pe_ttm,
+                    }
+            except Exception as e:
+                logger.warning(f"计算业绩预告 Forward PE 失败: {e}")
 
     if express_list:
         result['express'] = [
@@ -530,17 +689,27 @@ async def get_nine_turn(ts_code: str) -> Dict:
     result['nine_up_turn'] = latest.get('nine_up_turn')
     result['nine_down_turn'] = latest.get('nine_down_turn')
 
-    signals = [
-        r for r in rows
-        if r.get('nine_up_turn') == '+9' or r.get('nine_down_turn') == '-9'
-    ]
-    result['recent_signals'] = [
-        {
-            'date': r.get('trade_date', '')[:10],
-            'type': '九转见顶' if r.get('nine_up_turn') == '+9' else '九转见底',
-        }
-        for r in signals
-    ]
+    # 只取真正的"触发日"：count 首次达到 9 的那一天（即 count==9）。
+    # count>9 是触发后序列继续延伸，nine_up_turn 字段虽仍为 '+9' 但属同一次信号的延续，不是新触发。
+    initial_signals = []
+    for r in rows:
+        up_c = r.get('up_count')
+        down_c = r.get('down_count')
+        if r.get('nine_up_turn') == '+9' and up_c is not None and int(up_c) == 9:
+            initial_signals.append({'date': r.get('trade_date', '')[:10], 'type': '九转见顶'})
+        elif r.get('nine_down_turn') == '-9' and down_c is not None and int(down_c) == 9:
+            initial_signals.append({'date': r.get('trade_date', '')[:10], 'type': '九转见底'})
+    result['recent_signals'] = initial_signals
+
+    # 序列是否仍在延续：触发后未断（count > 9）
+    up_c_latest = latest.get('up_count')
+    down_c_latest = latest.get('down_count')
+    if latest.get('nine_up_turn') == '+9' and up_c_latest is not None and int(up_c_latest) > 9:
+        result['extension_days'] = int(up_c_latest) - 9
+        result['extension_direction'] = 'up'
+    elif latest.get('nine_down_turn') == '-9' and down_c_latest is not None and int(down_c_latest) > 9:
+        result['extension_days'] = int(down_c_latest) - 9
+        result['extension_direction'] = 'down'
 
     return result
 
@@ -627,12 +796,11 @@ async def get_auction(ts_code: str) -> Dict:
         auction_vol_c = safe_float(latest_c.get('vol'))
         auction_amount_c = safe_float(latest_c.get('amount'))
 
-        # 尾盘竞价成交占当日总成交比例（stock_daily.volume 单位：手；auction.vol 单位：股 → /100 换算）
+        # 尾盘竞价成交占当日总成交比例（stock_daily.volume 与 auction.vol 单位均为"股"）
         day_vol = daily_map.get(auction_date_c, {}).get('volume')
         vol_share_pct = None
         if day_vol and auction_vol_c:
-            day_vol_shares = day_vol * 100  # 手 → 股
-            vol_share_pct = round(auction_vol_c / day_vol_shares * 100, 2)
+            vol_share_pct = round(auction_vol_c / day_vol * 100, 2)
 
         result['close_auction'] = {
             'trade_date': auction_date_c,
@@ -641,5 +809,169 @@ async def get_auction(ts_code: str) -> Dict:
             'amount': auction_amount_c,
             'vol_share_pct': vol_share_pct,
         }
+
+    return result
+
+
+# ------------------------------------------------------------------
+# 八、聪明资金（融资融券 + 龙虎榜）
+# ------------------------------------------------------------------
+
+# 龙虎榜席位性质识别（用于把营业部名翻译成"游资 / 机构 / 量化 / 北向 / 散户主战场"）
+# 名单为公开常识性归类（一线/二线游资席位、量化席位等）。命名命中后才打标签，不命中保留原名。
+_SEAT_TAGS = {
+    # 北向 / ETF 通道
+    '深股通专用': '北向通道',
+    '沪股通专用': '北向通道',
+    # 公认机构席位（任何"机构专用"都是机构；席位名为固定字符串）
+    '机构专用': '机构席位',
+    # 知名一线游资席位（仅做标记，未来可扩展；命中字符串为子串匹配）
+    '中信证券股份有限公司深圳福田金田路证券营业部': '一线游资·深圳金田路（炒新/打板风）',
+    '国泰海通证券股份有限公司上海长宁区江苏路证券营业部': '一线游资·上海溧阳路（章盟主系）',
+    '华鑫证券有限责任公司上海茅台路证券营业部': '一线量化席位（华鑫茅台路）',
+    '中信证券(山东)有限责任公司青岛分公司': '量化/对冲席位（中信山东青岛）',
+}
+
+
+def _classify_seat(exalter: str) -> str:
+    """席位名称 → 性质标签。未命中返回空字符串（保留原名即可）。"""
+    if not exalter:
+        return ''
+    if exalter in _SEAT_TAGS:
+        return _SEAT_TAGS[exalter]
+    if '机构专用' in exalter:
+        return '机构席位'
+    if '深股通专用' in exalter or '沪股通专用' in exalter:
+        return '北向通道'
+    return ''
+
+
+async def get_smart_money(ts_code: str) -> Dict:
+    """采集"聪明资金"维度：
+    1) 融资融券 5 日明细 + 净额变动方向（衡量杠杆资金的进出）
+    2) 龙虎榜 60 日内的所有上榜事件，含席位明细及性质标记
+    """
+    from app.repositories.margin_detail_repository import MarginDetailRepository
+    from app.repositories.top_list_repository import TopListRepository
+    from app.repositories.top_inst_repository import TopInstRepository
+
+    today = datetime.now()
+    end_yyyymmdd = today.strftime('%Y%m%d')
+    start_60d = (today - timedelta(days=60)).strftime('%Y%m%d')
+    start_10d = (today - timedelta(days=15)).strftime('%Y%m%d')
+
+    # 并行查询（Repository 的 sort_by 白名单不含 trade_date，需在 collector 端再排序）
+    margin_rows, top_list_rows = await asyncio.gather(
+        asyncio.to_thread(
+            MarginDetailRepository().get_by_date_range,
+            start_10d, end_yyyymmdd, ts_code, 10, 0, None, None,
+        ),
+        asyncio.to_thread(
+            TopListRepository().get_by_date_range,
+            start_60d, end_yyyymmdd, ts_code, 20, 0, None, 'desc',
+        ),
+    )
+
+    # 强制按 trade_date desc 本地排序（最新在前）
+    if margin_rows:
+        margin_rows = sorted(
+            margin_rows,
+            key=lambda r: str(r.get('trade_date') or '')[:10].replace('-', ''),
+            reverse=True,
+        )
+    if top_list_rows:
+        top_list_rows = sorted(
+            top_list_rows,
+            key=lambda r: str(r.get('trade_date') or '')[:8],
+            reverse=True,
+        )
+
+    result: Dict[str, Any] = {}
+
+    # ---- 融资融券 ----
+    if margin_rows:
+        latest = margin_rows[0]
+        # rzye/rqye/rzrqye 单位：元
+        rzye = safe_float(latest.get('rzye'))
+        rqye = safe_float(latest.get('rqye'))
+        rzrqye = safe_float(latest.get('rzrqye'))
+
+        # 5 日累计净买入（融资买入额 - 融资偿还额）
+        net_5d = 0.0
+        rzye_change_5d = None
+        for r in margin_rows[:5]:
+            buy = safe_float(r.get('rzmre')) or 0
+            repay = safe_float(r.get('rzche')) or 0
+            net_5d += (buy - repay)
+        if len(margin_rows) >= 5:
+            curr_rzye = safe_float(margin_rows[0].get('rzye')) or 0
+            prev_rzye = safe_float(margin_rows[4].get('rzye')) or 0
+            if prev_rzye > 0:
+                rzye_change_5d = round((curr_rzye - prev_rzye) / prev_rzye * 100, 2)
+
+        latest_date_str = format_date_dashed(latest.get('trade_date'))
+        result['margin'] = {
+            'trade_date': latest_date_str,
+            'days_lag': days_since(latest_date_str, today.date()),
+            'rzye': rzye,                     # 元，融资余额
+            'rqye': rqye,                     # 元，融券余额
+            'rzrqye': rzrqye,                 # 元，两融余额
+            'net_buy_5d': net_5d,             # 元，5 日融资净买入
+            'rzye_change_5d_pct': rzye_change_5d,
+            'detail': [
+                {
+                    'trade_date': str(r.get('trade_date') or '')[:10].replace('-', ''),
+                    'rzye': safe_float(r.get('rzye')),
+                    'rzmre': safe_float(r.get('rzmre')),
+                    'rzche': safe_float(r.get('rzche')),
+                    'net_buy': (safe_float(r.get('rzmre')) or 0) - (safe_float(r.get('rzche')) or 0),
+                }
+                for r in margin_rows[:5]
+            ],
+        }
+
+    # ---- 龙虎榜（事件 + 席位明细）----
+    if top_list_rows:
+        events = []
+        for ev in top_list_rows[:5]:  # 最多取近 5 次上榜
+            ev_date = str(ev.get('trade_date') or '')[:8]
+            # 拉该日席位明细
+            insts = await asyncio.to_thread(
+                TopInstRepository().get_by_date_range,
+                ev_date, ev_date, ts_code, None, 1, 50,
+                'net_buy', 'desc',
+            )
+            buyers = []
+            sellers = []
+            for inst in insts or []:
+                exalter = inst.get('exalter', '') or ''
+                tag = _classify_seat(exalter)
+                row = {
+                    'exalter': exalter,
+                    'seat_tag': tag,
+                    'buy': safe_float(inst.get('buy')) or 0,
+                    'sell': safe_float(inst.get('sell')) or 0,
+                    'net_buy': safe_float(inst.get('net_buy')) or 0,
+                }
+                if str(inst.get('side', '')) == '0':
+                    buyers.append(row)
+                else:
+                    sellers.append(row)
+            buyers.sort(key=lambda x: x['net_buy'], reverse=True)
+            sellers.sort(key=lambda x: x['net_buy'])
+            events.append({
+                'trade_date': ev_date,
+                'pct_change': safe_float(ev.get('pct_change')),
+                'turnover_rate': safe_float(ev.get('turnover_rate')),
+                'amount': safe_float(ev.get('amount')),         # 元
+                'l_buy': safe_float(ev.get('l_buy')),           # 元
+                'l_sell': safe_float(ev.get('l_sell')),         # 元
+                'l_amount': safe_float(ev.get('l_amount')),     # 元（前五合计成交）
+                'net_amount': safe_float(ev.get('net_amount')), # 元（前五净额）
+                'reason': ev.get('reason') or '',
+                'buyers': buyers[:5],
+                'sellers': sellers[:5],
+            })
+        result['top_list_events'] = events
 
     return result

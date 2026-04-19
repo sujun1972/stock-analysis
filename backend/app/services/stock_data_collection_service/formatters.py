@@ -5,6 +5,7 @@
 """
 
 import math
+from datetime import date, datetime
 from typing import Optional
 
 
@@ -115,3 +116,52 @@ def fmt_vol(val) -> str:
     if v >= 1e4:
         return f"{v / 1e4:.0f}万股"
     return f"{v:.0f}股"
+
+
+# ------------------------------------------------------------------
+# 日期工具
+# 数据库中 trade_date / end_date 的常见两种格式：'YYYYMMDD' 与 'YYYY-MM-DD'。
+# 下面两个工具统一处理，避免各 collector 重复写日期解析/计算滞后天数的样板。
+# ------------------------------------------------------------------
+
+def parse_date_loose(raw) -> Optional[date]:
+    """兼容 'YYYYMMDD' / 'YYYY-MM-DD' / datetime 对象，解析失败返回 None。"""
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    digits = str(raw)[:10].replace('-', '')
+    if len(digits) < 8 or not digits[:8].isdigit():
+        return None
+    try:
+        return date(int(digits[:4]), int(digits[4:6]), int(digits[6:8]))
+    except ValueError:
+        return None
+
+
+def days_since(raw, today: Optional[date] = None) -> Optional[int]:
+    """返回 raw 日期距 today（默认当天）的天数；解析失败返回 None。"""
+    d = parse_date_loose(raw)
+    if d is None:
+        return None
+    ref = today or date.today()
+    return (ref - d).days
+
+
+def format_date_dashed(raw) -> str:
+    """把 'YYYYMMDD' 统一成 'YYYY-MM-DD'；无法解析时保留原值（去掉超过 10 位的尾部）。"""
+    d = parse_date_loose(raw)
+    if d is not None:
+        return d.strftime('%Y-%m-%d')
+    return str(raw)[:10] if raw else ''
+
+
+def quantile(sorted_vals, q: float) -> Optional[float]:
+    """用最近排名法取已升序排序序列的 q 分位（q ∈ [0,1]），序列为空返回 None。"""
+    n = len(sorted_vals)
+    if n == 0:
+        return None
+    idx = max(0, min(n - 1, int(round(q * (n - 1)))))
+    return round(sorted_vals[idx], 2)

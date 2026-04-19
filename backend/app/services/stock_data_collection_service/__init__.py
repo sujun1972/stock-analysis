@@ -39,11 +39,12 @@ class StockDataCollectionService:
             self._get_risk_alerts(ts_code),
             self._get_nine_turn(ts_code),
             self._get_auction(ts_code),
+            self._get_smart_money(ts_code),
             return_exceptions=True,
         )
 
-        labels = ['basic', 'capital', 'shareholder', 'technical', 'financial', 'risk', 'nine_turn', 'auction']
-        basic, capital, shareholder, technical, financial, risk, nine_turn, auction = [
+        labels = ['basic', 'capital', 'shareholder', 'technical', 'financial', 'risk', 'nine_turn', 'auction', 'smart_money']
+        basic, capital, shareholder, technical, financial, risk, nine_turn, auction, smart_money = [
             self._unwrap(v, label) for v, label in zip(results, labels)
         ]
 
@@ -59,6 +60,7 @@ class StockDataCollectionService:
             "risk": risk,
             "nine_turn": nine_turn,
             "auction": auction,
+            "smart_money": smart_money,
         }
 
     async def collect_and_format(self, ts_code: str, stock_name: str) -> tuple:
@@ -99,6 +101,9 @@ class StockDataCollectionService:
 
     async def _get_financial_reports(self, ts_code: str) -> Dict:
         return await collectors.get_financial_reports(ts_code)
+
+    async def _get_smart_money(self, ts_code: str) -> Dict:
+        return await collectors.get_smart_money(ts_code)
 
     async def _get_risk_alerts(self, ts_code: str) -> Dict:
         return await collectors.get_risk_alerts(ts_code)

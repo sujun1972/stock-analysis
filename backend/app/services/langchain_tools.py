@@ -179,12 +179,21 @@ async def get_capital_flow(ts_code: str) -> str:
     ]
     hk = data.get("hk_hold", {})
     if hk:
+        days_lag = hk.get("days_lag")
+        lag_suffix = f"，距今已 {days_lag} 天" if days_lag is not None and days_lag >= 5 else ""
         lines.append(
-            f"| 北向持股({hk.get('trade_date', '')}) | "
+            f"| 北向持股({hk.get('trade_date', '')}{lag_suffix}) | "
             f"{_safe_fmt(hk.get('vol'), 0)} 股, 占流通 {_safe_fmt(hk.get('ratio'))}% |"
         )
         if hk.get("vol_change_pct") is not None:
-            lines.append(f"| 北向较历史变动 | {_safe_fmt(hk.get('vol_change_pct'))}% |")
+            prev_date = hk.get("prev_date", "")
+            base_label = f"较上期({prev_date})" if prev_date else "较上期"
+            lines.append(f"| 北向{base_label}持股变动 | {_safe_fmt(hk.get('vol_change_pct'))}% |")
+        if days_lag is not None and days_lag >= 10:
+            lines.append(
+                f"| 北向数据频率 | 该股北向持股本地为季报频次（非日频），"
+                f"最新快照距今 {days_lag} 天 |"
+            )
     flow_detail = data.get("flow_detail", [])
     if flow_detail:
         lines.append("")
@@ -567,22 +576,31 @@ async def get_nine_turn(ts_code: str) -> str:
     up_signal = data.get("nine_up_turn")
     down_signal = data.get("nine_down_turn")
 
+    def _signal_qualifier(count: int, signal_label: str) -> str:
+        # count==9 当日为首次触发；count>9 表示触发后序列继续延伸（事实陈述，不下结论）。
+        if count == 9:
+            return f"（九转{signal_label}信号触发日）"
+        extra = count - 9
+        return f"（九转{signal_label}信号触发后序列继续延伸{extra}日）"
+
     parts = []
     if up_c is not None and up_c > 0:
         s = f"上涨计数={int(up_c)}"
         if up_signal == "+9":
-            s += "（已触发九转见顶信号）"
+            s += _signal_qualifier(int(up_c), "见顶")
         parts.append(s)
     if down_c is not None and down_c > 0:
         s = f"下跌计数={int(down_c)}"
         if down_signal == "-9":
-            s += "（已触发九转见底信号）"
+            s += _signal_qualifier(int(down_c), "见底")
         parts.append(s)
 
     lines.append(f"当前状态: {'，'.join(parts)}" if parts else "当前状态: 无连续计数")
 
     signals = data.get("recent_signals", [])
     if signals:
+        lines.append("")
+        lines.append("近期触发日（仅首次触发，非延续）:")
         lines.append("")
         lines.append("| 日期 | 信号 |")
         lines.append("|------|------|")

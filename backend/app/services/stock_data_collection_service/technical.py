@@ -69,7 +69,12 @@ async def get_technical_indicators(ts_code: str) -> Dict:
     # ---- 量价动能分析 ----
     from app.services.volume_price_analysis_service import VolumePriceAnalysisService
     ma_trend = (result.get('ma_analysis') or {}).get('structure', {}).get('trend', '')
-    result['volume_price'] = VolumePriceAnalysisService.analyze(df, trend_context=ma_trend)
+    # 拉近 60 日涨跌停事实（U/D/Z），让涨停/跌停/炸板日的 K 线获得专属语义。
+    # stock_daily 表无"是否涨停"列，且 A 股涨幅规则复杂（±10/±20/±5），不能仅靠 pct_change 推断。
+    limit_map = await _fetch_recent_limit_map(ts_code, lookback_days=70)
+    result['volume_price'] = VolumePriceAnalysisService.analyze(
+        df, trend_context=ma_trend, limit_map=limit_map,
+    )
 
     # ---- 近20日价格空间定位 ----
     if len(df) >= 20:
@@ -91,9 +96,51 @@ async def get_technical_indicators(ts_code: str) -> Dict:
         }
 
     # ---- 跨指标冲突与共振验证 ----
-    result['cross_verification'] = build_cross_verification(result)
+    # 传入 close 序列，让其能推演"明日布林上轨"动态位置（避免把静态 1.8% 误判为天花板）
+    result['cross_verification'] = build_cross_verification(result, close_series=close)
 
     return result
+
+
+async def _fetch_recent_limit_map(ts_code: str, lookback_days: int = 70) -> Dict[str, Dict[str, Any]]:
+    """从 limit_list_d 拉取近 N 日涨跌停事实，返回 {date_str: {limit_type, limit_times, open_times, fd_amount}}。
+
+    stock_daily 表无"是否涨停"列；A 股涨幅规则随板块/股票类型不同（±10/±20/±5），
+    仅靠 pct_change ≈ 9.99 判断涨停会漏判创业板（±20%）和 ST 股（±5%），且无法区分
+    一字板/反复炸板/普通封板。limit_list_d 是涨跌停事实的权威来源。
+    """
+    from app.repositories.limit_list_repository import LimitListRepository
+
+    today = datetime.now()
+    start_yyyymmdd = (today - timedelta(days=lookback_days)).strftime('%Y%m%d')
+    end_yyyymmdd = today.strftime('%Y%m%d')
+
+    try:
+        rows = await asyncio.to_thread(
+            LimitListRepository().get_by_date_range,
+            start_date=start_yyyymmdd,
+            end_date=end_yyyymmdd,
+            ts_code=ts_code,
+            page=1,
+            page_size=200,
+        )
+    except Exception:
+        return {}
+
+    # key 统一成 'YYYY-MM-DD'，与 stock_daily DataFrame 的 index 字符串对齐
+    from .formatters import format_date_dashed
+    limit_map: Dict[str, Dict[str, Any]] = {}
+    for r in rows or []:
+        date_key = format_date_dashed(r.get('trade_date'))
+        if not date_key:
+            continue
+        limit_map[date_key] = {
+            'limit_type': r.get('limit_type'),
+            'limit_times': r.get('limit_times'),
+            'open_times': r.get('open_times'),
+            'fd_amount': r.get('fd_amount'),
+        }
+    return limit_map
 
 
 def compute_atr(df: pd.DataFrame, period: int = 14) -> Optional[Dict[str, Any]]:
@@ -141,8 +188,82 @@ def compute_atr(df: pd.DataFrame, period: int = 14) -> Optional[Dict[str, Any]]:
     }
 
 
-def build_cross_verification(technical: Dict) -> Optional[Dict[str, Any]]:
-    """综合各技术指标，提取跨指标矛盾点、共振确认和风险因素。"""
+def _project_next_day_boll_upper(close_series: pd.Series,
+                                  scenarios: Optional[list] = None
+                                  ) -> Optional[Dict[str, Any]]:
+    """推演"明日布林上轨"在多种次日收盘情景下的位置。
+
+    布林上轨 = 20日 mean + 2*pstdev，是滚动窗口的动态产物：当新值进入窗口、20日前
+    的旧值滚出后，mean 和 std 都会变化 → 上轨被动上移/下移。仅看"当前上轨距今日 +1.8%"
+    会得出"上涨空间只有 1.8%"的静态错觉。
+
+    Args:
+        close_series: 收盘价 Series（按时间升序），至少 20 条。
+        scenarios: [(label, ratio)] 列表，默认覆盖平开/+5%/涨停+10%/-5%。
+
+    Returns:
+        {
+            'today_upper': float,
+            'today_close': float,
+            'projections': [{'label', 'next_close', 'projected_upper',
+                             'gain_to_upper_pct', 'upper_shift_pct'}, ...]
+        }
+        数据不足返回 None。
+    """
+    if close_series is None or len(close_series) < 20:
+        return None
+
+    closes = close_series.astype(float)
+    today_close = float(closes.iloc[-1])
+    last20 = closes.iloc[-20:]
+    today_mean = float(last20.mean())
+    # 与 BollAnalysisService 保持一致：使用总体标准差（pstdev）
+    today_std = float(last20.std(ddof=0))
+    today_upper = round(today_mean + 2 * today_std, 2)
+
+    # 滚动窗口：保留最近 19 条 + 1 个明日假设值
+    base_window = list(closes.iloc[-19:].astype(float))
+
+    if scenarios is None:
+        scenarios = [
+            ('平开持平', 1.00),
+            ('+3%', 1.03),
+            ('涨停 +10%', 1.10),
+            ('-3%', 0.97),
+        ]
+
+    projections = []
+    for label, ratio in scenarios:
+        next_close = round(today_close * ratio, 2)
+        new_window = pd.Series(base_window + [next_close])
+        new_upper = round(float(new_window.mean()) + 2 * float(new_window.std(ddof=0)), 2)
+        gain = round((new_upper - next_close) / next_close * 100, 1) if next_close > 0 else None
+        shift = round((new_upper - today_upper) / today_upper * 100, 1) if today_upper > 0 else None
+        projections.append({
+            'label': label,
+            'next_close': next_close,
+            'projected_upper': new_upper,
+            'gain_to_upper_pct': gain,
+            'upper_shift_pct': shift,
+        })
+
+    return {
+        'today_close': round(today_close, 2),
+        'today_upper': today_upper,
+        'projections': projections,
+    }
+
+
+def build_cross_verification(technical: Dict,
+                              close_series: Optional[pd.Series] = None
+                              ) -> Optional[Dict[str, Any]]:
+    """综合各技术指标，提取跨指标矛盾点、共振确认和风险因素。
+
+    Args:
+        technical: 技术指标聚合结果。
+        close_series: 收盘价序列（升序），用于推演"明日布林上轨"动态位置；
+            没有则跳过动态推演。
+    """
     ma_analysis = technical.get('ma_analysis')
     rsi_analysis = technical.get('rsi_analysis')
     macd_multi = technical.get('macd_multi')
@@ -334,7 +455,7 @@ def build_cross_verification(technical: Dict) -> Optional[Dict[str, Any]]:
         task_num += 1
 
     if risks:
-        prompt_parts.append(f'{task_num}. 评估各风险因素的实际威胁程度和触发条件')
+        prompt_parts.append(f'{task_num}. 请逐项评估上述风险因素的实际影响程度与触发条件')
         task_num += 1
 
     if candle and resistance_ladder and price_pos.get('percentile_20d', 0) >= 70:
@@ -354,24 +475,47 @@ def build_cross_verification(technical: Dict) -> Optional[Dict[str, Any]]:
                     break
         if has_danger_pattern and nearest_resist:
             prompt_parts.append(
-                f'{task_num}. 形态与空间共振：结合近期 K 线高位见顶形态与距离上方阻力位'
-                f'（{nearest_resist[0]} {nearest_resist[1]:.2f}，仅 +{abs(nearest_resist[2]):.1f}%）'
-                f'的距离，评估短线见顶回调的实际威胁程度'
+                f'{task_num}. 请评估近期 K 线形态（含上述 K 线分析中检测到的关键形态）'
+                f'与最近上方阻力位（{nearest_resist[0]} {nearest_resist[1]:.2f}，'
+                f'+{abs(nearest_resist[2]):.1f}%）的距离关系，并给出你的判断'
             )
             task_num += 1
 
     convergence = (ma_analysis or {}).get('convergence', {})
     bias_val = convergence.get('bias20')
+    # 推演明日布林上轨（仅当最近阻力是布林上轨时才有意义）
+    boll_projection = None
+    nearest_r_for_proj = resistance_ladder[0] if resistance_ladder else None
+    if (close_series is not None and nearest_r_for_proj
+            and nearest_r_for_proj[0] == '布林上轨'):
+        boll_projection = _project_next_day_boll_upper(close_series)
+
     if (bias_val is not None and abs(bias_val) >= 5
             and resistance_ladder and support_ladder):
         nearest_r = resistance_ladder[0]
         nearest_s = support_ladder[0]
-        prompt_parts.append(
+        prompt_lines = [
             f'{task_num}. 盈亏比计算：当前乖离率 {bias_val:+.1f}%，'
             f'上方阻力空间 +{abs(nearest_r[2]):.1f}%（{nearest_r[0]}），'
             f'下方支撑空间 {nearest_s[2]:.1f}%（{nearest_s[0]}），'
-            f'请计算盈亏比并评估当前价格位置的性价比'
-        )
+            f'请计算盈亏比并评估当前价格位置的性价比。'
+        ]
+        # 阻力是布林上轨时，必须提示其动态特性（窗口滚动 → 上轨被动上移）
+        if boll_projection and nearest_r[0] == '布林上轨':
+            projs = boll_projection.get('projections', [])
+            today_upper = boll_projection.get('today_upper')
+            scenario_descs = [
+                f"{p['label']}收于{p['next_close']:.2f} → 新上轨≈{p['projected_upper']:.2f}"
+                f"（距明日收盘{p['gain_to_upper_pct']:+.1f}%，上轨较今日{p['upper_shift_pct']:+.1f}%）"
+                for p in projs
+            ]
+            prompt_lines.append(
+                f'   说明：布林上轨为滚动 20 日 mean+2σ 的动态值，'
+                f'今日上轨 {today_upper}；下面是不同次日收盘情景下重新计算的明日上轨数值，'
+                f'供你在评估盈亏比时参考次日阻力空间的可能区间：'
+                + '；'.join(scenario_descs) + '。'
+            )
+        prompt_parts.append('\n'.join(prompt_lines))
         task_num += 1
 
     prompt_parts.append(
@@ -387,5 +531,6 @@ def build_cross_verification(technical: Dict) -> Optional[Dict[str, Any]]:
         'risks': risks,
         'support_ladder': support_ladder,
         'resistance_ladder': resistance_ladder,
+        'boll_projection': boll_projection,
         'prompt': prompt,
     }

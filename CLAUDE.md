@@ -95,13 +95,15 @@ CIOAgentService                      ← backend/app/services/cio_agent_service.
 create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（LangGraph）
     ↓
 7 个 LangChain Tool                  ← backend/app/services/langchain_tools.py
-    ├── get_basic_market             基础盘面（价格、估值分位、交易所属性、财务指标、行业、筹码）
-    ├── get_capital_flow             资金流向（主力净流入、北向资金；北交所自动跳过北向）
-    ├── get_shareholder_info         股东信息（人数变化、减持、解禁）
-    ├── get_technical_indicators     技术指标（均线结构、RSI、多级别MACD、量价动能）
-    ├── get_financial_reports        财报披露日期
+    ├── get_basic_market             基础盘面（价格/估值分位+PE Band/大盘相对强度/财务+滞后天数/行业/筹码/回购）
+    ├── get_capital_flow             资金流向（主力分档：超大单/大单/中单/小单；近5/10日资金vs价格；北向滞后标注）
+    ├── get_shareholder_info         股东信息（人数变化+滞后天数、减持、解禁）
+    ├── get_technical_indicators     技术指标（MA/RSI/MACD/布林/K线/量价；含涨停日专属语义、明日布林上轨推演）
+    ├── get_financial_reports        财报披露日期 + 业绩预告(24个月) + Forward PE 推演
     ├── get_risk_alerts              风险警示（ST、质押）
-    └── get_nine_turn                神奇九转指标
+    └── get_nine_turn                TD 序列（即神奇九转，第9根为变盘窗口）
+
+`StockDataCollectionService.collect_and_format()` 主链路另含一个 **smart_money** 维度（融资融券明细 + 龙虎榜事件含席位性质标记），尚未挂为 LangChain Tool；如需 CIO Agent 主动查询可在 `langchain_tools.py` 追加 `get_smart_money` 工具。
 ```
 
 `get_technical_indicators` 内部委托三个独立分析服务（纯计算，无 IO）：
@@ -115,7 +117,14 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
 | `CandlestickAnalysisService` | `candlestick_analysis_service.py` | K 线形态识别（单根形态基于真实涨跌幅分档、组合形态含高低位语境、重心趋势） |
 | `VolumePriceAnalysisService` | `volume_price_analysis_service.py` | 量价动能（逐日推演、中线结构、天量压力、异动检测、近5日量价背离系数） |
 
-**数据层输出原则**：6 个分析服务只输出**结构化事实描述**���数字 → 分类/定性），不输出操作建议或方向性结论（如"看多/看空/回调压力/反弹需求"）。趋势判断、交叉验证推理��操作建议由 LLM 独立完成。
+**数据层输出原则（适用于所有写给 LLM 的数据收集模块，不仅是技术指标服务）**：
+
+1. **只给中性事实，不下定论**。禁止使用"诱多失败/恐慌出货/边际利好钝化/反转预期被打脸/极端高估区/势均力敌/趋势惯性仍强"等带情感或判断的措辞。把"显著放量"换成"量比 1.5~2.0x"，把"⚠ 估值透支告警"换成"PE 与 P90 偏离度 +22.0%"。判断由 LLM 完成。
+2. **季度/季报快照必须告知滞后天数**（`days_lag` / `days_since_end`）。北向持股（季报频次）、股东人数、财报 ROE 等都是快照，不带滞后提示会被 AI 误用为即时数据。统一用 `formatters.days_since(date_raw, today)`。
+3. **环比/同比对比必须明示基准期**。"较历史变动 +184%" 是黑话；"较上期(2025-12-31)持股变动 -58.79%" 才是事实。
+4. **暴露口径与单位**。"主力净流入"在 LLM 语境是黑盒，必须在表头或 caliber 字段说清"主力 = 超大单(≥100万) + 大单(20~100万)，单位：万元"。同理 PE Band 应给出 P10/P50/P90/P99 的具体数值，让 AI 直接对比。
+5. **缺失维度也是事实**。如果某项数据库无（如盘口挂单），就不渲染该字段；不要伪造。
+6. **共用工具集中在 `formatters.py`**：日期解析（`parse_date_loose` / `days_since` / `format_date_dashed`）、分位数（`quantile`）、各类格式化（`fmt_amount` / `fmt_wan` / `fmt_flow` / `fmt_vol`）。新加 collector 时不要重复造轮子。
 
 **两套输出格式**：
 - **LangChain Tool 输出**（CIO Agent 调用）：Markdown 表格格式
