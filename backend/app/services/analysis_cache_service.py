@@ -73,6 +73,18 @@ ANALYSIS_DEPENDENCIES: Dict[str, List[str]] = {
         'dc_index', 'dc_member', 'dc_daily',
     ],
 
+    # 板块行情分析（板块元数据 + 日行情 + 板块资金 + 涨停板集中度）
+    'sector_analysis': [
+        'dc_index', 'dc_daily', 'moneyflow_ind_dc', 'limit_cpt',
+    ],
+
+    # 市场情绪 AI 分析（打板专题 + 大盘/北向资金 + 龙虎榜机构席位）
+    'sentiment_analysis': [
+        'limit_list', 'limit_step', 'limit_cpt',
+        'top_list', 'top_inst',
+        'moneyflow_mkt_dc', 'moneyflow_hsgt',
+    ],
+
     # 综合选股（依赖几乎全部行情 + 财务 + 资金）
     'stock_selection': [
         'stock_daily', 'adj_factor', 'daily_basic',

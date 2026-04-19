@@ -62,6 +62,13 @@ from .strategy_factory import StrategyFactory
 from .predefined.momentum_strategy import MomentumStrategy
 from .predefined.mean_reversion_strategy import MeanReversionStrategy
 from .predefined.multi_factor_strategy import MultiFactorStrategy
+from .predefined.piotroski_fscore_strategy import PiotroskiFScoreStrategy
+from .predefined.sloan_accruals_strategy import SloanAccrualsStrategy
+from .predefined.fcf_yield_strategy import FCFYieldStrategy
+from .predefined.rd_intensity_strategy import RDIntensityStrategy
+from .predefined.ar_risk_strategy import AccountsReceivableRiskStrategy
+from .predefined.inventory_turnover_strategy import InventoryTurnoverStrategy
+from .predefined.quality_momentum_strategy import QualityMomentumStrategy
 
 # 工具类
 from .strategy_combiner import StrategyCombiner
@@ -92,6 +99,13 @@ __all__ = [
     'MomentumStrategy',
     'MeanReversionStrategy',
     'MultiFactorStrategy',
+    'PiotroskiFScoreStrategy',
+    'SloanAccrualsStrategy',
+    'FCFYieldStrategy',
+    'RDIntensityStrategy',
+    'AccountsReceivableRiskStrategy',
+    'InventoryTurnoverStrategy',
+    'QualityMomentumStrategy',
 
     # 工具类
     'StrategyCombiner',

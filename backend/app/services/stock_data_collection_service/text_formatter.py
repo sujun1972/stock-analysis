@@ -31,6 +31,11 @@ def format_as_text(data: Dict) -> str:
     _format_capital_flow(lines, data)
 
     # ================================================================
+    # 二B、集合竞价（盘前/盘尾博弈）
+    # ================================================================
+    _format_auction(lines, data.get('auction') or {})
+
+    # ================================================================
     # 三、股东变化
     # ================================================================
     _format_shareholder(lines, data.get('shareholder', {}))
@@ -106,6 +111,32 @@ def _format_basic_market(lines: list, basic: Dict):
         lines.append("|------|--------|")
         for r in ind_5d:
             lines.append(f"| {r.get('trade_date', '')} | {fmt(r.get('pct_change'))}% |")
+
+    repurchase = basic.get('repurchase') or {}
+    if repurchase:
+        lines.append("")
+        lines.append("**股票回购（近1年，正面估值信号）：**")
+        lines.append("")
+        active = repurchase.get('active_plan')
+        if active:
+            lines.append(
+                f"- 最新进行中计划（{active.get('ann_date', '')}，状态：{active.get('proc', '')}）："
+            )
+            low = active.get('low_limit')
+            high = active.get('high_limit')
+            amt = active.get('amount')  # 单位：万元
+            vol = active.get('vol')     # 单位：万股
+            price_range = f"{fmt(low)} ~ {fmt(high)} 元" if low and high else 'N/A'
+            lines.append(f"    - 回购价区间：{price_range}")
+            lines.append(f"    - 计划回购数量：{fmt(vol, 2) if vol else 'N/A'} 万股")
+            lines.append(f"    - 计划回购金额：{fmt(amt, 2) if amt else 'N/A'} 万元")
+            if active.get('exp_date'):
+                lines.append(f"    - 预计实施期限：{active.get('exp_date')}")
+        lines.append(
+            f"- 近1年回购统计：进行中 {repurchase.get('active_count_1y', 0)} 项 / "
+            f"已完成 {repurchase.get('completed_count_1y', 0)} 项 / "
+            f"已完成金额合计 {fmt(repurchase.get('total_completed_amount_1y'), 2)} 万元"
+        )
     lines.append("")
 
 
@@ -145,6 +176,78 @@ def _format_capital_flow(lines: list, data: Dict):
                 f"| {fmt_flow(r.get('net_amount'))} "
                 f"| {fmt(r.get('pct_change'))}% |"
             )
+
+    block = capital.get('block_trade') or {}
+    if block and block.get('records_30d'):
+        lines.append("")
+        lines.append("**大宗交易（近30日，vol 单位：万股，amount 单位：万元）：**")
+        lines.append("")
+        premium = block.get('avg_premium_pct')
+        premium_str = f"{premium:+.2f}%" if premium is not None else 'N/A'
+        lines.append(
+            f"- 总笔数：{block.get('records_30d', 0)} 笔 | "
+            f"累计成交量：{fmt(block.get('total_vol_wan'), 2)} 万股 | "
+            f"累计成交额：{fmt(block.get('total_amount_wan'), 2)} 万元 | "
+            f"平均折溢价率：{premium_str}"
+        )
+        top_buyers = block.get('top_buyers', [])
+        if top_buyers:
+            lines.append("- TOP3 买方营业部：")
+            for b in top_buyers:
+                lines.append(f"    - {b.get('buyer', '')} — {fmt(b.get('amount_wan'), 2)} 万元")
+    lines.append("")
+
+
+def _format_auction(lines: list, auction: Dict):
+    if not auction:
+        return
+    open_a = auction.get('open_auction') or {}
+    close_a = auction.get('close_auction') or {}
+    if not open_a and not close_a:
+        return
+
+    lines.append("## 二B、集合竞价异动（盘前/盘尾博弈）")
+    lines.append("")
+
+    if open_a:
+        gap = open_a.get('gap_pct')
+        gap_str = f"{gap:+.2f}%" if gap is not None else 'N/A'
+        direction = ''
+        if gap is not None:
+            if gap > 2:
+                direction = '（强势高开）'
+            elif gap > 0:
+                direction = '（小幅高开）'
+            elif gap > -2:
+                direction = '（小幅低开）'
+            else:
+                direction = '（大幅低开）'
+        lines.append(
+            f"**开盘集合竞价（{open_a.get('trade_date', 'N/A')}）**"
+        )
+        lines.append("")
+        lines.append("| 指标 | 数值 |")
+        lines.append("|------|------|")
+        lines.append(f"| 竞价成交价 | {fmt(open_a.get('open'))} 元 |")
+        lines.append(f"| 前一日收盘 | {fmt(open_a.get('prev_close'))} 元 |")
+        lines.append(f"| 跳空幅度 | {gap_str} {direction} |")
+        lines.append(f"| 竞价成交量 | {fmt_vol(open_a.get('vol'))} |")
+        lines.append(f"| 竞价成交额 | {fmt_amount(open_a.get('amount'))} |")
+
+    if close_a:
+        share = close_a.get('vol_share_pct')
+        share_str = f"{share:.2f}%" if share is not None else 'N/A'
+        lines.append("")
+        lines.append(
+            f"**收盘集合竞价（{close_a.get('trade_date', 'N/A')}）**"
+        )
+        lines.append("")
+        lines.append("| 指标 | 数值 |")
+        lines.append("|------|------|")
+        lines.append(f"| 竞价收盘价 | {fmt(close_a.get('close'))} 元 |")
+        lines.append(f"| 竞价成交量 | {fmt_vol(close_a.get('vol'))} |")
+        lines.append(f"| 竞价成交额 | {fmt_amount(close_a.get('amount'))} |")
+        lines.append(f"| 占当日成交量比例 | {share_str} |")
     lines.append("")
 
 
@@ -172,11 +275,13 @@ def _format_shareholder(lines: list, shareholder: Dict):
         lines.append("| 公告日 | 股东名称 | 减持股数 | 变动比例 | 均价 |")
         lines.append("|--------|---------|---------|---------|------|")
         for r in reductions:
+            avg_price_val = r.get('avg_price')
+            avg_price_str = f"{fmt(avg_price_val)} 元" if avg_price_val is not None else "—"
             lines.append(
                 f"| {r.get('ann_date', '')} | {r.get('holder_name', '')} "
                 f"| {fmt(r.get('change_vol'), 0)} 股 "
                 f"| {fmt(r.get('change_ratio'))}% "
-                f"| {fmt(r.get('avg_price'))} 元 |"
+                f"| {avg_price_str} |"
             )
     else:
         lines.append("")
@@ -491,6 +596,53 @@ def _format_financial_risk(lines: list, data: Dict):
             lines.append(f"| {r.get('end_date', '')} | {date_str} |")
     else:
         lines.append("暂无近期财报披露计划")
+
+    forecasts = financial.get('forecasts', [])
+    if forecasts:
+        lines.append("")
+        lines.append("**业绩预告（最近12个月，按公告日倒序）：**")
+        lines.append("")
+        lines.append("| 报告期 | 公告日 | 预告类型 | 净利变动幅度 | 预告净利润区间（亿） | 变动原因 |")
+        lines.append("|--------|--------|---------|------------|--------------------|---------|")
+        for r in forecasts:
+            pct_min = r.get('p_change_min')
+            pct_max = r.get('p_change_max')
+            pct_str = (
+                f"{fmt(pct_min, 1)}% ~ {fmt(pct_max, 1)}%"
+                if pct_min is not None and pct_max is not None
+                else 'N/A'
+            )
+            # net_profit_min/max 单位为万元 → 亿元
+            np_min = r.get('net_profit_min')
+            np_max = r.get('net_profit_max')
+            if np_min is not None and np_max is not None:
+                np_str = f"{np_min / 1e4:.2f} ~ {np_max / 1e4:.2f}"
+            else:
+                np_str = 'N/A'
+            reason = (r.get('change_reason') or '').replace('|', '/').replace('\n', ' ')[:80]
+            lines.append(
+                f"| {r.get('end_date', '')} | {r.get('ann_date', '')} | "
+                f"{r.get('type', '')} | {pct_str} | {np_str} | {reason} |"
+            )
+
+    express_list = financial.get('express', [])
+    if express_list:
+        lines.append("")
+        lines.append("**业绩快报（最近12个月，按公告日倒序）：**")
+        lines.append("")
+        lines.append("| 报告期 | 公告日 | 营业收入（亿） | 归母净利（亿） | 稀释EPS | 稀释ROE(%) | 净利YoY(%) | 营收YoY(%) |")
+        lines.append("|--------|--------|--------------|--------------|---------|-----------|------------|-----------|")
+        for r in express_list:
+            # revenue / n_income 单位为元 → 亿元
+            rev = r.get('revenue')
+            ni = r.get('n_income')
+            rev_str = f"{rev / 1e8:.2f}" if rev is not None else 'N/A'
+            ni_str = f"{ni / 1e8:.2f}" if ni is not None else 'N/A'
+            lines.append(
+                f"| {r.get('end_date', '')} | {r.get('ann_date', '')} | {rev_str} | {ni_str} | "
+                f"{fmt(r.get('diluted_eps'), 3)} | {fmt(r.get('diluted_roe'), 2)} | "
+                f"{fmt(r.get('yoy_net_profit'), 2)} | {fmt(r.get('yoy_sales'), 2)} |"
+            )
 
     risk = data.get('risk', {})
     alerts = risk.get('alerts', [])

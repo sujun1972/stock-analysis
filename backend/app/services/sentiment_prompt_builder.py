@@ -16,6 +16,9 @@ class SentimentPromptBuilder:
         limit_list_data = data['limit_list_data']
         limit_step_data = data['limit_step_data']
         limit_cpt_data = data['limit_cpt_data']
+        mkt_flow = data.get('mkt_flow')
+        hsgt_flow = data.get('hsgt_flow')
+        top_inst_summary = data.get('top_inst_summary') or {}
 
         # 分类涨跌停数据
         limit_up_list = [s for s in limit_list_data if s.get('limit_type') == 'U']
@@ -128,6 +131,63 @@ class SentimentPromptBuilder:
         blast_count = len(blast_list)
         blast_rate = blast_count / (limit_up_count + blast_count) if (limit_up_count + blast_count) > 0 else 0
 
+        # 八、主力资金流向（moneyflow_mkt_dc，单位：元）
+        if mkt_flow:
+            mkt_net_yi = (mkt_flow.get('net_amount') or 0) / 1e8
+            mkt_net_rate = mkt_flow.get('net_amount_rate') or 0
+            buy_elg_yi = (mkt_flow.get('buy_elg_amount') or 0) / 1e8
+            buy_lg_yi = (mkt_flow.get('buy_lg_amount') or 0) / 1e8
+            buy_md_yi = (mkt_flow.get('buy_md_amount') or 0) / 1e8
+            buy_sm_yi = (mkt_flow.get('buy_sm_amount') or 0) / 1e8
+            pct_sh = mkt_flow.get('pct_change_sh') or 0
+            pct_sz = mkt_flow.get('pct_change_sz') or 0
+            mkt_flow_text = (
+                f"- **大盘主力净流入**: {mkt_net_yi:+.2f} 亿元（占比 {mkt_net_rate:+.2f}%）\n"
+                f"- **超大单净买入**: {buy_elg_yi:+.2f} 亿元\n"
+                f"- **大单净买入**: {buy_lg_yi:+.2f} 亿元\n"
+                f"- **中单净买入**: {buy_md_yi:+.2f} 亿元\n"
+                f"- **小单净买入**: {buy_sm_yi:+.2f} 亿元\n"
+                f"- **指数涨跌**: 上证 {pct_sh:+.2f}% | 深证 {pct_sz:+.2f}%"
+            )
+        else:
+            mkt_flow_text = "- 当日大盘资金流向数据缺失"
+
+        # 九、北向资金动向（moneyflow_hsgt，单位：百万元）
+        if hsgt_flow:
+            north_yi = (hsgt_flow.get('north_money') or 0) / 100  # 百万元 → 亿元
+            south_yi = (hsgt_flow.get('south_money') or 0) / 100
+            hgt_yi = (hsgt_flow.get('hgt') or 0) / 100
+            sgt_yi = (hsgt_flow.get('sgt') or 0) / 100
+            hsgt_text = (
+                f"- **北向资金净流入**: {north_yi:+.2f} 亿元（沪股通 {hgt_yi:+.2f} + 深股通 {sgt_yi:+.2f}）\n"
+                f"- **南向资金净流入**: {south_yi:+.2f} 亿元"
+            )
+        else:
+            hsgt_text = "- 当日北向资金数据缺失"
+
+        # 十、游资/机构席位画像（top_inst，按 ABS(net_buy) TOP5）
+        inst_count = top_inst_summary.get('institution_count', 0)
+        hm_count = top_inst_summary.get('hot_money_count', 0)
+        top_seats = top_inst_summary.get('top_seats', [])
+        if top_seats:
+            seat_lines = []
+            for i, s in enumerate(top_seats, 1):
+                tag = '机构' if s.get('is_institution') else '游资'
+                net_yi = (s.get('net_buy') or 0) / 1e8
+                seat_lines.append(
+                    f"{i}. [{tag}] {s.get('exalter', '')} "
+                    f"- 净{'买入' if net_yi >= 0 else '卖出'} {abs(net_yi):.2f}亿 "
+                    f"| 参与 {s.get('stock_count', 0)} 只"
+                )
+            top_inst_text = (
+                f"- **机构席位上榜数**: {inst_count} 家\n"
+                f"- **游资席位上榜数**: {hm_count} 家\n\n"
+                f"### TOP5 席位（按净买入绝对值排序）\n"
+                + '\n'.join(seat_lines)
+            )
+        else:
+            top_inst_text = "- 当日龙虎榜机构明细为空"
+
         prompt = f"""# A股打板专题盘后深度分析（{trade_date}）
 
 你是一位拥有20年实战经验的A股短线大师，擅长通过盘后数据精准解读市场情绪和资金动向。以下数据均来自当日A股真实市场数据。
@@ -168,6 +228,18 @@ class SentimentPromptBuilder:
 ### 净卖出前5（主力资金流出）
 {net_sell_text}
 
+## 八、大盘主力资金流向
+
+{mkt_flow_text}
+
+## 九、北向资金动向
+
+{hsgt_text}
+
+## 十、游资/机构席位画像
+
+{top_inst_text}
+
 ---
 
 ## 请以JSON格式回答以下四个灵魂拷问
@@ -198,13 +270,14 @@ class SentimentPromptBuilder:
 - `strategy`: "激进进攻"/"稳健参与"/"防守为主"/"空仓观望"
 - `reasoning`: 详细推理（150-300字）
 
-### 3. 【看暗流】：分析龙虎榜数据，顶级游资今天主攻了哪个方向？机构在建仓什么？
+### 3. 【看暗流】：结合龙虎榜机构明细、北向资金、大盘主力净流入三层数据，判断今日真实资金意图
 
 请在 `capital_flow_analysis` 字段中包含：
 - `hot_money_direction`: 对象，包含 `themes`(题材数组), `stocks`(股票代码数组), `concentration`("高度集中"/"分散"/"无明显方向")
 - `institution_direction`: 对象，包含 `sectors`(行业数组), `style`("防御性"/"进攻性"/"均衡配置")
 - `capital_consensus`: "游资机构共振"/"游资单边进攻"/"机构独立建仓"/"资金分歧"
-- `analysis`: 详细分析（200-400字）
+- `market_capital_signal`: 对象，包含 `main_flow_direction`("强势流入"/"温和流入"/"温和流出"/"强势流出"/"数据缺失"), `northbound_direction`("外资加仓"/"外资减仓"/"中性"/"数据缺失"), `consistency`("主力与北向共振"/"分歧"/"部分验证") —— 基于第八、九节数据作出判断
+- `analysis`: 详细分析（200-400字），必须同时引用龙虎榜席位数据与大盘/北向资金数据
 
 ### 4. 【明日战术】：基于以上推演，制定明日集合竞价和开盘半小时的应对策略
 

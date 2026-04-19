@@ -24,12 +24,14 @@ async def get_basic_market(ts_code: str, pure_code: str) -> Dict:
     from app.repositories.stock_basic_repository import StockBasicRepository
     from app.repositories.cyq_perf_repository import CyqPerfRepository
     from app.repositories.fina_indicator_repository import FinaIndicatorRepository
+    from app.repositories.repurchase_repository import RepurchaseRepository
 
     daily_repo = StockDailyRepository()
     basic_repo = DailyBasicRepository()
     stock_repo = StockBasicRepository()
     cyq_repo = CyqPerfRepository()
     fina_repo = FinaIndicatorRepository()
+    repurchase_repo = RepurchaseRepository()
 
     today = datetime.now()
     start_dash = (today - timedelta(days=14)).strftime('%Y-%m-%d')
@@ -37,14 +39,16 @@ async def get_basic_market(ts_code: str, pure_code: str) -> Dict:
     start_yyyymmdd = (today - timedelta(days=14)).strftime('%Y%m%d')
     end_yyyymmdd = today.strftime('%Y%m%d')
     pe_start_3y = (today - timedelta(days=365 * 3)).strftime('%Y%m%d')
+    start_365d = (today - timedelta(days=365)).strftime('%Y%m%d')
 
-    daily_df, basic_data, stock_info, cyq_data, fina_data, pe_history = await asyncio.gather(
+    daily_df, basic_data, stock_info, cyq_data, fina_data, pe_history, repurchase_data = await asyncio.gather(
         asyncio.to_thread(daily_repo.get_by_code_and_date_range, ts_code, start_dash, end_dash),
         asyncio.to_thread(basic_repo.get_by_code_and_date_range, ts_code, start_yyyymmdd, end_yyyymmdd, 5),
         asyncio.to_thread(stock_repo.get_full_by_ts_code, ts_code),
         asyncio.to_thread(cyq_repo.get_by_date_range, start_yyyymmdd, end_yyyymmdd, ts_code, 1, 1),
         asyncio.to_thread(fina_repo.get_by_code, ts_code, None, None, 4),
         asyncio.to_thread(basic_repo.get_by_code_and_date_range, ts_code, pe_start_3y, end_yyyymmdd, 2000),
+        asyncio.to_thread(repurchase_repo.get_by_date_range, start_365d, end_yyyymmdd, ts_code, None, 10, 0),
     )
 
     result: Dict[str, Any] = {}
@@ -135,6 +139,29 @@ async def get_basic_market(ts_code: str, pure_code: str) -> Dict:
             'weight_avg': safe_float(c.get('weight_avg')),
         }
 
+    # 近 1 年回购计划（正面估值信号）
+    if repurchase_data:
+        active_statuses = {'预案', '股东大会通过', '实施'}
+        active_plans = [r for r in repurchase_data if r.get('proc') in active_statuses]
+        completed = [r for r in repurchase_data if r.get('proc') == '完成']
+        latest_active = active_plans[0] if active_plans else None
+
+        result['repurchase'] = {
+            'active_plan': {
+                'ann_date': str(latest_active.get('ann_date', '')) if latest_active else '',
+                'end_date': str(latest_active.get('end_date', '') or '') if latest_active else '',
+                'exp_date': str(latest_active.get('exp_date', '') or '') if latest_active else '',
+                'proc': latest_active.get('proc', '') if latest_active else '',
+                'vol': safe_float(latest_active.get('vol')) if latest_active else None,
+                'amount': safe_float(latest_active.get('amount')) if latest_active else None,
+                'high_limit': safe_float(latest_active.get('high_limit')) if latest_active else None,
+                'low_limit': safe_float(latest_active.get('low_limit')) if latest_active else None,
+            } if latest_active else None,
+            'active_count_1y': len(active_plans),
+            'completed_count_1y': len(completed),
+            'total_completed_amount_1y': sum((r.get('amount') or 0) for r in completed),
+        }
+
     return result
 
 
@@ -179,9 +206,11 @@ async def _get_board_pct_5d(board_ts_code: str) -> list:
 async def get_capital_flow(ts_code: str, pure_code: str) -> Dict:
     from app.repositories.moneyflow_stock_dc_repository import MoneyflowStockDcRepository
     from app.repositories.hk_hold_repository import HkHoldRepository
+    from app.repositories.block_trade_repository import BlockTradeRepository
 
     today = datetime.now()
     start_10d = (today - timedelta(days=20)).strftime('%Y%m%d')
+    start_30d = (today - timedelta(days=30)).strftime('%Y%m%d')
     end_today = today.strftime('%Y%m%d')
 
     # 北交所(.BJ)不适用北向资金，跳过 hk_hold 查询
@@ -189,6 +218,7 @@ async def get_capital_flow(ts_code: str, pure_code: str) -> Dict:
 
     tasks = [
         asyncio.to_thread(MoneyflowStockDcRepository().get_by_date_range, start_10d, end_today, ts_code, 10),
+        asyncio.to_thread(BlockTradeRepository().get_by_code_and_date_range, ts_code, start_30d, end_today, 50),
     ]
     if not is_bse:
         tasks.append(
@@ -197,7 +227,8 @@ async def get_capital_flow(ts_code: str, pure_code: str) -> Dict:
 
     gather_results = await asyncio.gather(*tasks)
     flow_data = gather_results[0]
-    hk_data = gather_results[1] if not is_bse else None
+    block_data = gather_results[1]
+    hk_data = gather_results[2] if not is_bse else None
 
     result: Dict[str, Any] = {}
 
@@ -229,6 +260,55 @@ async def get_capital_flow(ts_code: str, pure_code: str) -> Dict:
             result['hk_hold']['vol_change_pct'] = (
                 round((curr_vol - prev_vol) / prev_vol * 100, 2) if prev_vol else None
             )
+
+    # 近 30 日大宗交易（vol 单位：万股；amount 单位：万元）
+    if block_data:
+        # 查询近 30 日日线收盘价，用于计算折溢价
+        from app.repositories.stock_daily_repository import StockDailyRepository
+        daily_start_dash = (today - timedelta(days=30)).strftime('%Y-%m-%d')
+        daily_end_dash = today.strftime('%Y-%m-%d')
+        close_map: Dict[str, float] = {}
+        try:
+            daily_df = await asyncio.to_thread(
+                StockDailyRepository().get_by_code_and_date_range,
+                ts_code, daily_start_dash, daily_end_dash,
+            )
+            if daily_df is not None and not daily_df.empty:
+                for idx, row in daily_df.iterrows():
+                    date_key = str(idx)[:10].replace('-', '')
+                    close_val = safe_float(row.get('close'))
+                    if close_val:
+                        close_map[date_key] = close_val
+        except Exception as e:
+            logger.warning(f"获取日线数据失败（用于大宗折溢价）: {e}")
+
+        premium_list = []
+        buyer_amount: Dict[str, float] = {}
+        total_amount_wan = 0.0
+        total_vol_wan = 0.0
+        for r in block_data:
+            total_amount_wan += float(r.get('amount') or 0)
+            total_vol_wan += float(r.get('vol') or 0)
+            buyer = (r.get('buyer') or '').strip() or '未知'
+            buyer_amount[buyer] = buyer_amount.get(buyer, 0.0) + float(r.get('amount') or 0)
+            date_key = str(r.get('trade_date') or '').replace('-', '')
+            close_ref = close_map.get(date_key)
+            price = safe_float(r.get('price'))
+            if close_ref and price:
+                premium_list.append((price - close_ref) / close_ref * 100)
+
+        avg_premium_pct = round(sum(premium_list) / len(premium_list), 2) if premium_list else None
+        top_buyers = sorted(buyer_amount.items(), key=lambda x: x[1], reverse=True)[:3]
+
+        result['block_trade'] = {
+            'records_30d': len(block_data),
+            'total_amount_wan': round(total_amount_wan, 2),
+            'total_vol_wan': round(total_vol_wan, 2),
+            'avg_premium_pct': avg_premium_pct,
+            'top_buyers': [
+                {'buyer': b, 'amount_wan': round(a, 2)} for b, a in top_buyers
+            ],
+        }
 
     return result
 
@@ -315,9 +395,22 @@ async def get_shareholder_info(ts_code: str) -> Dict:
 
 async def get_financial_reports(ts_code: str) -> Dict:
     from app.repositories.disclosure_date_repository import DisclosureDateRepository
+    from app.repositories.forecast_repository import ForecastRepository
+    from app.repositories.express_repository import ExpressRepository
 
-    disclosures = await asyncio.to_thread(
-        DisclosureDateRepository().get_by_ts_code, ts_code, 8
+    today = datetime.now()
+    end_yyyymmdd = today.strftime('%Y%m%d')
+    start_365d = (today - timedelta(days=365)).strftime('%Y%m%d')
+
+    disclosures, forecasts, express_list = await asyncio.gather(
+        asyncio.to_thread(DisclosureDateRepository().get_by_ts_code, ts_code, 8),
+        asyncio.to_thread(
+            ForecastRepository().get_by_date_range,
+            start_365d, end_yyyymmdd, ts_code, None, None, 5
+        ),
+        asyncio.to_thread(
+            ExpressRepository().get_by_code, ts_code, start_365d, end_yyyymmdd, 5
+        ),
     )
 
     result: Dict[str, Any] = {}
@@ -332,6 +425,36 @@ async def get_financial_reports(ts_code: str) -> Dict:
                 'modify_date': str(r.get('modify_date', '') or ''),
             }
             for r in filtered
+        ]
+
+    if forecasts:
+        result['forecasts'] = [
+            {
+                'ann_date': str(r.get('ann_date', '')),
+                'end_date': str(r.get('end_date', '')),
+                'type': r.get('type', '') or '',
+                'p_change_min': safe_float(r.get('p_change_min')),
+                'p_change_max': safe_float(r.get('p_change_max')),
+                'net_profit_min': safe_float(r.get('net_profit_min')),
+                'net_profit_max': safe_float(r.get('net_profit_max')),
+                'change_reason': (r.get('change_reason') or r.get('summary') or '')[:200],
+            }
+            for r in forecasts
+        ]
+
+    if express_list:
+        result['express'] = [
+            {
+                'ann_date': str(r.get('ann_date', '')),
+                'end_date': str(r.get('end_date', '')),
+                'revenue': safe_float(r.get('revenue')),
+                'n_income': safe_float(r.get('n_income')),
+                'diluted_eps': safe_float(r.get('diluted_eps')),
+                'diluted_roe': safe_float(r.get('diluted_roe')),
+                'yoy_net_profit': safe_float(r.get('yoy_net_profit')),
+                'yoy_sales': safe_float(r.get('yoy_sales')),
+            }
+            for r in express_list
         ]
 
     return result
@@ -418,5 +541,105 @@ async def get_nine_turn(ts_code: str) -> Dict:
         }
         for r in signals
     ]
+
+    return result
+
+
+# ------------------------------------------------------------------
+# 七、集合竞价（盘前/盘后）
+# ------------------------------------------------------------------
+
+async def get_auction(ts_code: str) -> Dict:
+    """查询最近一个交易日的开盘/收盘集合竞价数据，计算跳空幅度与成交占比。"""
+    from app.repositories.stk_auction_o_repository import StkAuctionORepository
+    from app.repositories.stk_auction_c_repository import StkAuctionCRepository
+    from app.repositories.stock_daily_repository import StockDailyRepository
+
+    today = datetime.now()
+    start_14d = (today - timedelta(days=14)).strftime('%Y%m%d')
+    end_today = today.strftime('%Y%m%d')
+    start_dash = (today - timedelta(days=14)).strftime('%Y-%m-%d')
+    end_dash = today.strftime('%Y-%m-%d')
+
+    auction_o_rows, auction_c_rows, daily_df = await asyncio.gather(
+        asyncio.to_thread(
+            StkAuctionORepository().get_by_date_range,
+            start_14d, end_today, ts_code, 5, 0,
+        ),
+        asyncio.to_thread(
+            StkAuctionCRepository().get_by_date_range,
+            start_14d, end_today, ts_code, 5, 0,
+        ),
+        asyncio.to_thread(
+            StockDailyRepository().get_by_code_and_date_range,
+            ts_code, start_dash, end_dash,
+        ),
+    )
+
+    result: Dict[str, Any] = {}
+
+    # 构建 trade_date → (close, vol) 字典
+    daily_map: Dict[str, Dict[str, Optional[float]]] = {}
+    if daily_df is not None and not daily_df.empty:
+        for idx, row in daily_df.iterrows():
+            date_key = str(idx)[:10].replace('-', '')
+            daily_map[date_key] = {
+                'close': safe_float(row.get('close')),
+                'volume': safe_float(row.get('volume')),
+            }
+
+    if auction_o_rows:
+        latest_o = auction_o_rows[0]
+        auction_date = str(latest_o.get('trade_date') or '')
+        auction_open = safe_float(latest_o.get('open'))
+        auction_vol = safe_float(latest_o.get('vol'))
+        auction_amount = safe_float(latest_o.get('amount'))
+
+        # 前一交易日收盘 → 跳空幅度
+        sorted_dates = sorted(daily_map.keys())
+        prev_close = None
+        if auction_date in sorted_dates:
+            idx_here = sorted_dates.index(auction_date)
+            if idx_here > 0:
+                prev_close = daily_map[sorted_dates[idx_here - 1]].get('close')
+        elif sorted_dates:
+            earlier = [d for d in sorted_dates if d < auction_date]
+            if earlier:
+                prev_close = daily_map[earlier[-1]].get('close')
+
+        gap_pct = None
+        if prev_close and auction_open:
+            gap_pct = round((auction_open - prev_close) / prev_close * 100, 2)
+
+        result['open_auction'] = {
+            'trade_date': auction_date,
+            'open': auction_open,
+            'vol': auction_vol,
+            'amount': auction_amount,
+            'gap_pct': gap_pct,
+            'prev_close': prev_close,
+        }
+
+    if auction_c_rows:
+        latest_c = auction_c_rows[0]
+        auction_date_c = str(latest_c.get('trade_date') or '')
+        auction_close = safe_float(latest_c.get('close'))
+        auction_vol_c = safe_float(latest_c.get('vol'))
+        auction_amount_c = safe_float(latest_c.get('amount'))
+
+        # 尾盘竞价成交占当日总成交比例（stock_daily.volume 单位：手；auction.vol 单位：股 → /100 换算）
+        day_vol = daily_map.get(auction_date_c, {}).get('volume')
+        vol_share_pct = None
+        if day_vol and auction_vol_c:
+            day_vol_shares = day_vol * 100  # 手 → 股
+            vol_share_pct = round(auction_vol_c / day_vol_shares * 100, 2)
+
+        result['close_auction'] = {
+            'trade_date': auction_date_c,
+            'close': auction_close,
+            'vol': auction_vol_c,
+            'amount': auction_amount_c,
+            'vol_share_pct': vol_share_pct,
+        }
 
     return result

@@ -156,7 +156,8 @@ class BaseStrategy(ABC):
         self,
         prices: pd.DataFrame,
         features: Optional[pd.DataFrame] = None,
-        date: Optional[pd.Timestamp] = None
+        date: Optional[pd.Timestamp] = None,
+        fundamentals: Optional[pd.DataFrame] = None,
     ) -> pd.Series:
         """
         计算股票评分（必须实现）
@@ -164,12 +165,20 @@ class BaseStrategy(ABC):
         用于排序选股，分数越高越好
 
         Args:
-            prices: 价格DataFrame
-            features: 特征DataFrame
-            date: 指定日期（None表示最新日期）
+            prices: 价格 DataFrame，index=交易日（DatetimeIndex），columns=ts_code，values=收盘价。
+            features: 特征 DataFrame，结构与 prices 相同，默认为成交量矩阵。
+            date: 指定日期（None 表示最新日期）。向后兼容保留，当前系统传入 `{}`。
+            fundamentals: **新增**。原始财报三表快照（长格式），用于构造价值/质量因子。
+                          - 每行 = 一个 (ts_code, end_date)
+                          - 列：ts_code, end_date, latest_ann_date,
+                                inc_*（利润表）, bs_*（资产负债表）, cf_*（现金流量表）
+                          - 系统已强制 `ann_date <= as_of_date`（防前视偏差）
+                          - 未使用财报数据的老策略可忽略此参数（默认 None）
+                          - 参见 backend/app/services/strategy_fundamentals.py
 
         Returns:
-            scores: 股票评分Series (index=stock_codes, values=scores)
+            scores: 股票评分 Series (index=stock_codes, values=scores)。
+                    评分 <= 0 的股票会被系统层过滤。
         """
         pass
 

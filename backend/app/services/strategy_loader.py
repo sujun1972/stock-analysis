@@ -14,6 +14,7 @@
 import sys
 import asyncio
 import hashlib
+import inspect
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 from pathlib import Path
@@ -367,10 +368,49 @@ class StrategyDynamicLoader:
         # features 传入成交量矩阵，结构与 prices 相同（index=交易日, columns=ts_code）
         # 策略可通过 features.iloc[-n:].mean() 等方式计算放量比等量价因子
         features = volume
+
+        # fundamentals 传入原始财报三表快照（长格式：一行 = 一个 ts_code×报告期）
+        # 列前缀 inc_/bs_/cf_。签名不接受 fundamentals 的老策略走 3 参数路径，向后兼容。
+        from app.services.strategy_fundamentals import fetch_fundamentals_snapshot
+        as_of_date = prices.index[-1].strftime("%Y%m%d")
         try:
-            scores = await asyncio.to_thread(
-                strategy.calculate_scores, prices, features, {}
+            fundamentals = await asyncio.to_thread(
+                fetch_fundamentals_snapshot,
+                prices.columns.tolist(), as_of_date, 8, 365,
             )
+        except Exception as e:
+            logger.warning(
+                f"选股策略 {strategy_record.get('id')} fundamentals 取数失败，降级为空表: {e}"
+            )
+            import pandas as _pd
+            fundamentals = _pd.DataFrame()
+
+        # 签名检测：区分新老策略接口。老策略 (prices, features, date) 3 参数，
+        # 新策略 (prices, features, date, fundamentals) 4 参数。
+        try:
+            sig = inspect.signature(strategy.calculate_scores)
+            n_positional = sum(
+                1 for p in sig.parameters.values()
+                if p.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                              inspect.Parameter.POSITIONAL_ONLY)
+            )
+            accepts_fundamentals = (
+                n_positional >= 4
+                or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+                or 'fundamentals' in sig.parameters
+            )
+        except (TypeError, ValueError):
+            accepts_fundamentals = False
+
+        try:
+            if accepts_fundamentals:
+                scores = await asyncio.to_thread(
+                    strategy.calculate_scores, prices, features, {}, fundamentals
+                )
+            else:
+                scores = await asyncio.to_thread(
+                    strategy.calculate_scores, prices, features, {}
+                )
         except Exception as e:
             logger.warning(f"选股策略 {strategy_record.get('id')} calculate_scores 失败: {e}")
             return []

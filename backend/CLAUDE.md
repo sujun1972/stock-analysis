@@ -57,8 +57,31 @@ ts_codes = await StrategyDynamicLoader.run_stock_selection(
 
 - `prices`：收盘价矩阵，index=连续交易日，columns=ts_code，值全为 float，无 NaN
 - `features`：成交量矩阵，结构与 `prices` 相同，停牌日填 0；策略可用 `features.iloc[-n:].mean()` 计算放量比等量价因子
+- `fundamentals`（可选，4 参数策略启用）：原始财报三表快照（见下节）
 
 **评分约定**：`calculate_scores()` 返回的 `pd.Series` 中，评分 `> 0` 的股票才会被选入结果；评分 `<= 0` 或 `-inf` 的股票视为未通过筛选。`top_n` 由策略自身的 `custom_params` 控制，系统层不做截断。
+
+### 策略接入财报数据（fundamentals 参数）
+
+需要用到 income / balancesheet / cashflow 原始字段构造价值/质量因子的策略，在 `calculate_scores` 签名中**添加第 4 参数** `fundamentals`：
+
+```python
+def calculate_scores(self, prices, features=None, date=None, fundamentals=None) -> pd.Series:
+    if fundamentals is None or fundamentals.empty:
+        return pd.Series(0.0, index=prices.columns)
+    # 按 ts_code 分组取最近 N 期
+    latest = fundamentals.sort_values(['ts_code','end_date'], ascending=[True,False]) \
+                         .groupby('ts_code').head(1)
+    ...
+```
+
+系统层（`run_stock_selection`）通过 `inspect.signature` 检测签名：3 参数老策略走原路径；4 参数策略自动注入由 `fetch_fundamentals_snapshot` 拉取的长格式 DataFrame（默认近 8 期，每期一行）。
+
+**字段前缀**：`inc_*`（income）、`bs_*`（balancesheet）、`cf_*`（cashflow）+ 键 `ts_code, end_date, latest_ann_date`。详见 `app/services/strategy_fundamentals.py` 的 `_COLUMN_LIST`。
+
+**防前视偏差（关键约束）**：`fetch_fundamentals_snapshot` 强制 `ann_date <= as_of_date`（即交易日）。绝不可用 `end_date`（报告期末日）作为过滤条件——未公告的财报对策略不可见。系统用 `prices.index[-1]` 作为锚点。
+
+**共用工具**：`core/src/strategies/_fundamentals_utils.safe_div` 处理 `NaN/None/0` 除法；6 个参考策略（Piotroski / Sloan / FCF / RD / AR / Inventory / QualityMomentum）均在 `core/src/strategies/predefined/` 下，作为模板。
 
 ---
 
