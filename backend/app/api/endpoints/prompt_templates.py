@@ -340,6 +340,7 @@ async def get_template_by_key(
                 ts_code=ts_code,
                 created_by=current_user.id,
                 db=db,
+                allow_generate_data_collection=True,
             )
             data["system_prompt"] = prompt_data["system_prompt"]
             data["user_prompt_template"] = prompt_data["user_prompt"]
@@ -395,11 +396,38 @@ async def build_stock_prompt(
 
         today = datetime.now()
         today_str = f"{today.year}年{today.month}月{today.day}日"
+        today_yyyymmdd = today.strftime("%Y%m%d")
         stock_name_and_code = f"{stock_name or ''} {stock_code or ''}".strip()
+
+        # 下一交易日：用于 prompt 明确"次日"指代，避免 LLM 在非交易日做时间错位预测
+        next_trade_day_raw = await asyncio.to_thread(
+            calendar_repo.get_next_trading_day, today_yyyymmdd
+        )
+        if next_trade_day_raw:
+            ndt = datetime.strptime(next_trade_day_raw, "%Y%m%d")
+            next_trade_day = f"{ndt.year}年{ndt.month}月{ndt.day}日"
+        else:
+            next_trade_day = "未知"
+
+        # 今日是否交易日：latest_trade_day_raw == today_yyyymmdd 时为 True
+        is_today_trading = (latest_trade_day_raw == today_yyyymmdd)
+        if is_today_trading:
+            date_context = (
+                f"{today_str}（**今日为交易日**。以下所有『次日』预测特指"
+                f"**下一交易日（{next_trade_day}）**。）"
+            )
+        else:
+            date_context = (
+                f"{today_str}（**系统分析日，非交易日**。上一交易日为 "
+                f"{latest_trade_day}，数据基于该日收盘截面。以下所有『次日』"
+                f"预测特指**下一交易日（{next_trade_day}）**。）"
+            )
 
         variables = {
             "current_date": today_str,
+            "current_date_with_context": date_context,
             "latest_trade_date": latest_trade_day,
+            "next_trade_date": next_trade_day,
             "stock_name_and_code": stock_name_and_code,
         }
 

@@ -122,7 +122,9 @@ async def get_items():
     return ApiResponse.success(data=await service.fetch())
 ```
 
-装饰器统一处理 `ValueError`/`KeyError`/`PermissionError`/`APIError` 等异常并返回标准 `HTTPException`。同步端点用 `@handle_api_errors_sync`。
+装饰器统一处理 `ValueError`/`KeyError`/`PermissionError`/`APIError` 等异常并返回标准 `HTTPException`。
+
+**sync/async 自动分流**：`@handle_api_errors` 现在会检测被装饰函数是否协程函数，同步函数自动转发到 `handle_api_errors_sync`，无需显式选择。`@handle_api_errors_sync` 作为语义别名保留。历史 `def` 端点误用 `@handle_api_errors` 会导致 `TypeError: object dict can't be used in 'await' expression`，现已被装饰器自动规避。
 
 ---
 

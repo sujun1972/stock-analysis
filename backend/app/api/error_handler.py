@@ -3,6 +3,7 @@ API 错误处理装饰器
 统一处理所有 API 端点的异常，提供一致的错误响应格式
 """
 
+import asyncio
 import re
 from functools import wraps
 from typing import Any, Callable
@@ -73,7 +74,13 @@ def handle_api_errors(func: Callable) -> Callable:
         result = await service.do_something()
         return result
     ```
+
+    同步端点也可直接使用该装饰器——会自动分流到 sync 版本；
+    `handle_api_errors_sync` 保留作为显式语义别名。
     """
+    # 同步函数：转发到 sync 版本（避免 async wrapper 返回协程后 FastAPI 将其包一层导致 `await dict` 的类型错误）
+    if not asyncio.iscoroutinefunction(func):
+        return handle_api_errors_sync(func)
 
     @wraps(func)
     async def wrapper(*args, **kwargs):
@@ -100,35 +107,31 @@ def handle_api_errors(func: Callable) -> Callable:
             )
 
         except ValueError as e:
-            # 参数错误
             error_msg = str(e)
-            logger.warning("参数错误: %s", error_msg)
+            logger.warning(f"参数错误: {error_msg}")
             raise HTTPException(
                 status_code=400, detail={"success": False, "message": "参数错误: " + error_msg}
             )
 
         except (FileNotFoundError, KeyError) as e:
-            # 资源不存在
             error_type = "文件" if isinstance(e, FileNotFoundError) else "资源"
             error_msg = str(e)
-            logger.warning("%s不存在: %s", error_type, error_msg)
+            logger.warning(f"{error_type}不存在: {error_msg}")
             raise HTTPException(
                 status_code=404,
                 detail={"success": False, "message": f"{error_type}不存在: " + error_msg},
             )
 
         except TypeError as e:
-            # 类型错误
             error_msg = str(e)
-            logger.warning("类型错误: %s", error_msg)
+            logger.opt(exception=True).warning(f"类型错误: {error_msg}")
             raise HTTPException(
                 status_code=400, detail={"success": False, "message": "类型错误: " + error_msg}
             )
 
         except PermissionError as e:
-            # 权限错误
             error_msg = str(e)
-            logger.warning("权限不足: %s", error_msg)
+            logger.warning(f"权限不足: {error_msg}")
             raise HTTPException(
                 status_code=403, detail={"success": False, "message": "权限不足: " + error_msg}
             )
@@ -194,7 +197,7 @@ def handle_api_errors_sync(func: Callable) -> Callable:
 
         except ValueError as e:
             error_msg = str(e)
-            logger.warning("参数错误: %s", error_msg)
+            logger.warning(f"参数错误: {error_msg}")
             raise HTTPException(
                 status_code=400, detail={"success": False, "message": "参数错误: " + error_msg}
             )
@@ -202,7 +205,7 @@ def handle_api_errors_sync(func: Callable) -> Callable:
         except (FileNotFoundError, KeyError) as e:
             error_type = "文件" if isinstance(e, FileNotFoundError) else "资源"
             error_msg = str(e)
-            logger.warning("%s不存在: %s", error_type, error_msg)
+            logger.warning(f"{error_type}不存在: {error_msg}")
             raise HTTPException(
                 status_code=404,
                 detail={"success": False, "message": f"{error_type}不存在: " + error_msg},
@@ -210,14 +213,14 @@ def handle_api_errors_sync(func: Callable) -> Callable:
 
         except TypeError as e:
             error_msg = str(e)
-            logger.warning("类型错误: %s", error_msg)
+            logger.opt(exception=True).warning(f"类型错误: {error_msg}")
             raise HTTPException(
                 status_code=400, detail={"success": False, "message": "类型错误: " + error_msg}
             )
 
         except PermissionError as e:
             error_msg = str(e)
-            logger.warning("权限不足: %s", error_msg)
+            logger.warning(f"权限不足: {error_msg}")
             raise HTTPException(
                 status_code=403, detail={"success": False, "message": "权限不足: " + error_msg}
             )

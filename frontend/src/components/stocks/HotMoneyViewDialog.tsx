@@ -188,22 +188,212 @@ function MarkdownContent({ text }: { text: string }) {
   )
 }
 
-// ── probability_metrics 字段的中文标签映射 ──────────────────────
-// key: JSON 字段名 → label: 中文标签，valuePrefix/valueSuffix 包裹值
+// ── 各专家 Section 配置 ────────────────────────────────────────
+// 每种 analysisType 对应一组 section 声明，每个 section 声明一个 JSON 顶层 key
+// 和该 section 下嵌套字段的中文标签映射。
+//
+// 约定：value 是 string 时作为『标签：值』条目展示；
+//       value 是嵌套对象时作为子卡片展示（进一步查 FIELD_LABELS 映射）；
+//       value 是数组（final_score.bull_factors）由 ProsConsList 特殊渲染；
+//       value 是 {probability, trigger_condition} 时（next_day_scenarios 三档）特殊处理。
+
+interface SectionConfig {
+  key: string          // JSON 顶层字段名
+  title: string        // section 中文标题
+  labels?: Record<string, string>  // 子字段 key → 中文标签
+}
+
+const SECTION_CONFIGS: Record<string, SectionConfig[]> = {
+  // 游资观点 v3.1.0（顶级游资 + 日内动能专家）
+  hot_money_view: [
+    {
+      key: 'seat_analysis',
+      title: '龙虎榜 · 席位分析',
+      labels: {
+        on_billboard_60d: '近 60 日上榜',
+        buyer_seat_type: '买方席位性质',
+        seat_signal: '席位信号',
+        key_seats: '关键席位',
+      },
+    },
+    {
+      key: 'theme_position',
+      title: '题材身位与板位',
+      labels: {
+        limit_status_today: '本日涨停状态',
+        sector_rank: '板块地位',
+        relative_position: '相对位置',
+        ecology_note: '市场情绪生态',
+      },
+    },
+    {
+      key: 'limit_gene',
+      title: '打板基因（近 60 日）',
+      labels: {
+        limit_up_count_60d: '涨停次数',
+        t1_win_rate: 'T+1 胜率',
+        t1_avg_pct: 'T+1 平均涨跌',
+        gene_verdict: '基因判定',
+      },
+    },
+    {
+      key: 'capital_structure',
+      title: '资金与筹码结构',
+      labels: {
+        main_flow_signal: '主力资金信号',
+        divergence_flag: '分歧/一致',
+      },
+    },
+    {
+      key: 'momentum_signal',
+      title: '竞价 · 量价动能',
+      labels: {
+        auction_signal: '竞价信号',
+        volume_structure: '量能结构',
+        technical_verdict: '技术共振',
+      },
+    },
+    {
+      key: 'next_day_scenarios',
+      title: '次日三档情景概率',
+      labels: {
+        bull_pct_ge_3: '强势溢价（≥+3%）',
+        neutral_minus2_to_3: '震荡平开（-2%~+3%）',
+        bear_pct_le_minus2: '破板低开（≤-2%）',
+        key_observation_window: '重点观察窗口',
+      },
+    },
+    {
+      key: 'execution_plan',
+      title: '执行计划',
+      labels: {
+        entry_zones: '分批介入价位',
+        stop_loss: '止损价位',
+        add_position_trigger: '加仓触发',
+        t0_reduce_signal: 'T+0 减仓信号',
+      },
+    },
+  ],
+  // 中线产业趋势专家 v2.0.0
+  midline_industry_expert: [
+    {
+      key: 'industry_cycle',
+      title: '产业景气度',
+      labels: {
+        sector_name: '板块归属',
+        cycle_stage: '景气周期阶段',
+        relative_strength: '板块 vs 个股相对强度',
+        catalyst_note: '中线催化要点',
+      },
+    },
+    {
+      key: 'fundamental_quality',
+      title: '公司基本面质地',
+      labels: {
+        latest_earnings_trend: '最新业绩趋势',
+        profitability_level: '盈利能力',
+        valuation_signal: '估值信号',
+        quality_verdict: '质地判定',
+      },
+    },
+    {
+      key: 'technical_structure',
+      title: '中线技术结构',
+      labels: {
+        weekly_macd: '周线 MACD',
+        monthly_boll_position: '月线布林',
+        ma_anchor: '均线锚点',
+        structure_verdict: '结构判定',
+      },
+    },
+    {
+      key: 'price_target',
+      title: '目标价区间（3~12 个月）',
+      labels: {
+        time_horizon: '时间窗口',
+        target_range_low: '下沿目标价',
+        target_range_high: '上沿目标价',
+        target_method: '推演方法',
+        stop_loss: '中线止损',
+      },
+    },
+    {
+      key: 'catalysts_and_risks',
+      title: '催化剂与风险',
+      labels: {
+        catalysts: '催化剂',
+        risks: '风险',
+      },
+    },
+  ],
+  // 长线价值守望者 v2.0.0
+  longterm_value_watcher: [
+    {
+      key: 'moat_assessment',
+      title: '护城河评估',
+      labels: {
+        moat_type: '护城河类型',
+        moat_width: '护城河宽度',
+        inference_basis: '推断依据',
+      },
+    },
+    {
+      key: 'earnings_quality',
+      title: '长期盈利质量',
+      labels: {
+        roe_level: 'ROE 水平',
+        gross_margin: '毛利率',
+        repurchase_signal: '回购信号',
+        earnings_trend: '业绩趋势',
+        quality_verdict: '质地判定',
+      },
+    },
+    {
+      key: 'valuation_margin',
+      title: '估值安全边际',
+      labels: {
+        current_pe: '当前 PE',
+        pe_band_position: 'PE Band 分位',
+        forward_pe_deviation: 'Forward PE 偏离',
+        margin_verdict: '安全边际判定',
+      },
+    },
+    {
+      key: 'long_term_risk',
+      title: '长线持有风险',
+      labels: {
+        shareholder_concentration: '股东集中度',
+        northbound_trend: '北向资金趋势',
+        pledge_risk: '股权质押',
+        unlock_risk: '解禁风险',
+        risk_verdict: '风险判定',
+      },
+    },
+    {
+      key: 'expected_return',
+      title: '预期回报拆解（3~5 年）',
+      labels: {
+        time_horizon: '时间窗口',
+        earnings_growth_contribution: '盈利增长贡献',
+        valuation_expansion_contribution: '估值修复贡献',
+        dividend_contribution: '股息贡献',
+        total_annualized_return: '预期年化总回报',
+      },
+    },
+  ],
+}
+
+// ── probability_metrics 字段的中文标签映射（兼容旧 schema）──────────
 const PM_FIELD_LABELS: Record<string, { label: string; prefix?: string }> = {
-  // 游资观点
   next_day_plus_2_percent_prob: { label: '次日 +2% 概率' },
   confidence_level:             { label: '置信度' },
   key_observation_window:       { label: '观察窗口' },
-  // 中线专家
   three_month_positive_return_prob: { label: '3 个月正收益概率' },
   trend_stage:                  { label: '趋势阶段' },
   key_catalyst:                 { label: '核心催化' },
-  // 长线价值守望者
   one_year_intrinsic_return_prob:   { label: '1 年内在回报概率' },
   valuation_level:              { label: '估值水位' },
   safety_margin:                { label: '安全边际' },
-  // CIO 指令
   short_term_signal:            { label: '短线信号' },
   mid_term_signal:              { label: '中线信号' },
   long_term_signal:             { label: '长线信号' },
@@ -257,16 +447,98 @@ function DimensionSection({ title, content }: { title: string; content: string }
   )
 }
 
+/** 渲染单个字段的值（支持嵌套对象、数组、字符串、next_day_scenarios 特殊结构）*/
+function FieldValue({ value }: { value: any }): React.ReactElement | null {
+  if (value == null || value === '') return <span className="text-gray-400">-</span>
+
+  // 数组：逐条列出（catalysts/risks 等）
+  if (Array.isArray(value)) {
+    if (value.length === 0) return <span className="text-gray-400">-</span>
+    return (
+      <ul className="mt-0.5 space-y-0.5">
+        {value.map((item, i) => (
+          <li key={i} className="flex gap-1.5">
+            <span className="text-gray-400 shrink-0">·</span>
+            <span>{renderBold(String(item ?? '-'))}</span>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
+  // next_day_scenarios 三档的子对象 { probability, trigger_condition }
+  if (typeof value === 'object') {
+    if ('probability' in value || 'trigger_condition' in value) {
+      return (
+        <span>
+          <strong className="text-base">{renderBold(String(value.probability ?? '-'))}</strong>
+          {value.trigger_condition && (
+            <span className="text-gray-600 dark:text-gray-400 ml-2 text-xs">
+              ／ {renderBold(String(value.trigger_condition))}
+            </span>
+          )}
+        </span>
+      )
+    }
+    // 兜底：JSON 化显示（正常不走到这里）
+    return <span className="text-xs text-gray-500">{JSON.stringify(value)}</span>
+  }
+
+  // 字符串 / 数字：直接显示，支持 **加粗** 标记
+  return <span>{renderBold(String(value))}</span>
+}
+
+/** 渲染一个 section：标题 + 带字段标签的条目列表 */
+function GenericSection({
+  title,
+  data,
+  labels,
+}: {
+  title: string
+  data: Record<string, any>
+  labels?: Record<string, string>
+}) {
+  const entries = Object.entries(data).filter(([, v]) => v != null && v !== '')
+  if (entries.length === 0) return null
+  return (
+    <section>
+      <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">{title}</h3>
+      <ul className="space-y-1 pl-1">
+        {entries.map(([key, val]) => {
+          const label = labels?.[key] ?? key.replace(/_/g, ' ')
+          return (
+            <li key={key} className="flex gap-1.5">
+              <span className="text-gray-400 shrink-0">·</span>
+              <span className="flex-1">
+                <span className="text-gray-500 dark:text-gray-400">{label}：</span>
+                <FieldValue value={val} />
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
 /**
  * 通用 JSON 结构化分析渲染器。
- * 支持：游资观点 / 中线专家 / 长线价值守望者 / CIO 指令，
- * 所有类型共用同一套骨架渲染逻辑，仅 probability_metrics 字段名通过映射表转换。
+ * 根据 analysisType 查找 SECTION_CONFIGS，按声明的 section 顺序渲染；
+ * 配置外的顶层字段（如 risk_warning / final_score）由专门逻辑处理；
+ * 兼容旧 schema（probability_metrics / dimensions / trading_strategy / pros/cons）。
  */
-function StructuredAnalysisContent({ d }: { d: Record<string, any> }) {
-  const pm  = d.probability_metrics as Record<string, any> | undefined
-  const ts  = d.trading_strategy    as Record<string, any> | undefined
-  const fs  = d.final_score         as Record<string, any> | undefined
+function StructuredAnalysisContent({ d, analysisType }: { d: Record<string, any>; analysisType: string }) {
+  const sections = SECTION_CONFIGS[analysisType] ?? []
+  const fs = d.final_score as Record<string, any> | undefined
   const score = fs?.score != null ? parseFloat(String(fs.score)) : null
+
+  // 兼容字段：新 schema 用 bull_factors/bear_factors + key_quote；旧用 pros/cons
+  const bullFactors = Array.isArray(fs?.bull_factors) ? fs.bull_factors : (Array.isArray(fs?.pros) ? fs.pros : [])
+  const bearFactors = Array.isArray(fs?.bear_factors) ? fs.bear_factors : (Array.isArray(fs?.cons) ? fs.cons : [])
+
+  // 兼容旧 schema
+  const pm = d.probability_metrics as Record<string, any> | undefined
+  const ts = d.trading_strategy    as Record<string, any> | undefined
 
   return (
     <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed space-y-3">
@@ -281,36 +553,29 @@ function StructuredAnalysisContent({ d }: { d: Record<string, any> }) {
         )}
       </div>
 
-      {/* 概率指标区 */}
-      {pm && Object.keys(pm).length > 0 && (
-        <section>
-          <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">核心指标</h3>
-          <ul className="space-y-0.5 pl-1">
-            {Object.entries(pm).map(([key, val], i) => {
-              const meta = PM_FIELD_LABELS[key]
-              const label = meta?.label ?? key.replace(/_/g, ' ')
-              return (
-                <li key={i} className="flex gap-1.5">
-                  <span className="text-gray-400 shrink-0">·</span>
-                  <span>
-                    <span className="text-gray-500 dark:text-gray-400">{label}：</span>
-                    <strong>{renderBold(String(val ?? '-'))}</strong>
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
-        </section>
+      {/* 新 schema：按 SECTION_CONFIGS 声明顺序渲染每个 section */}
+      {sections.map(cfg => {
+        const sectionData = d[cfg.key]
+        if (!sectionData || typeof sectionData !== 'object') return null
+        return <GenericSection key={cfg.key} title={cfg.title} data={sectionData} labels={cfg.labels} />
+      })}
+
+      {/* 旧 schema 兼容：probability_metrics 核心指标区
+          只在没有任何新 schema section 字段时降级显示（避免新旧 schema 同时重复渲染） */}
+      {pm && Object.keys(pm).length > 0 && !sections.some(cfg => d[cfg.key]) && (
+        <GenericSection title="核心指标" data={pm} labels={Object.fromEntries(
+          Object.entries(PM_FIELD_LABELS).map(([k, v]) => [k, v.label])
+        )} />
       )}
 
-      {/* 维度分析（title + content 结构） */}
+      {/* 旧 schema 兼容：dimensions 维度分析 */}
       {d.dimensions && Object.values(d.dimensions).map((dim: any, i: number) =>
         dim?.title && dim?.content
           ? <DimensionSection key={i} title={dim.title} content={dim.content} />
           : null
       )}
 
-      {/* 交易策略（游资观点专属，其他类型若有则展示） */}
+      {/* 旧 schema 兼容：trading_strategy */}
       {ts && (ts.action_plan || ts.risk_warning) && (
         <section>
           <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">交易策略</h3>
@@ -329,21 +594,34 @@ function StructuredAnalysisContent({ d }: { d: Record<string, any> }) {
         </section>
       )}
 
+      {/* 顶层 risk_warning（新游资 schema 单独字段）*/}
+      {typeof d.risk_warning === 'string' && d.risk_warning.trim() && (
+        <section>
+          <h3 className="text-sm font-semibold text-red-600 dark:text-red-400 mb-1">风险提示</h3>
+          <p className="text-sm">{renderBold(d.risk_warning)}</p>
+        </section>
+      )}
+
       {/* 综合评分区 */}
       {fs && score != null && (
         <section className="border-t border-gray-100 dark:border-gray-700 pt-3">
           <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-2">综合评分</h3>
           <ScoreBadge score={score} rating={fs.rating} />
-          {Array.isArray(fs.pros) && fs.pros.length > 0 && (
+          {typeof fs.key_quote === 'string' && fs.key_quote.trim() && (
+            <p className="mt-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 rounded-md text-sm font-semibold text-blue-800 dark:text-blue-200">
+              {renderBold(fs.key_quote)}
+            </p>
+          )}
+          {bullFactors.length > 0 && (
             <div className="mt-2">
-              <span className="font-semibold text-gray-700 dark:text-gray-300">优势</span>
-              <ProsConsList items={fs.pros} variant="pros" />
+              <span className="font-semibold text-gray-700 dark:text-gray-300">正向因子</span>
+              <ProsConsList items={bullFactors} variant="pros" />
             </div>
           )}
-          {Array.isArray(fs.cons) && fs.cons.length > 0 && (
+          {bearFactors.length > 0 && (
             <div className="mt-1.5">
-              <span className="font-semibold text-gray-700 dark:text-gray-300">劣势</span>
-              <ProsConsList items={fs.cons} variant="cons" />
+              <span className="font-semibold text-gray-700 dark:text-gray-300">负向因子</span>
+              <ProsConsList items={bearFactors} variant="cons" />
             </div>
           )}
         </section>
@@ -366,7 +644,7 @@ function AnalysisContent({ text, analysisType }: { text: string; analysisType: s
     try {
       const d = JSON.parse(text)
       if (d && typeof d === 'object' && !Array.isArray(d)) {
-        return <StructuredAnalysisContent d={d} />
+        return <StructuredAnalysisContent d={d} analysisType={analysisType} />
       }
     } catch {
       // JSON 解析失败，降级为 Markdown 渲染

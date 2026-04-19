@@ -34,14 +34,24 @@ def format_as_text(data: Dict) -> str:
     _format_capital_flow(lines, data)
 
     # ================================================================
-    # 二B、集合竞价（盘前/盘尾博弈）
+    # 二B、集合竞价（盘前/盘尾博弈） + 竞价基准对比
     # ================================================================
-    _format_auction(lines, data.get('auction') or {})
+    _format_auction(lines, data.get('auction') or {}, data.get('auction_baseline') or {})
 
     # ================================================================
     # 二C、聪明资金（融资融券 + 龙虎榜）
     # ================================================================
     _format_smart_money(lines, data.get('smart_money') or {})
+
+    # ================================================================
+    # 二D、涨停生态（市场情绪 + 个股题材身位）
+    # ================================================================
+    _format_limit_ecology(lines, data.get('limit_ecology') or {})
+
+    # ================================================================
+    # 二E、个股历史涨停基因（近60日打板记录 + T+1 溢价）
+    # ================================================================
+    _format_limit_history(lines, data.get('limit_history') or {})
 
     # ================================================================
     # 三、股东变化
@@ -169,7 +179,7 @@ def _format_basic_market(lines: list, basic: Dict, financial: Dict = None):
         stale_flag = ''
         if days_lag is not None and days_lag >= 180:
             stale_flag = f"  ⚠️ 数据已过期 {days_lag} 天，请以下方业绩快报/预告为准"
-        lag_note = f"，距今 {days_lag} 天" if days_lag is not None else ''
+        lag_note = f"，距报告期末 {days_lag} 个自然日" if days_lag is not None else ''
         lines.append(f"| --- 最新财报（报告期 {fina.get('end_date', '')}{lag_note}）{stale_flag} | --- |")
         lines.append(f"| 营收同比(YoY) | {fmt(fina.get('or_yoy'))}% |")
         lines.append(f"| 归母净利润同比(YoY) | {fmt(fina.get('netprofit_yoy'))}% |")
@@ -297,18 +307,18 @@ def _format_basic_market(lines: list, basic: Dict, financial: Dict = None):
             )
             low = active.get('low_limit')
             high = active.get('high_limit')
-            amt = active.get('amount')  # 单位：万元
-            vol = active.get('vol')     # 单位：万股
+            amt = active.get('amount')  # 原始单位：元
+            vol = active.get('vol')     # 原始单位：股
             price_range = f"{fmt(low)} ~ {fmt(high)} 元" if low and high else 'N/A'
             lines.append(f"    - 回购价区间：{price_range}")
-            lines.append(f"    - 计划回购数量：{fmt(vol, 2) if vol else 'N/A'} 万股")
-            lines.append(f"    - 计划回购金额：{fmt(amt, 2) if amt else 'N/A'} 万元")
+            lines.append(f"    - 计划回购数量：{fmt_vol(vol) if vol else 'N/A'}")
+            lines.append(f"    - 计划回购金额：{fmt_amount(amt) if amt else 'N/A'}")
             if active.get('exp_date'):
                 lines.append(f"    - 预计实施期限：{active.get('exp_date')}")
         lines.append(
             f"- 近1年回购统计：进行中 {repurchase.get('active_count_1y', 0)} 项 / "
             f"已完成 {repurchase.get('completed_count_1y', 0)} 项 / "
-            f"已完成金额合计 {fmt(repurchase.get('total_completed_amount_1y'), 2)} 万元"
+            f"已完成金额合计 {fmt_amount(repurchase.get('total_completed_amount_1y'))}"
         )
     lines.append("")
 
@@ -375,7 +385,7 @@ def _format_capital_flow(lines: list, data: Dict):
         # 部分股票北向持股为季报频次（仅季末有数据），距今 ≥ 5 个交易日即可能"过期"
         lag_suffix = ''
         if days_lag is not None and days_lag >= 5:
-            lag_suffix = f"，距今已 {days_lag} 天"
+            lag_suffix = f"，距披露日 {days_lag} 个自然日"
         lines.append(
             f"| 北向持股({hk.get('trade_date', '')}{lag_suffix}) | "
             f"{fmt(hk.get('vol'), 0)} 股，占流通 {fmt(hk.get('ratio'))}% |"
@@ -388,7 +398,7 @@ def _format_capital_flow(lines: list, data: Dict):
         if days_lag is not None and days_lag >= 10:
             lines.append(
                 f"| 北向数据频率 | 该股北向持股本地为季报频次（非日频）；"
-                f"最新快照距今 {days_lag} 天 |"
+                f"最新快照距披露日 {days_lag} 个自然日 |"
             )
     elif not is_bse:
         lines.append("| 北向资金 | 本地无持股数据 |")
@@ -432,13 +442,16 @@ def _format_capital_flow(lines: list, data: Dict):
     lines.append("")
 
 
-def _format_auction(lines: list, auction: Dict):
+def _format_auction(lines: list, auction: Dict, baseline: Dict = None):
     if not auction:
         return
     open_a = auction.get('open_auction') or {}
     close_a = auction.get('close_auction') or {}
     if not open_a and not close_a:
         return
+    baseline = baseline or {}
+    open_base = baseline.get('open_auction_baseline') or {}
+    close_base = baseline.get('close_auction_baseline') or {}
 
     lines.append("## 二B、集合竞价异动（盘前/盘尾博弈）")
     lines.append("")
@@ -467,6 +480,17 @@ def _format_auction(lines: list, auction: Dict):
         lines.append(f"| 跳空幅度 | {gap_str} {direction} |")
         lines.append(f"| 竞价成交量 | {fmt_vol(open_a.get('vol'))} |")
         lines.append(f"| 竞价成交额 | {fmt_amount(open_a.get('amount'))} |")
+        # 近 20 日开盘竞价基准对比（识别盘前抢筹 / 撤单冷场）
+        if open_base and open_base.get('vs_baseline_x') is not None:
+            ratio = open_base.get('vs_baseline_x')
+            avg_amt = open_base.get('baseline_avg')
+            n = open_base.get('sample_size')
+            lines.append(
+                f"| 近{n}日开盘竞价均值 | {fmt_amount(avg_amt)} |"
+            )
+            lines.append(
+                f"| 本日 vs 均值 | {ratio:.2f}x （倍数 >1.3 偏热、<0.7 偏冷） |"
+            )
 
     if close_a:
         share = close_a.get('vol_share_pct')
@@ -482,6 +506,17 @@ def _format_auction(lines: list, auction: Dict):
         lines.append(f"| 竞价成交量 | {fmt_vol(close_a.get('vol'))} |")
         lines.append(f"| 竞价成交额 | {fmt_amount(close_a.get('amount'))} |")
         lines.append(f"| 占当日成交量比例 | {share_str} |")
+        # 近 20 日收盘竞价基准对比
+        if close_base and close_base.get('vs_baseline_x') is not None:
+            ratio = close_base.get('vs_baseline_x')
+            avg_amt = close_base.get('baseline_avg')
+            n = close_base.get('sample_size')
+            lines.append(
+                f"| 近{n}日收盘竞价均值 | {fmt_amount(avg_amt)} |"
+            )
+            lines.append(
+                f"| 本日 vs 均值 | {ratio:.2f}x （倍数 >1.3 偏热、<0.7 偏冷） |"
+            )
     lines.append("")
 
 
@@ -489,7 +524,10 @@ def _format_smart_money(lines: list, sm: Dict):
     """渲染聪明资金（融资融券 + 龙虎榜）。"""
     margin = sm.get('margin')
     events = sm.get('top_list_events') or []
-    if not margin and not events:
+    # on_billboard_60d 为显式的"近 60 日是否上榜"标记；
+    # 即使 events 为空也要渲染"未上榜"提示，避免 LLM 误判为数据缺失
+    on_bb = sm.get('on_billboard_60d')
+    if not margin and not events and on_bb is None:
         return
 
     lines.append("## 二C、聪明资金（融资融券 + 龙虎榜）")
@@ -498,7 +536,7 @@ def _format_smart_money(lines: list, sm: Dict):
     # ---- 融资融券 ----
     if margin:
         days_lag = margin.get('days_lag')
-        lag_suffix = f"，距今 {days_lag} 天" if days_lag is not None and days_lag >= 2 else ''
+        lag_suffix = f"，距披露日 {days_lag} 个自然日（含非交易日）" if days_lag is not None and days_lag >= 2 else ''
         lines.append(f"**融资融券（最新 {margin.get('trade_date', '')}{lag_suffix}）：**")
         lines.append("")
         rzye = margin.get('rzye')      # 元
@@ -540,7 +578,13 @@ def _format_smart_money(lines: list, sm: Dict):
             )
 
     # ---- 龙虎榜 ----
-    if events:
+    # 有事件：渲染完整上榜明细
+    # 无事件但 on_billboard_60d 标记为 False：显式告知 AI "未上榜"（事实 vs 数据缺失）
+    if not events and on_bb is False:
+        lines.append("")
+        lines.append("**龙虎榜：** 近 60 日未登龙虎榜（无游资 / 机构席位博弈事件）")
+        lines.append("")
+    elif events:
         lines.append("")
         lines.append(f"**龙虎榜（近60日上榜 {len(events)} 次）：**")
         lines.append("")
@@ -614,7 +658,7 @@ def _format_shareholder(lines: list, shareholder: Dict):
         if days_lag is not None and days_lag >= 60:
             lines.append("")
             lines.append(
-                f"> 数据频率说明：股东人数披露非日频，最新一条距今 {days_lag} 天。"
+                f"> 数据频率说明：股东人数披露非日频，最新一条距披露日 {days_lag} 个自然日。"
             )
     else:
         lines.append("股东人数：暂无数据")
@@ -842,7 +886,7 @@ def _format_technical(lines: list, data: Dict):
                 lines.append(f"      形态: {d['pattern']}")
         vp_ratio_desc = vp.get('vp_ratio_desc')
         if vp_ratio_desc:
-            lines.append(f"  量价背离系数: {vp_ratio_desc}")
+            lines.append(f"  量能结构(5日): {vp_ratio_desc}（>1 偏多、=1 均衡、<1 偏空）")
         mid_long = vp.get('mid_long', {})
         if mid_long:
             lines.append("  中长线结构:")
@@ -1081,3 +1125,152 @@ def _format_financial_risk(lines: list, data: Dict):
         lines.append(f"| 质押笔数 | {pledge.get('pledge_count', 'N/A')} 笔 |")
         lines.append(f"| 质押比例 | {fmt(pledge.get('pledge_ratio'))}% |")
         lines.append(f"| 未解押股份 | {fmt(pledge.get('unrest_pledge'), 0)} 万股 |")
+
+
+# ==========================================================================
+# 涨停生态 / 历史涨停基因
+# ==========================================================================
+
+def _format_limit_ecology(lines: list, ecology: Dict):
+    """渲染涨停生态：市场情绪 + 连板天梯 + 最强板块 + 个股身位。"""
+    if not ecology:
+        return
+    trade_date = ecology.get('trade_date', '')
+    market = ecology.get('market_sentiment') or {}
+    ladder = ecology.get('ladder_top5') or []
+    boards = ecology.get('top_boards') or []
+    stock_limit = ecology.get('stock_limit_status')
+    max_ladder = ecology.get('max_ladder_nums') or 0
+
+    lines.append("")
+    lines.append(f"## 二D、涨停生态（基准日 {trade_date}）")
+    lines.append("")
+
+    # 市场情绪温度
+    lines.append("**全市场情绪温度：**")
+    lines.append("")
+    lines.append("| 指标 | 数值 |")
+    lines.append("|------|------|")
+    lines.append(f"| 涨停家数 | {market.get('up_count', 0)} 只 |")
+    lines.append(f"| 跌停家数 | {market.get('down_count', 0)} 只 |")
+    lines.append(f"| 炸板家数 | {market.get('broken_count', 0)} 只 |")
+    if market.get('broken_ratio_pct') is not None:
+        lines.append(
+            f"| 炸板率 | {market['broken_ratio_pct']}% "
+            f"（= 炸板 / (涨停+炸板)，>35% 多为情绪退潮） |"
+        )
+    lines.append(f"| 最高标板位 | {max_ladder} 板 |")
+    lines.append("")
+
+    # 连板天梯 Top 5
+    if ladder:
+        lines.append("**连板天梯 Top 5：**")
+        lines.append("")
+        lines.append("| 板位 | 股票 | 代码 |")
+        lines.append("|------|------|------|")
+        for r in ladder:
+            lines.append(
+                f"| {r.get('nums', 0)} 板 | {r.get('name', '')} | {r.get('ts_code', '')} |"
+            )
+        lines.append("")
+
+    # 最强板块 Top 5（按涨停家数）
+    if boards:
+        lines.append("**最强板块 Top 5（按当日涨停家数排名）：**")
+        lines.append("")
+        lines.append("| 板块 | 涨停家数 | 连续涨停家数 | 板块涨跌幅 |")
+        lines.append("|------|---------|-------------|----------|")
+        for r in boards:
+            pct = r.get('pct_change')
+            pct_str = f"{pct:+.2f}%" if pct is not None else 'N/A'
+            lines.append(
+                f"| {r.get('name', '')} | {r.get('up_nums', 0)} | "
+                f"{r.get('cons_nums', 0)} | {pct_str} |"
+            )
+        lines.append("")
+
+    # 个股身位
+    lines.append("**本股当日涨停身位：**")
+    lines.append("")
+    if stock_limit is None:
+        lines.append(f"- 本日（{trade_date}）未上涨停榜（非涨停 / 跌停 / 炸板）")
+    else:
+        lt = stock_limit.get('limit_type') or ''
+        type_str = {'U': '涨停', 'D': '跌停', 'Z': '炸板'}.get(lt, lt)
+        streak = stock_limit.get('limit_streak')
+        up_stat = stock_limit.get('up_stat') or ''
+        open_times = stock_limit.get('open_times', 0)
+        fd = stock_limit.get('fd_amount')
+        fd_str = ''
+        if fd is not None:
+            fd_str = f"{fd / 1e8:.2f} 亿元" if abs(fd) >= 1e8 else f"{fd / 1e4:.2f} 万元"
+        lines.append(f"- 类型：{type_str}")
+        if streak is not None:
+            lines.append(f"- 当前连板数：{streak} 板 ({up_stat})")
+        lines.append(f"- 炸板次数：{open_times} 次")
+        if fd is not None:
+            lines.append(f"- 封单金额：{fd_str}")
+        if stock_limit.get('first_time'):
+            lines.append(
+                f"- 首次封板：{stock_limit['first_time']}；"
+                f"最终封板：{stock_limit.get('last_time', '')}"
+            )
+    lines.append("")
+
+
+def _format_limit_history(lines: list, history: Dict):
+    """渲染个股历史涨停基因：近60日涨停次数 / T+1 溢价 / 接力成功率。"""
+    if not history:
+        return
+    lookback = history.get('lookback_days', 60)
+    count = history.get('limit_up_count', 0)
+    last_date = history.get('last_limit_up_date')
+    days_since = history.get('days_since_last')
+    t1 = history.get('t1_stats')
+    events = history.get('recent_events') or []
+
+    lines.append(f"## 二E、个股历史涨停基因（近 {lookback} 日）")
+    lines.append("")
+
+    if count == 0:
+        lines.append(f"- 近 {lookback} 日无涨停记录（非打板股 / 冷门标的）")
+        lines.append("")
+        return
+
+    lines.append("| 指标 | 数值 |")
+    lines.append("|------|------|")
+    lines.append(f"| 涨停次数 | {count} 次 |")
+    if last_date:
+        since_str = f"距今 {days_since} 交易日" if days_since is not None else ''
+        lines.append(f"| 最近一次涨停 | {last_date} {since_str} |")
+    if t1:
+        lines.append(
+            f"| 涨停次日 T+1 平均涨跌 | {t1.get('avg_pct', 0):+.2f}% "
+            f"（{t1.get('sample_size', 0)} 个样本） |"
+        )
+        lines.append(
+            f"| 涨停次日 T+1 胜率 | {t1.get('win_rate_pct', 0)}% "
+            f"（T+1 收红概率；>60% 视为『接力基因强』） |"
+        )
+        lines.append(
+            f"| T+1 最大/最小涨幅 | {t1.get('max_pct', 0):+.2f}% / "
+            f"{t1.get('min_pct', 0):+.2f}% |"
+        )
+    lines.append("")
+
+    # 最近 5 次涨停明细
+    if events:
+        lines.append(f"**最近 {len(events)} 次涨停明细：**")
+        lines.append("")
+        lines.append("| 日期 | 连板状态 | 炸板次数 | 当日涨幅 | T+1 涨幅 |")
+        lines.append("|------|---------|---------|---------|---------|")
+        for ev in events:
+            pct = ev.get('pct_change')
+            t1_pct = ev.get('t1_pct_change')
+            pct_str = f"{pct:+.2f}%" if pct is not None else 'N/A'
+            t1_str = f"{t1_pct:+.2f}%" if t1_pct is not None else 'N/A'
+            lines.append(
+                f"| {ev.get('trade_date', '')} | {ev.get('up_stat', '')} | "
+                f"{ev.get('open_times', 0)} | {pct_str} | {t1_str} |"
+            )
+        lines.append("")

@@ -944,14 +944,30 @@ _SEAT_TAGS = {
     # 北向 / ETF 通道
     '深股通专用': '北向通道',
     '沪股通专用': '北向通道',
-    # 公认机构席位（任何"机构专用"都是机构；席位名为固定字符串）
+    # 公认机构席位
     '机构专用': '机构席位',
-    # 知名一线游资席位（仅做标记，未来可扩展；命中字符串为子串匹配）
-    '中信证券股份有限公司深圳福田金田路证券营业部': '一线游资·深圳金田路（炒新/打板风）',
-    '国泰海通证券股份有限公司上海长宁区江苏路证券营业部': '一线游资·上海溧阳路（章盟主系）',
-    '华鑫证券有限责任公司上海茅台路证券营业部': '一线量化席位（华鑫茅台路）',
-    '中信证券(山东)有限责任公司青岛分公司': '量化/对冲席位（中信山东青岛）',
 }
+
+# 子串匹配的知名席位（按"子串 → 标签"登记，命中即打标签）
+# 游资席位主要依据市场公开共识，未必完全代表当前资金主体；仅作定性参考
+_SEAT_SUBSTRING_TAGS = [
+    ('深圳福田金田路证券', '一线游资·深圳金田路系'),
+    ('深圳益田路荣超商务中心', '一线游资·深圳益田路系'),
+    ('上海长宁区江苏路证券', '一线游资·上海溧阳路（章盟主/作手系）'),
+    ('上海淮海中路证券', '一线游资·上海淮海中路'),
+    ('上海茅台路证券', '一线量化席位·华鑫茅台路'),
+    ('北京上地', '知名游资·北京上地'),
+    ('北京陈家湾', '知名游资·北京陈家湾'),
+    ('拉萨东环路', '西藏游资·拉萨东环路'),
+    ('拉萨团结路', '西藏游资·拉萨团结路'),
+    ('拉萨北京西路', '西藏游资·拉萨北京西路'),
+    ('拉萨朵森格路', '西藏游资·朵森格路'),
+    ('青岛分公司', '量化/对冲席位·中信山东青岛'),
+    ('厦门美湖路', '知名游资·厦门美湖路'),
+    ('成都东城根上街', '成都游资·东城根上街'),
+    ('杭州庆春路', '浙系游资·杭州庆春路'),
+    ('宁波解放南路', '宁波系游资·宁波解放南路'),
+]
 
 
 def _classify_seat(exalter: str) -> str:
@@ -964,6 +980,9 @@ def _classify_seat(exalter: str) -> str:
         return '机构席位'
     if '深股通专用' in exalter or '沪股通专用' in exalter:
         return '北向通道'
+    for sub, tag in _SEAT_SUBSTRING_TAGS:
+        if sub in exalter:
+            return tag
     return ''
 
 
@@ -1095,4 +1114,321 @@ async def get_smart_money(ts_code: str) -> Dict:
             })
         result['top_list_events'] = events
 
+    # 明确标记是否上榜（空态语义化，避免 LLM 把"缺字段"误解为"数据缺失"）
+    result['on_billboard_60d'] = bool(top_list_rows)
+    if not top_list_rows:
+        result['top_list_events'] = []
+
     return result
+
+
+# ------------------------------------------------------------------
+# 九、涨停生态（全市场情绪 + 个股题材身位）
+# ------------------------------------------------------------------
+
+async def get_limit_ecology(ts_code: str) -> Dict:
+    """采集"涨停生态"维度：
+    1) 最近交易日全市场涨停/跌停/炸板家数 → 情绪温度
+    2) 连板天梯（最高标板位 + Top 5 连板股票）→ 接力空间
+    3) 最强板块（按涨停家数排名 Top 5）→ 主线识别
+    4) 个股在最近交易日的涨停状态（板位/炸板次数/封单额）→ 身位
+    """
+    from app.repositories.limit_list_repository import LimitListRepository
+    from app.repositories.limit_step_repository import LimitStepRepository
+    from app.repositories.limit_cpt_repository import LimitCptRepository
+
+    # 基准日：limit_list_d 最新日期（非自然日，确保数据存在）
+    latest_trade_date = await asyncio.to_thread(
+        LimitListRepository().get_latest_trade_date
+    )
+    if not latest_trade_date:
+        return {}
+
+    stats_u, stats_d, stats_z, step_rows, cpt_rows, stock_limit_rows = await asyncio.gather(
+        asyncio.to_thread(LimitListRepository().get_statistics, latest_trade_date, latest_trade_date, 'U'),
+        asyncio.to_thread(LimitListRepository().get_statistics, latest_trade_date, latest_trade_date, 'D'),
+        asyncio.to_thread(LimitListRepository().get_statistics, latest_trade_date, latest_trade_date, 'Z'),
+        asyncio.to_thread(LimitStepRepository().get_top_by_nums, latest_trade_date, 20, False),
+        asyncio.to_thread(LimitCptRepository().get_top_by_up_nums, latest_trade_date, 10),
+        asyncio.to_thread(
+            LimitListRepository().get_by_date_range,
+            latest_trade_date, latest_trade_date, ts_code, None, 1, 5, None, 'desc',
+        ),
+        return_exceptions=True,
+    )
+
+    # 解包（失败的子查询回退空）
+    def _unwrap(v, default):
+        if isinstance(v, Exception):
+            logger.warning(f"[limit_ecology] 子查询异常: {type(v).__name__}: {v}")
+            return default
+        return v
+
+    stats_u = _unwrap(stats_u, {})
+    stats_d = _unwrap(stats_d, {})
+    stats_z = _unwrap(stats_z, {})
+    step_rows = _unwrap(step_rows, []) or []
+    cpt_rows = _unwrap(cpt_rows, []) or []
+    stock_limit_rows = _unwrap(stock_limit_rows, []) or []
+
+    # 市场情绪温度
+    market = {
+        'trade_date': latest_trade_date,
+        'up_count': int(stats_u.get('total_count') or 0),
+        'down_count': int(stats_d.get('total_count') or 0),
+        'broken_count': int(stats_z.get('total_count') or 0),  # 炸板
+    }
+    broken_ratio = None
+    if (market['up_count'] + market['broken_count']) > 0:
+        broken_ratio = round(
+            market['broken_count'] / (market['up_count'] + market['broken_count']) * 100, 1
+        )
+    market['broken_ratio_pct'] = broken_ratio  # 炸板率 = 炸板 / (涨停 + 炸板)
+
+    # 连板天梯：最高标板位 + Top 5
+    ladder = []
+    max_nums = 0
+    for r in step_rows[:5]:
+        nums = int(r.get('nums') or 0)
+        if nums > max_nums:
+            max_nums = nums
+        ladder.append({
+            'ts_code': r.get('ts_code') or '',
+            'name': r.get('name') or '',
+            'nums': nums,
+        })
+
+    # 最强板块天梯：Top 5
+    top_boards = []
+    for r in cpt_rows[:5]:
+        top_boards.append({
+            'ts_code': r.get('ts_code') or '',
+            'name': r.get('name') or '',
+            'up_nums': int(r.get('up_nums') or 0),
+            'cons_nums': int(r.get('cons_nums') or 0),
+            'pct_change': safe_float(r.get('pct_chg')),
+            'rank': int(r.get('rank') or 0) if r.get('rank') is not None else None,
+        })
+
+    # 个股涨停状态（如不在榜则为 None）
+    stock_limit = None
+    if stock_limit_rows:
+        row = stock_limit_rows[0]
+        up_stat = str(row.get('up_stat') or '')  # 如 "2/3"
+        # 解析连板数（up_stat 前半部分）
+        limit_streak = None
+        if '/' in up_stat:
+            try:
+                limit_streak = int(up_stat.split('/')[0])
+            except (ValueError, IndexError):
+                pass
+        stock_limit = {
+            'limit_type': row.get('limit_type') or '',          # U / D / Z
+            'up_stat': up_stat,                                  # 连板状态 "N板/M日内涨停次数"
+            'limit_streak': limit_streak,                        # 当前连板数 N
+            'limit_times': int(row.get('limit_times') or 0),    # 当日涨停次数（触板含炸板）
+            'open_times': int(row.get('open_times') or 0),      # 炸板次数
+            'fd_amount': safe_float(row.get('fd_amount')),      # 封单金额（元）
+            'first_time': str(row.get('first_time') or ''),     # 首次涨停时间
+            'last_time': str(row.get('last_time') or ''),       # 最后涨停时间
+            'pct_change': safe_float(row.get('pct_chg')),
+        }
+
+    return {
+        'trade_date': latest_trade_date,
+        'market_sentiment': market,
+        'max_ladder_nums': max_nums,                      # 全市场最高标板位
+        'ladder_top5': ladder,
+        'top_boards': top_boards,
+        'stock_limit_status': stock_limit,
+    }
+
+
+# ------------------------------------------------------------------
+# 十、个股历史涨停基因（近 60 日打板记录 + T+1 溢价统计）
+# ------------------------------------------------------------------
+
+async def get_limit_history(ts_code: str) -> Dict:
+    """采集个股近 60 日涨停历史：
+    1) 涨停次数（U 类型，不含炸板）
+    2) 每次涨停次日的 pct_change（T+1 溢价）→ 接力成功率
+    3) 最近一次涨停距今几交易日
+    """
+    from app.repositories.limit_list_repository import LimitListRepository
+    from app.repositories.stock_daily_repository import StockDailyRepository
+    from app.repositories.trading_calendar_repository import TradingCalendarRepository
+
+    # 多取 90 个日历日，保证覆盖 60 个交易日
+    today = datetime.now()
+    today_str = today.strftime('%Y%m%d')
+    start_90d = (today - timedelta(days=90)).strftime('%Y%m%d')
+
+    # 近 60 日涨停记录（U 类型）
+    limit_up_rows = await asyncio.to_thread(
+        LimitListRepository().get_by_date_range,
+        start_90d, today_str, ts_code, 'U', 1, 100, None, 'desc',
+    )
+    limit_up_rows = limit_up_rows or []
+
+    if not limit_up_rows:
+        return {
+            'lookback_days': 60,
+            'limit_up_count': 0,
+            'last_limit_up_date': None,
+            'days_since_last': None,
+            't1_stats': None,
+            'recent_events': [],
+        }
+
+    # 拉个股近 90 日日线，计算每次涨停次日涨跌幅
+    # stock_daily.code 存 ts_code 格式（如 '002580.SZ'），不是纯 6 位数字
+    start_dash = (today - timedelta(days=90)).strftime('%Y-%m-%d')
+    end_dash = today.strftime('%Y-%m-%d')
+    daily_df = await asyncio.to_thread(
+        StockDailyRepository().get_by_code_and_date_range,
+        ts_code, start_dash, end_dash,
+    )
+
+    # trade_date (YYYYMMDD) → pct_change
+    daily_pct_map: Dict[str, float] = {}
+    sorted_trade_dates: list = []
+    if daily_df is not None and not daily_df.empty:
+        for idx, row in daily_df.iterrows():
+            key = str(idx)[:10].replace('-', '')
+            pct = safe_float(row.get('pct_change'))
+            daily_pct_map[key] = pct
+            sorted_trade_dates.append(key)
+        sorted_trade_dates.sort()
+
+    # 计算每次涨停次日溢价
+    events = []
+    t1_returns = []
+    for r in limit_up_rows:
+        ev_date = str(r.get('trade_date') or '')[:8]
+        if not ev_date:
+            continue
+        # 从交易日列表找 T+1
+        next_day_pct = None
+        if ev_date in sorted_trade_dates:
+            idx = sorted_trade_dates.index(ev_date)
+            if idx + 1 < len(sorted_trade_dates):
+                next_key = sorted_trade_dates[idx + 1]
+                next_day_pct = daily_pct_map.get(next_key)
+        if next_day_pct is not None:
+            t1_returns.append(next_day_pct)
+        events.append({
+            'trade_date': ev_date,
+            'up_stat': str(r.get('up_stat') or ''),
+            'open_times': int(r.get('open_times') or 0),
+            'pct_change': safe_float(r.get('pct_chg')),
+            't1_pct_change': next_day_pct,
+        })
+
+    # T+1 溢价统计
+    t1_stats = None
+    if t1_returns:
+        avg = sum(t1_returns) / len(t1_returns)
+        win = sum(1 for x in t1_returns if x > 0)
+        t1_stats = {
+            'sample_size': len(t1_returns),
+            'avg_pct': round(avg, 2),
+            'win_rate_pct': round(win / len(t1_returns) * 100, 1),
+            'max_pct': round(max(t1_returns), 2),
+            'min_pct': round(min(t1_returns), 2),
+        }
+
+    # 最近一次涨停距今交易日数
+    last_date = events[0]['trade_date'] if events else None
+    days_since_last = None
+    if last_date:
+        # 用交易日历计数
+        cal_repo = TradingCalendarRepository()
+        try:
+            # 包含端点共 N 个交易日（last_date ... today）
+            days_since_last = await asyncio.to_thread(
+                cal_repo.get_trading_days_between, last_date, today_str
+            )
+            days_since_last = max(0, (days_since_last or 0) - 1)  # 去掉起点
+        except Exception:
+            days_since_last = None
+
+    return {
+        'lookback_days': 60,
+        'limit_up_count': len(limit_up_rows),
+        'last_limit_up_date': last_date,
+        'days_since_last': days_since_last,
+        't1_stats': t1_stats,
+        'recent_events': events[:5],  # 最近 5 次
+    }
+
+
+# ------------------------------------------------------------------
+# 十一、竞价基准（近 20 日开盘/收盘竞价均值对比）
+# ------------------------------------------------------------------
+
+async def get_auction_baseline(ts_code: str) -> Dict:
+    """对比当日开盘/收盘集合竞价成交额与近 20 日均值，识别"盘前抢筹/撤单"信号。
+
+    get_auction 只给了绝对数（67 万元），游资无法判断冷热；
+    本模块提供近 20 日均值作为对比锚点，得出相对倍数。
+    """
+    from app.repositories.stk_auction_o_repository import StkAuctionORepository
+    from app.repositories.stk_auction_c_repository import StkAuctionCRepository
+
+    # 40 个日历日对应约 25~28 个交易日，保证足够覆盖近 20 个交易日的竞价样本
+    today = datetime.now()
+    end_yyyymmdd = today.strftime('%Y%m%d')
+    start_40d = (today - timedelta(days=40)).strftime('%Y%m%d')
+
+    auction_o_rows, auction_c_rows = await asyncio.gather(
+        asyncio.to_thread(
+            StkAuctionORepository().get_by_date_range,
+            start_40d, end_yyyymmdd, ts_code, 25, 0,
+        ),
+        asyncio.to_thread(
+            StkAuctionCRepository().get_by_date_range,
+            start_40d, end_yyyymmdd, ts_code, 25, 0,
+        ),
+        return_exceptions=True,
+    )
+
+    def _unwrap(v):
+        if isinstance(v, Exception):
+            logger.warning(f"[auction_baseline] 查询异常: {type(v).__name__}: {v}")
+            return []
+        return v or []
+
+    auction_o_rows = _unwrap(auction_o_rows)
+    auction_c_rows = _unwrap(auction_c_rows)
+
+    def _compute_baseline(rows: list) -> Optional[Dict]:
+        if not rows:
+            return None
+        # rows 已按 trade_date desc 排序，第 0 条为最新
+        latest = rows[0]
+        latest_amount = safe_float(latest.get('amount'))
+        # 用"除最新日外"的历史样本（最多 20 个）计算均值
+        historical = [safe_float(r.get('amount')) for r in rows[1:21]]
+        historical = [x for x in historical if x is not None and x > 0]
+        if not historical or latest_amount is None:
+            return {
+                'trade_date': str(latest.get('trade_date') or '')[:8],
+                'latest_amount': latest_amount,
+                'baseline_avg': None,
+                'sample_size': len(historical),
+                'vs_baseline_x': None,
+            }
+        avg = sum(historical) / len(historical)
+        ratio = round(latest_amount / avg, 2) if avg > 0 else None
+        return {
+            'trade_date': str(latest.get('trade_date') or '')[:8],
+            'latest_amount': latest_amount,
+            'baseline_avg': round(avg, 2),
+            'sample_size': len(historical),
+            'vs_baseline_x': ratio,  # 当日 / 近 20 日均值，倍数
+        }
+
+    return {
+        'open_auction_baseline': _compute_baseline(auction_o_rows),
+        'close_auction_baseline': _compute_baseline(auction_c_rows),
+    }

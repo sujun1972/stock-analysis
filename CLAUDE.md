@@ -103,7 +103,11 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
     ├── get_risk_alerts              风险警示（ST、质押）
     └── get_nine_turn                TD 序列（即神奇九转，第9根为变盘窗口）
 
-`StockDataCollectionService.collect_and_format()` 主链路另含一个 **smart_money** 维度（融资融券明细 + 龙虎榜事件含席位性质标记），尚未挂为 LangChain Tool；如需 CIO Agent 主动查询可在 `langchain_tools.py` 追加 `get_smart_money` 工具。
+`StockDataCollectionService.collect_and_format()` 主链路另含四个维度尚未挂为 LangChain Tool；如需 CIO Agent 主动查询可在 `langchain_tools.py` 追加对应工具：
+- **smart_money**：融资融券明细 + 龙虎榜事件（含席位性质标记 `_SEAT_TAGS` / `_SEAT_SUBSTRING_TAGS`；无上榜时 `on_billboard_60d=False` 显式标记，避免 LLM 误判为数据缺失）
+- **limit_ecology**：涨停生态（最近交易日全市场涨停/跌停/炸板 + 连板天梯 Top5 + 最强板块 Top5 + 本股当日涨停身位）
+- **limit_history**：个股近 60 日涨停基因（涨停次数 / T+1 胜率 + 平均溢价 / 最近涨停距今交易日数）
+- **auction_baseline**：竞价基准对比（当日开盘/收盘竞价成交额 vs 近 20 日均值倍数，识别盘前抢筹/冷场）
 ```
 
 `get_technical_indicators` 内部委托三个独立分析服务（纯计算，无 IO）：
@@ -115,7 +119,7 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
 | `RsiAnalysisService` | `rsi_analysis_service.py` | RSI 多周期分析（超买超卖、趋势方向、背离、跨周期共振） |
 | `BollAnalysisService` | `boll_analysis_service.py` | 布林线多级别分析（通道宽度、价格位置/%B、中轨方向、突破信号、跨级别共振） |
 | `CandlestickAnalysisService` | `candlestick_analysis_service.py` | K 线形态识别（单根形态基于真实涨跌幅分档、组合形态含高低位语境、重心趋势） |
-| `VolumePriceAnalysisService` | `volume_price_analysis_service.py` | 量价动能（逐日推演、中线结构、天量压力、异动检测、近5日量价背离系数） |
+| `VolumePriceAnalysisService` | `volume_price_analysis_service.py` | 量价动能（逐日推演、中线结构、天量压力、异动检测、近5日量能结构=上涨日总量/下跌日总量） |
 
 **数据层输出原则（适用于所有写给 LLM 的数据收集模块，不仅是技术指标服务）**：
 
@@ -125,6 +129,8 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
 4. **暴露口径与单位**。"主力净流入"在 LLM 语境是黑盒，必须在表头或 caliber 字段说清"主力 = 超大单(≥100万) + 大单(20~100万)，单位：万元"。同理 PE Band 应给出 P10/P50/P90/P99 的具体数值，让 AI 直接对比。
 5. **缺失维度也是事实**。如果某项数据库无（如盘口挂单），就不渲染该字段；不要伪造。
 6. **共用工具集中在 `formatters.py`**：日期解析（`parse_date_loose` / `days_since` / `format_date_dashed`）、分位数（`quantile`）、各类格式化（`fmt_amount` / `fmt_wan` / `fmt_flow` / `fmt_vol`）。新加 collector 时不要重复造轮子。
+7. **金额/股数渲染必须走 `fmt_amount`（原始单位：元）/ `fmt_vol`（原始单位：股）**，禁止手写 `{fmt(v)} 万元` —— 除非底层字段确实是万元单位。Tushare 的 `repurchase.amount`、`margin_detail.rzye`、`moneyflow.*` 等原始单位是元，直接贴"万元"会放大 1 万倍（见历史 bug：回购金额 6182 万被误显示为 6182 亿）。
+8. **时效性文案用"距披露日 / 距报告期末 N 个自然日"**，禁止模糊"距今 N 天"——周末/节假日会让 LLM 按自然日误判数据陈旧度。跨度用交易日时明说"距今 N 交易日"。
 
 **两套输出格式**：
 - **LangChain Tool 输出**（CIO Agent 调用）：Markdown 表格格式
@@ -139,6 +145,40 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
 - **max_iterations**：5 轮（通过 LangGraph `recursion_limit` 控制）
 - **超时**：120 秒
 - **Expert Summaries**：`/generate-multi` 的 `include_cio=true` 时，前面专家的输出摘要会注入 Agent 的用户消息
+
+### 个股专家 Prompt 模板规范
+
+所有个股 JSON 分析类型（`hot_money_view` / `midline_industry_expert` / `longterm_value_watcher` / `macro_risk_expert`）的 prompt 模板（`llm_prompt_templates` 表）共享以下约定：
+
+**模板变量**（由 `build_stock_prompt()` 在 `backend/app/api/endpoints/prompt_templates.py` 注入）：
+- `{{ stock_name_and_code }}`：目标股票名称+代码
+- `{{ current_date_with_context }}`：带交易日语义的参考日期——今日是交易日则注明"今日为交易日"，否则注明"系统分析日，非交易日 + 上一交易日 + 下一交易日"；所有"次日"预测统一指向**下一交易日**，避免 LLM 在周末/节假日做时间错位预测
+- `{{ next_trade_date }}`：独立的下一交易日字段（经 `TradingCalendarRepository.get_next_trading_day` 查询真实日历）
+- `{{ stock_data_collection }}`：完整数据收集报告（由 `StockDataCollectionService.collect_and_format()` 填充）
+
+**硬约束块**（推荐放在 `system_prompt` 或 user prompt 开头）：
+1. 不得脑补（缺失字段据实填 `数据不足 / 未上榜 / 无披露`）
+2. 不得换算（所有数值直接引用原始数据）
+3. 滞后数据必须标注报告期 + 滞后天数
+4. 异常值过滤（单位错误/逻辑矛盾时写"数据异常/不可用"）
+
+**JSON schema 统一 `final_score` 结构**：
+```
+"final_score": {
+  "score": 0.0,
+  "rating": "专家自定义分档",
+  "bull_factors": ["正向因子 1（引用具体数据）", ...],
+  "bear_factors": ["负向因子 1（引用具体数据）", ...],
+  "key_quote": "一句话核心结论（≤50 字）"
+}
+```
+`ai_output_parser.StockExpertAnalysisResult.extract_score()` 会按 `final_score.score` → `comprehensive_score` → `score` 顺序提取；旧模板的 `pros/cons` 字段前端仍兜底兼容但新模板一律用 `bull_factors/bear_factors`。
+
+**新增专家类型 checklist**：
+1. Prompt 迁移脚本在 `backend/scripts/migrate_*_template.py`（重新执行会 UPSERT）
+2. 后端 `app/api/endpoints/stock_ai_analysis.py` 的 `ALLOWED_ANALYSIS_TYPES` 和 `_JSON_ANALYSIS_TYPES` 更新
+3. 前端 `HotMoneyViewDialog.tsx` 的 `SECTION_CONFIGS` 添加对应 `analysisType` 的 section 列表（title + labels 映射）
+4. `admin/types/prompt-template.ts` 的 `BUSINESS_TYPES` 和 `BUSINESS_TYPE_LABELS` 添加
 
 ### Celery 任务架构
 

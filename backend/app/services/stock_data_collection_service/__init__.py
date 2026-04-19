@@ -40,11 +40,19 @@ class StockDataCollectionService:
             self._get_nine_turn(ts_code),
             self._get_auction(ts_code),
             self._get_smart_money(ts_code),
+            self._get_limit_ecology(ts_code),
+            self._get_limit_history(ts_code),
+            self._get_auction_baseline(ts_code),
             return_exceptions=True,
         )
 
-        labels = ['basic', 'capital', 'shareholder', 'technical', 'financial', 'risk', 'nine_turn', 'auction', 'smart_money']
-        basic, capital, shareholder, technical, financial, risk, nine_turn, auction, smart_money = [
+        labels = [
+            'basic', 'capital', 'shareholder', 'technical', 'financial',
+            'risk', 'nine_turn', 'auction', 'smart_money',
+            'limit_ecology', 'limit_history', 'auction_baseline',
+        ]
+        (basic, capital, shareholder, technical, financial, risk, nine_turn,
+         auction, smart_money, limit_ecology, limit_history, auction_baseline) = [
             self._unwrap(v, label) for v, label in zip(results, labels)
         ]
 
@@ -61,6 +69,9 @@ class StockDataCollectionService:
             "nine_turn": nine_turn,
             "auction": auction,
             "smart_money": smart_money,
+            "limit_ecology": limit_ecology,
+            "limit_history": limit_history,
+            "auction_baseline": auction_baseline,
         }
 
     async def collect_and_format(self, ts_code: str, stock_name: str) -> tuple:
@@ -113,3 +124,12 @@ class StockDataCollectionService:
 
     async def _get_auction(self, ts_code: str) -> Dict:
         return await collectors.get_auction(ts_code)
+
+    async def _get_limit_ecology(self, ts_code: str) -> Dict:
+        return await collectors.get_limit_ecology(ts_code)
+
+    async def _get_limit_history(self, ts_code: str) -> Dict:
+        return await collectors.get_limit_history(ts_code)
+
+    async def _get_auction_baseline(self, ts_code: str) -> Dict:
+        return await collectors.get_auction_baseline(ts_code)
