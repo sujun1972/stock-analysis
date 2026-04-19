@@ -322,23 +322,49 @@ async def get_capital_flow(ts_code: str, pure_code: str) -> Dict:
         ]
 
         # 资金 vs 价格 累计对比（5 日 / 10 日）：用复合涨幅（连乘）算累计涨幅
-        # 仅做事实陈述：累计净额 + 累计涨幅 + 是否同向。AI 自行判断"背离"含义
+        # 主力净额 = 超大单+大单，但两者方向可能相反。拆开看可识别"游资/机构博弈"结构：
+        # 例如超大单（大资金）派发、大单（活跃游资）接力，用总净额会误导。
         def _cumulative_pct(rows):
             cum = 1.0
             for r in rows:
                 p = safe_float(r.get('pct_change')) or 0
                 cum *= (1 + p / 100)
             return round((cum - 1) * 100, 2)
+
+        def _cumulative_net(rows, key):
+            return round(sum((safe_float(r.get(key)) or 0) for r in rows), 2)
+
         if flow_data:
             cum_5d_pct = _cumulative_pct(flow_data[:5]) if len(flow_data) >= 5 else None
             cum_10d_pct = _cumulative_pct(flow_data[:10]) if len(flow_data) >= 10 else None
+            elg_5d = _cumulative_net(flow_data[:5], 'buy_elg_amount') if len(flow_data) >= 5 else None
+            lg_5d = _cumulative_net(flow_data[:5], 'buy_lg_amount') if len(flow_data) >= 5 else None
+            elg_10d = _cumulative_net(flow_data[:10], 'buy_elg_amount') if len(flow_data) >= 10 else None
+            lg_10d = _cumulative_net(flow_data[:10], 'buy_lg_amount') if len(flow_data) >= 10 else None
             net_5d = result['net_5d']
             net_10d = result['net_10d']
+
+            def _battle_tag(elg_val, lg_val):
+                """超大单 vs 大单方向是否分歧：同向返回 None；分歧返回描述文字。"""
+                if elg_val is None or lg_val is None:
+                    return None
+                if elg_val * lg_val < 0:
+                    if elg_val < 0 < lg_val:
+                        return '超大单派发、大单承接（筹码由大资金向游资转移）'
+                    return '超大单吸筹、大单派发（大资金逆势建仓）'
+                return None
+
             result['flow_vs_price'] = {
                 'cum_pct_5d': cum_5d_pct,
                 'cum_pct_10d': cum_10d_pct,
                 'net_5d': net_5d,
                 'net_10d': net_10d,
+                'elg_5d': elg_5d,
+                'lg_5d': lg_5d,
+                'elg_10d': elg_10d,
+                'lg_10d': lg_10d,
+                'battle_5d': _battle_tag(elg_5d, lg_5d),
+                'battle_10d': _battle_tag(elg_10d, lg_10d),
                 'same_direction_5d': (
                     None if cum_5d_pct is None
                     else (cum_5d_pct >= 0) == (net_5d >= 0)

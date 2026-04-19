@@ -239,12 +239,23 @@ def _project_next_day_boll_upper(close_series: pd.Series,
         new_upper = round(float(new_window.mean()) + 2 * float(new_window.std(ddof=0)), 2)
         gain = round((new_upper - next_close) / next_close * 100, 1) if next_close > 0 else None
         shift = round((new_upper - today_upper) / today_upper * 100, 1) if today_upper > 0 else None
+        # 位置语义标签：当次日收盘突破新上轨（gain<0），意味着"股价突破 +2σ 通道"→ 加速上涨，
+        # 而不是"距离上轨仅 -2.4% 的阻力"。前者是强势延续信号，后者是静态误读。
+        if gain is None:
+            location = ''
+        elif gain < 0:
+            location = '收盘突破新上轨（+2σ 通道外，加速上涨形态）'
+        elif gain < 2:
+            location = '收盘贴近新上轨（强势运行）'
+        else:
+            location = '收盘仍在新上轨下方（通道内）'
         projections.append({
             'label': label,
             'next_close': next_close,
             'projected_upper': new_upper,
             'gain_to_upper_pct': gain,
             'upper_shift_pct': shift,
+            'location': location,
         })
 
     return {
@@ -501,18 +512,20 @@ def build_cross_verification(technical: Dict,
             f'请计算盈亏比并评估当前价格位置的性价比。'
         ]
         # 阻力是布林上轨时，必须提示其动态特性（窗口滚动 → 上轨被动上移）
+        # 并且对每种场景明确标注"收盘突破/贴近/未破"上轨，避免把"涨停后上轨仍在 -2.4%"误读为"涨停遇阻"
         if boll_projection and nearest_r[0] == '布林上轨':
             projs = boll_projection.get('projections', [])
             today_upper = boll_projection.get('today_upper')
             scenario_descs = [
                 f"{p['label']}收于{p['next_close']:.2f} → 新上轨≈{p['projected_upper']:.2f}"
-                f"（距明日收盘{p['gain_to_upper_pct']:+.1f}%，上轨较今日{p['upper_shift_pct']:+.1f}%）"
+                f"（上轨较今日{p['upper_shift_pct']:+.1f}%；"
+                f"{p.get('location', '')}）"
                 for p in projs
             ]
             prompt_lines.append(
                 f'   说明：布林上轨为滚动 20 日 mean+2σ 的动态值，'
-                f'今日上轨 {today_upper}；下面是不同次日收盘情景下重新计算的明日上轨数值，'
-                f'供你在评估盈亏比时参考次日阻力空间的可能区间：'
+                f'今日上轨 {today_upper}；下面列出不同次日收盘情景下重新计算的明日上轨数值——'
+                f'注意：次日收盘突破上轨并不意味着"遇阻"，反而是 +2σ 通道被突破的加速上涨信号。'
                 + '；'.join(scenario_descs) + '。'
             )
         prompt_parts.append('\n'.join(prompt_lines))

@@ -23,7 +23,10 @@ def format_as_text(data: Dict) -> str:
     # ================================================================
     # 一、基础盘面
     # ================================================================
-    _format_basic_market(lines, basic)
+    # financial 的 Forward PE + 最新业绩快报/预告需要注入基础盘面表：
+    # 1) PE-TTM 行旁并列展示 Forward PE，避免只看 PE-TTM 历史分位就判为"极度高估"
+    # 2) 旧报告期过期（≥90 天）时附加最新快报/预告的 ROE/EPS，覆盖"财务瞎子摸象"
+    _format_basic_market(lines, basic, data.get('financial') or {})
 
     # ================================================================
     # 二、资金流向
@@ -62,7 +65,12 @@ def format_as_text(data: Dict) -> str:
 # 各章节内部格式化
 # ------------------------------------------------------------------
 
-def _format_basic_market(lines: list, basic: Dict):
+def _format_basic_market(lines: list, basic: Dict, financial: Dict = None):
+    financial = financial or {}
+    forecast_fwd_pe = financial.get('forecast_forward_pe')
+    express_list = financial.get('express') or []
+    forecasts = financial.get('forecasts') or []
+
     lines.append("## 一、基础盘面与行业位置")
     lines.append("")
     lines.append("| 指标 | 数值 |")
@@ -91,6 +99,20 @@ def _format_basic_market(lines: list, basic: Dict):
     lines.append(f"| 成交额 | {fmt_amount(basic.get('amount'))} |")
     lines.append(f"| 换手率 | {fmt(basic.get('turnover_rate'))}% |")
     lines.append(f"| PE-TTM | {fmt_pe(basic.get('pe_ttm'))} |")
+
+    # Forward PE 前置：PE-TTM 基于过去 12 个月滚动盈利（含低基数旧季度），业绩一旦大幅预增，
+    # PE-TTM 的历史分位会虚高。并列展示可避免"只看 PE-TTM 99% 分位就判为极度高估"。
+    if forecast_fwd_pe:
+        fpe_mid = forecast_fwd_pe.get('forward_pe_mid')
+        fpe_low = forecast_fwd_pe.get('forward_pe_low')
+        fpe_high = forecast_fwd_pe.get('forward_pe_high')
+        end_date = forecast_fwd_pe.get('forecast_end_date', '')
+        if fpe_mid is not None:
+            lines.append(
+                f"| Forward PE（预告{end_date}） | "
+                f"下限 {fpe_high}x / 中值 **{fpe_mid}x** / 上限 {fpe_low}x "
+                f"（详见第五节 Forward PE 推演） |"
+            )
 
     pe_pct = basic.get('pe_percentile_3y')
     if pe_pct is not None:
@@ -143,23 +165,71 @@ def _format_basic_market(lines: list, basic: Dict):
     fina = basic.get('fina', {})
     if fina:
         days_lag = fina.get('days_since_end')
+        # 报告期距今 ≥180 天时显著标注"财务数据已过期"，提醒 AI 不要把三季报当即时基本面
+        stale_flag = ''
+        if days_lag is not None and days_lag >= 180:
+            stale_flag = f"  ⚠️ 数据已过期 {days_lag} 天，请以下方业绩快报/预告为准"
         lag_note = f"，距今 {days_lag} 天" if days_lag is not None else ''
-        lines.append(f"| --- 最新财报（报告期 {fina.get('end_date', '')}{lag_note}） | --- |")
+        lines.append(f"| --- 最新财报（报告期 {fina.get('end_date', '')}{lag_note}）{stale_flag} | --- |")
         lines.append(f"| 营收同比(YoY) | {fmt(fina.get('or_yoy'))}% |")
         lines.append(f"| 归母净利润同比(YoY) | {fmt(fina.get('netprofit_yoy'))}% |")
         lines.append(f"| ROE | {fmt(fina.get('roe'))}% |")
         lines.append(f"| 毛利率 | {fmt(fina.get('grossprofit_margin'))}% |")
 
+        # 若三季报过期，插入最新业绩快报的关键财务（ROE/EPS/YoY），覆盖"财务瞎子摸象"问题
+        if days_lag is not None and days_lag >= 90 and express_list:
+            latest_express = express_list[0]
+            exp_end = latest_express.get('end_date', '')
+            exp_ann = latest_express.get('ann_date', '')
+            # 仅当快报报告期比财报报告期新时才覆盖
+            if str(exp_end) > str(fina.get('end_date', '')):
+                lines.append(
+                    f"| --- 最新业绩快报（报告期 {exp_end}，公告日 {exp_ann}） | --- |"
+                )
+                if latest_express.get('yoy_sales') is not None:
+                    lines.append(f"| 快报-营收同比 | {fmt(latest_express.get('yoy_sales'))}% |")
+                if latest_express.get('yoy_net_profit') is not None:
+                    lines.append(f"| 快报-归母净利同比 | {fmt(latest_express.get('yoy_net_profit'))}% |")
+                if latest_express.get('diluted_roe') is not None:
+                    lines.append(f"| 快报-稀释ROE | {fmt(latest_express.get('diluted_roe'))}% |")
+                if latest_express.get('diluted_eps') is not None:
+                    lines.append(f"| 快报-稀释EPS | {fmt(latest_express.get('diluted_eps'), 3)} 元 |")
+        # 无业绩快报时，若有最新预告的净利变动区间，也做最简洁提示（避免 AI 完全看不到最新数据）
+        elif days_lag is not None and days_lag >= 90 and forecasts:
+            latest_forecast = forecasts[0]
+            fc_end = latest_forecast.get('end_date', '')
+            fc_ann = latest_forecast.get('ann_date', '')
+            if str(fc_end) > str(fina.get('end_date', '')):
+                pct_min = latest_forecast.get('p_change_min')
+                pct_max = latest_forecast.get('p_change_max')
+                if pct_min is not None and pct_max is not None:
+                    lines.append(
+                        f"| --- 最新业绩预告（报告期 {fc_end}，公告日 {fc_ann}，"
+                        f"{latest_forecast.get('type', '')}） | --- |"
+                    )
+                    lines.append(f"| 预告-净利变动幅度 | {fmt(pct_min, 1)}% ~ {fmt(pct_max, 1)}% |")
+
     chip = basic.get('chip', {})
     if chip:
-        lines.append(f"| 筹码获利比 | {fmt(chip.get('winner_rate'))}% |")
+        # 口径说明（命名澄清）：winner_rate 是基于历史成交筹码分布（每日每价位衰减叠加）的
+        # "全市场获利盘比例"，与"(当前价 - 加权均价)/加权均价"的浮盈率不是同一概念，不能互推。
+        lines.append(f"| 筹码获利比（全市场获利盘比例） | {fmt(chip.get('winner_rate'))}% |")
         lines.append(
-            f"| 成本分布 (15%/50%/85%) | "
+            f"| 成本密集区 (15%/50%/85%分位) | "
             f"{fmt(chip.get('cost_15pct'))} / "
             f"{fmt(chip.get('cost_50pct'))} / "
             f"{fmt(chip.get('cost_85pct'))} 元 |"
         )
-        lines.append(f"| 加权平均成本 | {fmt(chip.get('weight_avg'))} 元 |")
+        weight_avg = chip.get('weight_avg')
+        current_close = basic.get('close')
+        if weight_avg is not None and current_close is not None and weight_avg > 0:
+            float_profit_pct = round((current_close - weight_avg) / weight_avg * 100, 2)
+            lines.append(
+                f"| 加权平均成本 | {fmt(weight_avg)} 元 "
+                f"（较当前收盘浮盈 {float_profit_pct:+.2f}%） |"
+            )
+        else:
+            lines.append(f"| 加权平均成本 | {fmt(weight_avg)} 元 |")
 
     ind_5d = basic.get('industry_5d', [])
     if ind_5d:
@@ -170,6 +240,35 @@ def _format_basic_market(lines: list, basic: Dict):
         lines.append("|------|--------|")
         for r in ind_5d:
             lines.append(f"| {r.get('trade_date', '')} | {fmt(r.get('pct_change'))}% |")
+
+        # 个股 vs 行业板块累计相对强弱：帮 AI 判断这波涨幅是"板块普涨"还是"个股独立行情"
+        stock_recent = basic.get('recent_5d') or []
+        if stock_recent and len(stock_recent) >= 2:
+            def _cum(vals):
+                cum = 1.0
+                for v in vals:
+                    if v is None:
+                        continue
+                    cum *= (1 + v / 100)
+                return round((cum - 1) * 100, 2)
+            stock_pcts = [r.get('pct_change') for r in stock_recent]
+            ind_pcts = [r.get('pct_change') for r in ind_5d]
+            stock_cum = _cum(stock_pcts)
+            ind_cum = _cum(ind_pcts)
+            if stock_cum is not None and ind_cum is not None:
+                diff = round(stock_cum - ind_cum, 2)
+                # 区分"板块跟风"（差异<3pct）和"独立行情"（差异≥5pct）
+                if abs(diff) >= 5:
+                    tag = '大幅跑赢板块（疑似个股独立行情，如重组/业绩/主力拉升）' if diff > 0 else '大幅跑输板块（个股异常承压）'
+                elif abs(diff) >= 3:
+                    tag = '小幅跑赢板块' if diff > 0 else '小幅跑输板块'
+                else:
+                    tag = '与板块基本同步（板块普涨/普跌驱动）'
+                lines.append("")
+                lines.append(
+                    f"> 近5日累计涨跌：个股 {stock_cum:+.2f}% vs 行业板块 {ind_cum:+.2f}%，"
+                    f"相对强度 {diff:+.2f}pct — {tag}"
+                )
 
     repurchase = basic.get('repurchase') or {}
     if repurchase:
@@ -222,18 +321,36 @@ def _format_capital_flow(lines: list, data: Dict):
         net10 = fvp.get('net_10d')
         same5 = fvp.get('same_direction_5d')
         same10 = fvp.get('same_direction_10d')
+        elg5 = fvp.get('elg_5d')
+        lg5 = fvp.get('lg_5d')
+        elg10 = fvp.get('elg_10d')
+        lg10 = fvp.get('lg_10d')
+        battle5 = fvp.get('battle_5d')
+        battle10 = fvp.get('battle_10d')
         if cum5 is not None and net5 is not None:
-            tag5 = '同向' if same5 else '反向（资金与价格不一致）'
+            tag5 = '同向' if same5 else '反向（主力总净额与价格不一致，建议结合下方超大单/大单拆分看）'
             lines.append(
                 f"| 资金 vs 价格 近5日 | 累计涨幅 {cum5:+.2f}% / 主力累计净额 "
                 f"{fmt_flow(net5)} → {tag5} |"
             )
+            if elg5 is not None and lg5 is not None:
+                battle_suffix = f"；结构特征：{battle5}" if battle5 else ''
+                lines.append(
+                    f"| 近5日主力拆分 | 超大单累计 {fmt_flow(elg5)}；"
+                    f"大单累计 {fmt_flow(lg5)}{battle_suffix} |"
+                )
         if cum10 is not None and net10 is not None:
-            tag10 = '同向' if same10 else '反向（资金与价格不一致）'
+            tag10 = '同向' if same10 else '反向（主力总净额与价格不一致，建议结合下方超大单/大单拆分看）'
             lines.append(
                 f"| 资金 vs 价格 近10日 | 累计涨幅 {cum10:+.2f}% / 主力累计净额 "
                 f"{fmt_flow(net10)} → {tag10} |"
             )
+            if elg10 is not None and lg10 is not None:
+                battle_suffix = f"；结构特征：{battle10}" if battle10 else ''
+                lines.append(
+                    f"| 近10日主力拆分 | 超大单累计 {fmt_flow(elg10)}；"
+                    f"大单累计 {fmt_flow(lg10)}{battle_suffix} |"
+                )
 
     # 北向资金（北交所不适用，直接跳过）
     is_bse = data.get('ts_code', '').endswith('.BJ')
@@ -753,17 +870,19 @@ def _format_technical(lines: list, data: Dict):
                 lines.append(f"    - {name}: {val:.2f} ({pct:.1f}%)")
 
         # 布林上轨动态推演：列出不同次日收盘下重新计算的上轨数值
+        # 每个场景追加"位置语义"——收盘突破上轨 = 加速上涨，而非"距上轨 -X% = 遇阻"
         boll_proj = cross_verification.get('boll_projection') or {}
         projs = boll_proj.get('projections') or []
         if projs:
             today_upper = boll_proj.get('today_upper')
             lines.append(f"  布林上轨明日推演（今日上轨 {today_upper:.2f}）:")
             for p in projs:
+                loc = p.get('location', '')
+                loc_suffix = f"；{loc}" if loc else ''
                 lines.append(
                     f"    - 明日{p['label']} 收 {p['next_close']:.2f} → "
                     f"新上轨 ≈ {p['projected_upper']:.2f} "
-                    f"（距明日收盘 {p['gain_to_upper_pct']:+.1f}%，"
-                    f"上轨较今日 {p['upper_shift_pct']:+.1f}%）"
+                    f"（上轨较今日 {p['upper_shift_pct']:+.1f}%{loc_suffix}）"
                 )
 
     # --- TD 序列（即神奇九转，原始算法为 Tom DeMark Sequential，第 9 根为变盘窗口）---
