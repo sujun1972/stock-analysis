@@ -35,6 +35,7 @@ import {
   X,
   ChevronDown,
   Filter,
+  Sparkles,
 } from 'lucide-react'
 import { useSmartRefresh } from '@/hooks/useMarketStatus'
 import { LazyConceptSelect } from '@/components/stocks/LazyConceptSelect'
@@ -42,6 +43,7 @@ import { HotMoneyViewDialog } from '@/components/stocks/HotMoneyViewDialog'
 import { AddToListDialog } from './components/AddToListDialog'
 import { RenameListDialog } from './components/RenameListDialog'
 import { StockTableRow } from './components/StockTableRow'
+import { BatchAnalysisDialog } from './components/BatchAnalysisDialog'
 import type { StockList, StockInfo } from '@/types'
 import type { Strategy } from '@/types/strategy'
 
@@ -101,6 +103,8 @@ function StocksPageContent() {
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [renameTarget, setRenameTarget] = useState<StockList | null>(null)
+  const [batchAnalysisOpen, setBatchAnalysisOpen] = useState(false)
+  const [analyzingTsCodes, setAnalyzingTsCodes] = useState<Set<string>>(new Set())
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   // ── AI 分析弹窗状态 ──
@@ -220,6 +224,38 @@ function StocksPageContent() {
   }, [fetchStocks])
 
   useSmartRefresh(refreshCallback, currentPageCodes, true)
+
+  // ── 批量分析"分析中"股票轮询（每 3 秒） ──
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setAnalyzingTsCodes(new Set())
+      return
+    }
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const tick = async () => {
+      try {
+        const res = await apiClient.getActiveBatchTsCodes()
+        if (cancelled) return
+        const nextCodes: string[] = res?.data?.ts_codes ?? []
+        setAnalyzingTsCodes((prev) => {
+          const next = new Set(nextCodes)
+          let removedAny = false
+          prev.forEach((ts) => { if (!next.has(ts)) removedAny = true })
+          if (removedAny) fetchStocks(true)
+          return next
+        })
+      } catch {
+        // 静默失败，下个 tick 重试
+      }
+      if (!cancelled) timer = setTimeout(tick, 3000)
+    }
+    tick()
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [isAuthenticated, fetchStocks])
 
   const totalPages = Math.ceil((totalStocks ?? 0) / pageSize)
 
@@ -437,6 +473,9 @@ function StocksPageContent() {
           <Button size="sm" onClick={() => setAddDialogOpen(true)}>
             <BookmarkPlus className="h-4 w-4 mr-1" />添加到列表
           </Button>
+          <Button size="sm" variant="secondary" onClick={() => setBatchAnalysisOpen(true)}>
+            <Sparkles className="h-4 w-4 mr-1" />批量 AI 分析
+          </Button>
         </div>
       )}
 
@@ -648,6 +687,7 @@ function StocksPageContent() {
                       stock={stock}
                       isAuthenticated={isAuthenticated}
                       isSelected={selectedCodes.has(toTsCode(stock.code))}
+                      isAnalyzing={analyzingTsCodes.has(toTsCode(stock.code))}
                       onToggleSelect={toggleStock}
                       onOpenAnalysis={handleOpenAnalysis}
                     />
@@ -736,6 +776,12 @@ function StocksPageContent() {
         open={renameDialogOpen}
         list={renameTarget}
         onClose={() => { setRenameDialogOpen(false); setRenameTarget(null) }}
+      />
+      <BatchAnalysisDialog
+        open={batchAnalysisOpen}
+        onClose={() => setBatchAnalysisOpen(false)}
+        selectedTsCodes={Array.from(selectedCodes)}
+        onSuccess={() => fetchStocks(true)}
       />
       <HotMoneyViewDialog
         open={hotMoneyDialogOpen}

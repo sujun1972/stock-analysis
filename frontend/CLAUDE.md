@@ -204,6 +204,8 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 **一键分析按钮**：弹窗底部 Footer 的「一键分析」按钮调用 `POST /api/stock-ai-analysis/generate-multi`，并行生成游资/中线/价值 3 个专家 + CIO 综合决策。完成后通过 `refreshKey` 机制触发所有 Tab 自动刷新历史。各 Tab 内的单独"AI 分析"按钮仍保留，可单独重新生成某个专家。
 
+**批量 AI 分析（异步 + 轮询）**：`/stocks` 页面选中多只股票后，浮动操作栏中的「批量 AI 分析」按钮（`BatchAnalysisDialog`）调用 `POST /api/stock-ai-analysis/batch` 提交 Celery 任务，拿到 `celery_task_id` 后每 3 秒 `GET /api/stock-ai-analysis/batch/{id}` 轮询进度。关闭弹窗不中断任务。`stocks/page.tsx` 另一层常驻轮询 `GET /api/stock-ai-analysis/batch/active/ts-codes`，登录用户每 3 秒拉一次"分析中"ts_code 集合，`StockTableRow` 的 `isAnalyzing=true` 时把"AI 分析"按钮替换为旋转图标（刷新页面后仍能恢复展示）。股票从"分析中"列表移除时自动 `fetchStocks(true)` 拉最新评分。
+
 打开弹窗时，全部 5 个提示词通过 `Promise.all` 并发加载，互不阻塞。新增 Tab 后必须同步更新父页面（`/stocks/page.tsx`、`/analysis/page.tsx`）的 state 和 `HotMoneyViewDialog` props。
 
 **`{{ stock_data_collection }}` 占位符填充**：`build_stock_prompt()` 通过 `allow_generate_data_collection` 参数区分行为：

@@ -498,6 +498,105 @@ class CeleryTaskHistoryRepository(BaseRepository):
                 reason=str(e)
             )
 
+    def update_batch_progress(
+        self,
+        celery_task_id: str,
+        *,
+        total_items: Optional[int] = None,
+        completed_items: Optional[int] = None,
+        success_items: Optional[int] = None,
+        failed_items: Optional[int] = None,
+        progress: Optional[int] = None,
+        metadata: Optional[Dict] = None,
+    ) -> int:
+        """更新批量任务的分桶进度和 metadata。
+
+        metadata 使用 PostgreSQL jsonb 的 `||` 操作符做浅合并，保留登记任务时写入的
+        `trigger/source` 等键，仅覆盖新传入的键（如 `items/concurrency`）。
+
+        仅用于批量任务（如 batch_ai_analysis），与 Celery 信号处理器互不干扰：
+        信号处理器只改 status / started_at / completed_at / result / error / duration_ms。
+        """
+        fields = []
+        params_list: list = []
+
+        def _add(name: str, value):
+            fields.append(f"{name} = %s")
+            params_list.append(value)
+
+        if total_items is not None:
+            _add("total_items", total_items)
+        if completed_items is not None:
+            _add("completed_items", completed_items)
+        if success_items is not None:
+            _add("success_items", success_items)
+        if failed_items is not None:
+            _add("failed_items", failed_items)
+        if progress is not None:
+            _add("progress", progress)
+        if metadata is not None:
+            # COALESCE 处理 metadata 为 NULL 的情况，|| 做浅合并保留旧键
+            fields.append("metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb")
+            params_list.append(json.dumps(metadata))
+
+        if not fields:
+            return 0
+
+        params_list.append(celery_task_id)
+        query = f"""
+            UPDATE {self.TABLE_NAME}
+            SET {', '.join(fields)}
+            WHERE celery_task_id = %s
+        """
+        try:
+            return self.execute_update(query, tuple(params_list))
+        except Exception as e:
+            logger.error(f"更新批量任务进度失败: {e}")
+            raise DatabaseError(
+                "更新批量任务进度失败",
+                error_code="BATCH_PROGRESS_UPDATE_FAILED",
+                reason=str(e),
+            )
+
+    def get_active_batch_ts_codes(self, user_id: int, task_type: str) -> List[str]:
+        """获取指定用户所有活跃（pending/running）批量任务中尚未完成的 ts_code。
+
+        用于前端标记股票列表中"分析中"的股票。
+        从 params.ts_codes 中排除 metadata.items 中已 status='success'/'error' 的条目。
+        """
+        query = f"""
+            SELECT params, metadata
+            FROM {self.TABLE_NAME}
+            WHERE user_id = %s
+              AND task_type = %s
+              AND status IN ('pending', 'running', 'progress')
+        """
+        try:
+            rows = self.execute_query(query, (user_id, task_type))
+        except Exception as e:
+            logger.error(f"查询活跃批量任务失败: {e}")
+            return []
+
+        active: set[str] = set()
+        for row in rows:
+            params_raw = row[0]
+            metadata_raw = row[1]
+            params_dict = params_raw if isinstance(params_raw, dict) else (
+                json.loads(params_raw) if params_raw else {}
+            )
+            metadata_dict = metadata_raw if isinstance(metadata_raw, dict) else (
+                json.loads(metadata_raw) if metadata_raw else {}
+            )
+            ts_codes = params_dict.get("ts_codes") or []
+            done: set[str] = set()
+            for item in (metadata_dict.get("items") or []):
+                if item.get("status") in ("success", "error"):
+                    done.add(item.get("ts_code"))
+            for ts in ts_codes:
+                if ts and ts not in done:
+                    active.add(ts)
+        return sorted(active)
+
     def delete_task_history(self, celery_task_id: str, user_id: Optional[int] = None) -> int:
         """
         删除任务历史记录

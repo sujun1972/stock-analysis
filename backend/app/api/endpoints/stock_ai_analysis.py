@@ -3,7 +3,9 @@
 支持保存分析结果（游资观点等多种类型）、查询最新版本、浏览历史版本
 """
 
+import asyncio
 import time
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -127,22 +129,11 @@ class GenerateAnalysisRequest(BaseModel):
     template_key: str = Field(..., description="提示词模板 key，如 top_speculative_investor_v1")
 
 
-# analysis_type → 默认 template_key 映射
-_DEFAULT_TEMPLATE_KEYS = {
-    "hot_money_view": "top_speculative_investor_v1",
-    "midline_industry_expert": "midline_industry_expert_v1",
-    "longterm_value_watcher": "longterm_value_watcher_v1",
-    "cio_directive": "cio_directive_v1",
-    "macro_risk_expert": "macro_risk_expert_v1",
-}
-
-# CIO 综合决策时，前置专家 analysis_type → CIO 模板占位符的映射。
-# value 必须落在 prompt_templates.EXPERT_OUTPUT_PLACEHOLDERS 集合中。
-_EXPERT_TYPE_TO_CIO_PLACEHOLDER = {
-    "hot_money_view": "hot_money_summary",
-    "midline_industry_expert": "midline_summary",
-    "longterm_value_watcher": "longterm_summary",
-}
+# analysis_type 相关常量（DEFAULT_TEMPLATE_KEYS、EXPERT_TYPE_TO_CIO_PLACEHOLDER）
+# 集中在 batch_ai_analysis_service 中定义，供端点和 Celery 任务共享。
+from app.services.batch_ai_analysis_service import (  # noqa: E402
+    DEFAULT_TEMPLATE_KEYS as _DEFAULT_TEMPLATE_KEYS,
+)
 
 
 class GenerateMultiRequest(BaseModel):
@@ -446,12 +437,10 @@ async def generate_multi_analysis(
 ):
     """并行调用多个 AI 专家分析同一只股票，数据收集只做一次。
 
-    通过 asyncio.gather 并行编排多个专家，每个专家独立保存结果。
-    可选：所有专家完成后串联 CIO 综合决策步骤（将前面专家的输出摘要注入 CIO prompt）。
+    核心逻辑委托给 batch_ai_analysis_service.run_multi_expert_for_stock，
+    该函数同时为 batch_ai_analysis Celery 任务服务。
     """
-    import asyncio
-    from app.api.endpoints.prompt_templates import build_stock_prompt
-    from app.services.ai_service import AIStrategyService
+    from app.services.batch_ai_analysis_service import run_multi_expert_for_stock
 
     # 校验 analysis_types
     invalid_types = [t for t in body.analysis_types if t not in _JSON_ANALYSIS_TYPES and t != "stock_data_collection"]
@@ -460,237 +449,165 @@ async def generate_multi_analysis(
             message=f"不支持的分析类型: {invalid_types}，允许值: {list(_JSON_ANALYSIS_TYPES)}"
         ).to_dict()
 
-    # 去重，移除 cio_directive（如果 include_cio=True 则最后单独处理）
-    expert_types = list(dict.fromkeys(
-        t for t in body.analysis_types if t != "cio_directive"
-    ))
-    if not expert_types and not body.include_cio:
-        return ApiResponse.bad_request(message="至少需要一个非 CIO 分析类型").to_dict()
-
-    ai_service = AIStrategyService()
-
-    # 1. 构建第一个专家的提示词（触发数据收集，后续专家共享）
-    #    所有专家模板都引用 {{ stock_data_collection }}，第一次调用会生成并缓存
-    first_type = expert_types[0] if expert_types else "cio_directive"
-    first_template_key = _DEFAULT_TEMPLATE_KEYS.get(first_type)
-    if not first_template_key:
-        return ApiResponse.bad_request(message=f"分析类型 {first_type} 无默认模板").to_dict()
-
     try:
-        first_prompt_data = await build_stock_prompt(
-            template_key=first_template_key,
+        data = await run_multi_expert_for_stock(
+            ts_code=body.ts_code,
             stock_name=body.stock_name,
             stock_code=body.stock_code,
-            ts_code=body.ts_code,
-            created_by=current_user.id,
+            analysis_types=list(body.analysis_types),
+            include_cio=body.include_cio,
+            user_id=current_user.id,
             db=db,
-            allow_generate_data_collection=True,
         )
+    except ValueError as e:
+        return ApiResponse.bad_request(message=str(e)).to_dict()
     except Exception as e:
-        logger.error(f"[generate_multi] 构建提示词失败: {e}", exc_info=True)
-        return ApiResponse.error(message=f"构建提示词失败: {e}", code=500).to_dict()
+        logger.error(f"[generate_multi] 失败: {e}", exc_info=True)
+        return ApiResponse.error(message=f"多专家分析失败: {e}", code=500).to_dict()
 
-    trade_date = first_prompt_data.get("trade_date")
-
-    # 2. 并行构建所有专家的提示词（数据收集已缓存，此步很快）
-    async def build_expert_prompt(analysis_type: str) -> dict:
-        template_key = _DEFAULT_TEMPLATE_KEYS.get(analysis_type)
-        if not template_key:
-            raise ValueError(f"分析类型 {analysis_type} 无默认模板")
-        return await build_stock_prompt(
-            template_key=template_key,
-            stock_name=body.stock_name,
-            stock_code=body.stock_code,
-            ts_code=body.ts_code,
-            created_by=current_user.id,
-            db=db,
-            allow_generate_data_collection=True,
-        )
-
-    # 第一个已构建，其余并行构建
-    remaining_types = expert_types[1:]
-    try:
-        remaining_prompts = await asyncio.gather(*[
-            build_expert_prompt(t) for t in remaining_types
-        ])
-    except Exception as e:
-        logger.error(f"[generate_multi] 并行构建提示词失败: {e}", exc_info=True)
-        return ApiResponse.error(message=f"构建提示词失败: {e}", code=500).to_dict()
-
-    all_prompt_data = {expert_types[0]: first_prompt_data}
-    for t, pd_item in zip(remaining_types, remaining_prompts):
-        all_prompt_data[t] = pd_item
-
-    # 3. 并行调用 AI 生成
-    async def run_expert(analysis_type: str) -> dict:
-        prompt_data = all_prompt_data[analysis_type]
-        system_prompt = prompt_data["system_prompt"]
-        user_prompt = prompt_data["user_prompt"]
-        full_prompt = f"{system_prompt}\n\n{user_prompt}".strip() if system_prompt else user_prompt
-
-        provider_name = prompt_data["recommended_provider"]
-        provider_config = ai_service.get_provider_config(provider_name)
-        provider_config["temperature"] = prompt_data["recommended_temperature"]
-        provider_config["max_tokens"] = prompt_data["recommended_max_tokens"]
-
-        call_id, start_time_log = _log_llm_start(
-            db, provider_name, provider_config,
-            prompt_text=full_prompt,
-            caller_function="generate_multi_analysis",
-            ts_code=body.ts_code, user_id=current_user.id,
-            analysis_type=analysis_type,
-        )
-
-        try:
-            client = ai_service.create_client(provider_name, provider_config)
-            start_time = time.time()
-            ai_text, tokens_used = await client.generate_strategy(full_prompt)
-            generation_time = time.time() - start_time
-        except Exception as e:
-            _log_llm_failure(db, call_id, start_time_log, e)
-            raise
-
-        logger.info(
-            f"[generate_multi] {body.ts_code} {analysis_type} "
-            f"生成完成: {len(ai_text)}字 / {tokens_used} tokens / {generation_time:.2f}s"
-        )
-        _log_llm_success(db, call_id, start_time_log, ai_text, tokens_used)
-
-        # 清理 JSON + 提取评分
-        if analysis_type in _JSON_ANALYSIS_TYPES:
-            ai_text, extracted_score = _extract_json_and_score(ai_text)
-        else:
-            extracted_score = None
-
-        # 保存
-        result = await StockAiAnalysisService().save_analysis(
-            ts_code=body.ts_code,
-            analysis_type=analysis_type,
-            analysis_text=ai_text,
-            score=extracted_score,
-            prompt_text=full_prompt,
-            ai_provider=provider_name,
-            ai_model=provider_config.get("model_name"),
-            created_by=current_user.id,
-            trade_date=trade_date,
-        )
-
-        return {
-            "analysis_type": analysis_type,
-            **result,
-            "analysis_text": ai_text,
-            "score": extracted_score,
-            "tokens_used": tokens_used,
-            "generation_time": round(generation_time, 2),
-        }
-
-    try:
-        expert_results = await asyncio.gather(*[
-            run_expert(t) for t in expert_types
-        ], return_exceptions=True)
-    except Exception as e:
-        logger.error(f"[generate_multi] 并行生成失败: {e}", exc_info=True)
-        return ApiResponse.error(message=f"并行生成失败: {e}", code=500).to_dict()
-
-    # 分离成功和失败的结果
-    results = []
-    errors = []
-    for i, r in enumerate(expert_results):
-        if isinstance(r, Exception):
-            errors.append({"analysis_type": expert_types[i], "error": str(r)})
-            logger.error(f"[generate_multi] {expert_types[i]} 失败: {r}")
-        else:
-            results.append(r)
-
-    # 4. 可选：CIO Agent 综合决策（Agent 自主查询数据 + 参考前面专家结论）
-    cio_result = None
-    cio_call_id = None
-    cio_start_time_log = None
-    if body.include_cio and results:
-        try:
-            from app.services.cio_agent_service import CIOAgentService
-
-            # 把每个完成的专家完整 analysis_text（不截断）按映射注入 CIO 模板占位符
-            expert_outputs = {
-                placeholder: (r.get("analysis_text") or "")
-                for r in results
-                if (placeholder := _EXPERT_TYPE_TO_CIO_PLACEHOLDER.get(r["analysis_type"]))
-            }
-
-            prep = await _prepare_cio_prompt(
-                body, current_user, db, ai_service, expert_outputs=expert_outputs,
-            )
-
-            cio_call_id, cio_start_time_log = _log_llm_start(
-                db, prep["provider_name"], prep["provider_config"],
-                prompt_text=prep["full_prompt"],
-                caller_function="generate_multi_analysis",
-                ts_code=body.ts_code, user_id=current_user.id,
-                analysis_type="cio_directive", agent_mode=True,
-            )
-
-            agent_result = await CIOAgentService().run_agent(
-                ts_code=body.ts_code,
-                stock_name=body.stock_name,
-                system_prompt=prep["system_prompt"],
-                user_prompt=prep["user_prompt"],
-                provider=prep["provider_name"],
-                provider_config=prep["provider_config"],
-            )
-
-            cio_text = agent_result["content"]
-            cio_tokens = agent_result["tokens_used"]
-            cio_gen_time = agent_result["generation_time"]
-            _log_llm_success(db, cio_call_id, cio_start_time_log, cio_text, cio_tokens)
-
-            cio_text, cio_score = _extract_json_and_score(cio_text)
-
-            cio_saved = await StockAiAnalysisService().save_analysis(
-                ts_code=body.ts_code,
-                analysis_type="cio_directive",
-                analysis_text=cio_text,
-                score=cio_score,
-                prompt_text=prep["full_prompt"],
-                ai_provider=prep["provider_name"],
-                ai_model=prep["provider_config"].get("model_name"),
-                created_by=current_user.id,
-                trade_date=trade_date,
-            )
-
-            cio_result = {
-                "analysis_type": "cio_directive",
-                **cio_saved,
-                "analysis_text": cio_text,
-                "score": cio_score,
-                "tokens_used": cio_tokens,
-                "generation_time": round(cio_gen_time, 2),
-                "agent_tool_calls": agent_result.get("tool_calls", []),
-                "agent_iterations": agent_result.get("iterations", 0),
-            }
-        except Exception as e:
-            logger.error(f"[generate_multi] CIO Agent 综合决策失败: {e}", exc_info=True)
-            _log_llm_failure(db, cio_call_id, cio_start_time_log, e)
-            errors.append({"analysis_type": "cio_directive", "error": str(e)})
-
-    total_tokens = sum(r.get("tokens_used", 0) for r in results)
-    total_time = sum(r.get("generation_time", 0) for r in results)
-    if cio_result:
-        total_tokens += cio_result.get("tokens_used", 0)
-        total_time += cio_result.get("generation_time", 0)
+    results = data["expert_results"]
+    cio_result = data["cio_result"]
+    errors = data["errors"] or []
+    # trade_date 字段仅内部需要，响应中不透出以保持对前端的向后兼容
+    data.pop("trade_date", None)
 
     return ApiResponse.success(
-        data={
-            "expert_results": results,
-            "cio_result": cio_result,
-            "errors": errors if errors else None,
-            "total_tokens": total_tokens,
-            "total_generation_time": round(total_time, 2),
-            "expert_count": len(results) + (1 if cio_result else 0),
-        },
+        data=data,
         message=f"多专家分析完成：{len(results)} 个专家成功"
         + (f"，{len(errors)} 个失败" if errors else "")
         + ("，含 CIO 综合决策" if cio_result else ""),
     ).to_dict()
+
+
+# ------------------------------------------------------------------
+# 批量 AI 分析（异步）
+# ------------------------------------------------------------------
+
+class BatchAnalysisRequest(BaseModel):
+    ts_codes: list[str] = Field(..., min_length=1, description="股票 ts_code 列表，如 ['000001.SZ', '600519.SH']")
+    analysis_types: list[str] = Field(
+        default_factory=lambda: ["hot_money_view", "midline_industry_expert", "longterm_value_watcher"],
+        description="分析类型列表，默认 3 专家",
+    )
+    include_cio: bool = Field(True, description="是否追加 CIO 综合决策")
+
+
+@router.post("/batch")
+@handle_api_errors
+async def submit_batch_analysis(
+    body: BatchAnalysisRequest,
+    current_user: User = Depends(get_current_active_user),
+):
+    """提交批量 AI 分析任务，后端异步执行，返回 celery_task_id 供前端轮询。"""
+    from app.services.stock_quote_cache import stock_quote_cache
+    from app.services.task_history_helper import TaskHistoryHelper
+    from app.tasks.batch_ai_analysis_tasks import batch_ai_analysis_task, TASK_TYPE
+
+    # 去重 + 规范化
+    ts_codes = list(dict.fromkeys(c.strip().upper() for c in body.ts_codes if c and c.strip()))
+    if not ts_codes:
+        return ApiResponse.bad_request(message="ts_codes 不能为空").to_dict()
+
+    # 校验 analysis_types
+    invalid = [t for t in body.analysis_types if t not in _JSON_ANALYSIS_TYPES and t != "stock_data_collection"]
+    if invalid:
+        return ApiResponse.bad_request(message=f"不支持的分析类型: {invalid}").to_dict()
+
+    # 批量查股票名（走 StockQuoteCache）；查询失败不致命，回落到纯数字代码
+    try:
+        quotes = await stock_quote_cache.get_quotes_batch(ts_codes)
+    except Exception as e:
+        logger.warning(f"[batch] 查询股票名失败，fallback 用代码: {e}")
+        quotes = {}
+    stock_names = {
+        ts: (quotes.get(ts, {}).get("name") or ts.split(".")[0])
+        for ts in ts_codes
+    }
+
+    # 先生成 Celery task_id 并登记历史记录，再 apply_async 提交任务。
+    # 避免 worker 已经开始跑、update_batch_progress() 找不到 WHERE celery_task_id=? 记录。
+    celery_task_id = str(uuid.uuid4())
+
+    await TaskHistoryHelper().create_task_record(
+        celery_task_id=celery_task_id,
+        task_name="tasks.batch_ai_analysis",
+        display_name=f"批量 AI 分析（{len(ts_codes)} 只）",
+        task_type=TASK_TYPE,
+        user_id=current_user.id,
+        task_params={
+            "ts_codes": ts_codes,
+            "analysis_types": list(body.analysis_types),
+            "include_cio": body.include_cio,
+        },
+        source="stocks_page",
+    )
+
+    batch_ai_analysis_task.apply_async(
+        task_id=celery_task_id,
+        kwargs={
+            "ts_codes": ts_codes,
+            "stock_names": stock_names,
+            "analysis_types": list(body.analysis_types),
+            "include_cio": body.include_cio,
+            "user_id": current_user.id,
+        },
+    )
+
+    return ApiResponse.success(
+        data={"celery_task_id": celery_task_id, "total": len(ts_codes)},
+        message=f"已提交 {len(ts_codes)} 只股票的批量分析任务",
+    ).to_dict()
+
+
+@router.get("/batch/{celery_task_id}")
+@handle_api_errors
+async def get_batch_analysis(
+    celery_task_id: str,
+    current_user: User = Depends(get_current_active_user),
+):
+    """查询批量 AI 分析任务进度（供前端 3 秒轮询）。"""
+    from app.repositories.celery_task_history_repository import CeleryTaskHistoryRepository
+
+    repo = CeleryTaskHistoryRepository()
+    record = await asyncio.to_thread(repo.get_by_task_id, celery_task_id)
+    if record is None:
+        return ApiResponse.not_found(message="任务不存在").to_dict()
+    if record.get("user_id") != current_user.id:
+        return ApiResponse.bad_request(message="无权查看该任务").to_dict()
+
+    metadata = record.get("metadata") or {}
+    return ApiResponse.success(data={
+        "celery_task_id": record["celery_task_id"],
+        "status": record["status"],
+        "progress": record.get("progress") or 0,
+        "total_items": record.get("total_items"),
+        "completed_items": record.get("completed_items"),
+        "success_items": record.get("success_items"),
+        "failed_items": record.get("failed_items"),
+        "items": metadata.get("items") or [],
+        "created_at": record.get("created_at").isoformat() if record.get("created_at") else None,
+        "completed_at": record.get("completed_at").isoformat() if record.get("completed_at") else None,
+        "error": record.get("error"),
+    }).to_dict()
+
+
+@router.get("/batch/active/ts-codes")
+@handle_api_errors
+async def get_active_batch_ts_codes(
+    current_user: User = Depends(get_current_active_user),
+):
+    """返回当前用户所有活跃批量任务中"尚未完成"的 ts_code 集合。
+
+    用于股票列表页标记"分析中"的股票，支持刷新后恢复显示。
+    """
+    from app.repositories.celery_task_history_repository import CeleryTaskHistoryRepository
+    from app.tasks.batch_ai_analysis_tasks import TASK_TYPE
+
+    repo = CeleryTaskHistoryRepository()
+    ts_codes = await asyncio.to_thread(
+        repo.get_active_batch_ts_codes, current_user.id, TASK_TYPE,
+    )
+    return ApiResponse.success(data={"ts_codes": ts_codes}).to_dict()
 
 
 @router.post("/")

@@ -75,6 +75,9 @@ class ApiClient {
   deleteStockAnalysis = stocksApi.deleteStockAnalysis
   generateStockAnalysis = stocksApi.generateStockAnalysis
   generateMultiAnalysis = stocksApi.generateMultiAnalysis
+  submitBatchAnalysis = stocksApi.submitBatchAnalysis
+  getBatchAnalysisProgress = stocksApi.getBatchAnalysisProgress
+  getActiveBatchTsCodes = stocksApi.getActiveBatchTsCodes
   collectStockData = stocksApi.collectStockData
   getPromptTemplateByKey = stocksApi.getPromptTemplateByKey
 

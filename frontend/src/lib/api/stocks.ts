@@ -354,6 +354,49 @@ export async function generateMultiAnalysis(params: {
   return apiPost('/api/stock-ai-analysis/generate-multi', params)
 }
 
+// ===== 批量 AI 分析 =====
+
+export interface BatchAnalysisItem {
+  ts_code: string
+  stock_name: string
+  status: 'pending' | 'running' | 'success' | 'error'
+  error?: string | null
+  duration_sec?: number | null
+  expert_count?: number
+}
+
+export interface BatchAnalysisProgress {
+  celery_task_id: string
+  status: string
+  progress: number
+  total_items: number | null
+  completed_items: number | null
+  success_items: number | null
+  failed_items: number | null
+  items: BatchAnalysisItem[]
+  created_at: string | null
+  completed_at: string | null
+  error: string | null
+}
+
+export async function submitBatchAnalysis(params: {
+  ts_codes: string[]
+  analysis_types?: string[]
+  include_cio?: boolean
+}): Promise<ApiResponse<{ celery_task_id: string; total: number; ts_codes: string[] }>> {
+  return apiPost('/api/stock-ai-analysis/batch', params)
+}
+
+export async function getBatchAnalysisProgress(
+  celeryTaskId: string,
+): Promise<ApiResponse<BatchAnalysisProgress>> {
+  return apiGet(`/api/stock-ai-analysis/batch/${celeryTaskId}`)
+}
+
+export async function getActiveBatchTsCodes(): Promise<ApiResponse<{ ts_codes: string[] }>> {
+  return apiGet('/api/stock-ai-analysis/batch/active/ts-codes')
+}
+
 export async function collectStockData(tsCode: string, stockName: string): Promise<ApiResponse<{ text: string }>> {
   return apiPost('/api/stock-data-collection/collect', {
     ts_code: tsCode,

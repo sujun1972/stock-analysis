@@ -64,6 +64,12 @@ except Exception as e:
     logger.error(f"❌ 加载AI策略生成任务模块失败: {e}")
 
 try:
+    from app.tasks import batch_ai_analysis_tasks
+    logger.info(f"✅ 已加载批量AI分析任务模块")
+except Exception as e:
+    logger.error(f"❌ 加载批量AI分析任务模块失败: {e}")
+
+try:
     from app.tasks import sentiment_tasks
     logger.info(f"✅ 已加载市场情绪任务模块")
 except Exception as e:
