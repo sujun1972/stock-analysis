@@ -12,7 +12,7 @@ class StockAiAnalysisRepository(BaseRepository):
     _SELECT_COLS = (
         "id, ts_code, analysis_type, analysis_text, score, "
         "prompt_text, ai_provider, ai_model, version, created_by, "
-        "created_at, updated_at, trade_date"
+        "created_at, updated_at, trade_date, original_analysis_id"
     )
 
     def __init__(self, db=None):
@@ -29,19 +29,21 @@ class StockAiAnalysisRepository(BaseRepository):
         ai_model: Optional[str],
         created_by: Optional[int],
         trade_date: Optional[str] = None,
+        original_analysis_id: Optional[int] = None,
     ) -> Dict:
         """插入一条新的分析记录，版本号自动递增（同一 ts_code + analysis_type 下 MAX(version)+1）"""
         query = """
             INSERT INTO stock_ai_analysis
                 (ts_code, analysis_type, analysis_text, score, prompt_text,
-                 ai_provider, ai_model, version, created_by, trade_date)
+                 ai_provider, ai_model, version, created_by, trade_date,
+                 original_analysis_id)
             VALUES (
                 %s, %s, %s, %s, %s, %s, %s,
                 COALESCE((
                     SELECT MAX(version) FROM stock_ai_analysis
                     WHERE ts_code = %s AND analysis_type = %s
                 ), 0) + 1,
-                %s, %s
+                %s, %s, %s
             )
             RETURNING id, version, created_at, trade_date
         """
@@ -49,7 +51,7 @@ class StockAiAnalysisRepository(BaseRepository):
             ts_code, analysis_type, analysis_text, score, prompt_text,
             ai_provider, ai_model,
             ts_code, analysis_type,  # for subquery
-            created_by, trade_date,
+            created_by, trade_date, original_analysis_id,
         )
         try:
             result = self.execute_query_returning(query, params)
@@ -284,4 +286,5 @@ class StockAiAnalysisRepository(BaseRepository):
             "created_at": row[10].isoformat() if hasattr(row[10], 'isoformat') else row[10],
             "updated_at": row[11].isoformat() if hasattr(row[11], 'isoformat') else row[11],
             "trade_date": row[12] if len(row) > 12 else None,
+            "original_analysis_id": row[13] if len(row) > 13 else None,
         }

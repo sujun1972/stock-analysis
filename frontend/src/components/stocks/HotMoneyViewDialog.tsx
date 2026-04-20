@@ -29,6 +29,7 @@ import {
   Sparkles,
   Code,
   BookOpen,
+  RotateCcw,
 } from 'lucide-react'
 
 import type { StockAnalysisRecord } from '@/types'
@@ -274,6 +275,134 @@ const SECTION_CONFIGS: Record<string, SectionConfig[]> = {
       },
     },
   ],
+  // 中线产业趋势专家·事后复盘 v1.0.0
+  midline_review: [
+    {
+      key: 'review_adequacy',
+      title: '复盘时效性',
+    },
+    {
+      key: 'prediction_summary',
+      title: '原预测摘要',
+    },
+    {
+      key: 'hit_rate',
+      title: '命中度评估',
+      labels: {
+        industry_cycle: '产业景气度演变',
+        earnings_fulfillment: '业绩兑现度',
+        technical_evolution: '技术结构演变',
+        price_target: '目标价区间命中',
+        score_rating: '评分档位',
+      },
+    },
+    {
+      key: 'mispriced_factors',
+      title: '误判归因',
+    },
+    {
+      key: 'execution_retrospective',
+      title: '中线持有复盘',
+      labels: {
+        entry_executed_result: '按计划买入结果',
+        stop_loss_triggered: '是否触发止损',
+        catalyst_fulfilled: '催化剂兑现状态',
+        overall_verdict: '整体战果',
+      },
+    },
+    {
+      key: 'prompt_improvement_hints',
+      title: 'Prompt 改进建议',
+    },
+    {
+      key: 'lesson_for_future',
+      title: '可迁移经验',
+    },
+  ],
+  // 长线价值守望者·事后复盘 v1.0.0
+  longterm_review: [
+    {
+      key: 'review_adequacy',
+      title: '复盘时效性',
+    },
+    {
+      key: 'prediction_summary',
+      title: '原预测摘要',
+    },
+    {
+      key: 'hit_rate',
+      title: '命中度评估',
+      labels: {
+        moat_validation: '护城河验证',
+        earnings_quality_fulfillment: '盈利质量兑现',
+        valuation_mean_reversion: '估值回归进度',
+        expected_return: '预期回报拆解',
+        risk_exposure: '风险暴露',
+        score_rating: '评分档位',
+      },
+    },
+    {
+      key: 'mispriced_factors',
+      title: '误判归因',
+    },
+    {
+      key: 'execution_retrospective',
+      title: '长线持有复盘',
+      labels: {
+        entry_executed_result: '按计划买入结果',
+        dividend_received: '持有期间派息',
+        dca_opportunity: '加仓机会',
+        overall_verdict: '整体战果',
+      },
+    },
+    {
+      key: 'prompt_improvement_hints',
+      title: 'Prompt 改进建议',
+    },
+    {
+      key: 'lesson_for_future',
+      title: '可迁移经验',
+    },
+  ],
+  // 顶级游资观点·事后复盘 v1.0.0
+  hot_money_review: [
+    {
+      key: 'prediction_summary',
+      title: '原预测摘要',
+    },
+    {
+      key: 'hit_rate',
+      title: '命中度评估',
+      labels: {
+        next_day_scenario: '次日情景预测',
+        seat_signal: '席位信号预测',
+        theme_position: '题材身位预测',
+        score_rating: '评分档位',
+      },
+    },
+    {
+      key: 'mispriced_factors',
+      title: '误判归因',
+    },
+    {
+      key: 'execution_retrospective',
+      title: '执行计划复盘',
+      labels: {
+        entry_executed_result: '按计划买入结果',
+        stop_loss_triggered: '是否触发止损',
+        add_position_triggered: '是否触发加仓',
+        overall_verdict: '整体战果',
+      },
+    },
+    {
+      key: 'prompt_improvement_hints',
+      title: 'Prompt 改进建议',
+    },
+    {
+      key: 'lesson_for_future',
+      title: '可迁移经验',
+    },
+  ],
   // 中线产业趋势专家 v2.0.0
   midline_industry_expert: [
     {
@@ -480,8 +609,19 @@ function FieldValue({ value }: { value: any }): React.ReactElement | null {
         </span>
       )
     }
-    // 兜底：JSON 化显示（正常不走到这里）
-    return <span className="text-xs text-gray-500">{JSON.stringify(value)}</span>
+    // 通用嵌套对象：把每个键值对作为小标签渲染（适用于 hit_rate 各维度的 predicted/actual/verdict/evidence）
+    const entries = Object.entries(value).filter(([, v]) => v != null && v !== '')
+    if (entries.length === 0) return <span className="text-gray-400">-</span>
+    return (
+      <div className="mt-0.5 space-y-0.5">
+        {entries.map(([k, v]) => (
+          <div key={k} className="text-xs">
+            <span className="text-gray-500 dark:text-gray-400">{k.replace(/_/g, ' ')}：</span>
+            <span>{renderBold(String(v ?? '-'))}</span>
+          </div>
+        ))}
+      </div>
+    )
   }
 
   // 字符串 / 数字：直接显示，支持 **加粗** 标记
@@ -556,8 +696,52 @@ function StructuredAnalysisContent({ d, analysisType }: { d: Record<string, any>
       {/* 新 schema：按 SECTION_CONFIGS 声明顺序渲染每个 section */}
       {sections.map(cfg => {
         const sectionData = d[cfg.key]
-        if (!sectionData || typeof sectionData !== 'object') return null
-        return <GenericSection key={cfg.key} title={cfg.title} data={sectionData} labels={cfg.labels} />
+        if (sectionData == null || sectionData === '') return null
+
+        // 字符串：以段落形式渲染（如 prediction_summary / lesson_for_future）
+        if (typeof sectionData === 'string') {
+          return (
+            <section key={cfg.key}>
+              <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">{cfg.title}</h3>
+              <p className="text-sm leading-relaxed">{renderBold(sectionData)}</p>
+            </section>
+          )
+        }
+
+        // 数组：子元素可能是字符串（简单列表）或对象（每条一个卡片，如 mispriced_factors）
+        if (Array.isArray(sectionData)) {
+          if (sectionData.length === 0) return null
+          return (
+            <section key={cfg.key}>
+              <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">{cfg.title}</h3>
+              <ul className="space-y-1.5 pl-1">
+                {sectionData.map((item, i) => (
+                  <li key={i} className="flex gap-1.5">
+                    <span className="text-gray-400 shrink-0">·</span>
+                    {typeof item === 'string' ? (
+                      <span className="flex-1">{renderBold(item)}</span>
+                    ) : item && typeof item === 'object' ? (
+                      <div className="flex-1 space-y-0.5">
+                        {Object.entries(item).map(([k, v]) => (
+                          <div key={k} className="text-xs">
+                            <span className="text-gray-500 dark:text-gray-400">{k.replace(/_/g, ' ')}：</span>
+                            <span>{renderBold(String(v ?? '-'))}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )
+        }
+
+        // 对象：走通用渲染
+        if (typeof sectionData === 'object') {
+          return <GenericSection key={cfg.key} title={cfg.title} data={sectionData} labels={cfg.labels} />
+        }
+        return null
       })}
 
       {/* 旧 schema 兼容：probability_metrics 核心指标区
@@ -636,7 +820,10 @@ function StructuredAnalysisContent({ d, analysisType }: { d: Record<string, any>
  * 其他类型 → MarkdownContent（react-markdown + GFM 表格）
  */
 const JSON_ANALYSIS_TYPES = new Set([
-  'hot_money_view', 'midline_industry_expert', 'longterm_value_watcher', 'cio_directive', 'macro_risk_expert',
+  'hot_money_view', 'hot_money_review',
+  'midline_industry_expert', 'midline_review',
+  'longterm_value_watcher', 'longterm_review',
+  'cio_directive', 'macro_risk_expert',
 ])
 
 function AnalysisContent({ text, analysisType }: { text: string; analysisType: string }) {
@@ -667,10 +854,14 @@ interface AnalysisTabProps {
   open: boolean
   refreshKey?: number    // 外部触发刷新（如一键分析完成后 +1）
   onSaved?: () => void
+  enableReview?: boolean // 是否在每条记录上显示"复盘此报告"按钮
+  reviewType?: 'hot_money' | 'midline' | 'longterm'  // 复盘类型，enableReview=true 时必填
+  onReviewCreated?: (reviewType: 'hot_money' | 'midline' | 'longterm') => void
 }
 
 function AnalysisTab({
   tsCode, stockName, stockCode, analysisType, templateKey, promptContent, promptLoading, open, refreshKey, onSaved,
+  enableReview, reviewType, onReviewCreated,
 }: AnalysisTabProps) {
   const [copied, setCopied] = useState(false)
   const [promptExpanded, setPromptExpanded] = useState(false)
@@ -701,6 +892,10 @@ function AnalysisTab({
   // AI 直接生成（游资观点 tab 专用）
   const [aiGenerating, setAiGenerating] = useState(false)
   const [aiGenMsg, setAiGenMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+
+  // 复盘（enableReview 为 true 时显示按钮；每条历史记录可独立触发一次复盘）
+  const [reviewing, setReviewing] = useState(false)
+  const [reviewMsg, setReviewMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   const currentRecord: AnalysisRecord | null = history[currentIndex] ?? null
 
@@ -803,6 +998,46 @@ function AnalysisTab({
       setAiGenMsg({ text: e?.response?.data?.message || 'AI 分析失败', type: 'error' })
     } finally {
       setAiGenerating(false)
+    }
+  }
+
+  const handleReview = async (force = false) => {
+    if (!currentRecord || !tsCode || !stockName || !stockCode || !reviewType) return
+    setReviewing(true)
+    setReviewMsg(null)
+
+    // 失败统一处理：若后端返回带"建议..."的时间窗不足提示且非 force，弹 confirm 询问强制重试
+    const handleFailure = async (backendMsg: string) => {
+      if (backendMsg.includes('建议') && !force) {
+        if (window.confirm(`${backendMsg}\n\n是否仍要强制生成复盘？`)) {
+          await handleReview(true)
+          return
+        }
+        setReviewMsg({ text: '已取消复盘', type: 'error' })
+      } else {
+        setReviewMsg({ text: backendMsg, type: 'error' })
+      }
+    }
+
+    try {
+      const res = await apiClient.generateReviewAnalysis({
+        ts_code: tsCode,
+        stock_name: stockName,
+        stock_code: stockCode,
+        original_analysis_id: currentRecord.id,
+        review_type: reviewType,
+        force,
+      })
+      if (res?.code === 200 && res.data?.analysis_text) {
+        setReviewMsg({ text: '复盘完成，已切换到复盘 Tab', type: 'success' })
+        onReviewCreated?.(reviewType)
+      } else {
+        await handleFailure(res?.message || '复盘失败')
+      }
+    } catch (e: any) {
+      await handleFailure(e?.response?.data?.message || '复盘失败')
+    } finally {
+      setReviewing(false)
     }
   }
 
@@ -939,6 +1174,11 @@ function AnalysisTab({
             {aiGenMsg.text}
           </p>
         )}
+        {reviewMsg && (
+          <p className={`text-xs mb-2 ${reviewMsg.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
+            {reviewMsg.text}
+          </p>
+        )}
 
         {historyLoading ? (
           <div className="text-center py-6 text-gray-400 text-sm">加载中...</div>
@@ -961,6 +1201,16 @@ function AnalysisTab({
                 )}
                 {!editMode && !deleteConfirm && (
                   <>
+                    {enableReview && reviewType && (
+                      <button
+                        onClick={() => handleReview(false)}
+                        disabled={reviewing}
+                        className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-orange-500 disabled:opacity-40"
+                        title={`让${reviewType === 'hot_money' ? '短线' : reviewType === 'midline' ? '中线' : '长线'}专家复盘此报告`}
+                      >
+                        <RotateCcw className={`h-3.5 w-3.5 ${reviewing ? 'animate-spin' : ''}`} />
+                      </button>
+                    )}
                     <button
                       onClick={() => setShowRawText(!showRawText)}
                       className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-purple-500"
@@ -1122,14 +1372,25 @@ export function HotMoneyViewDialog({
   const [multiGenerating, setMultiGenerating] = useState(false)
   const [multiMsg, setMultiMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [activeTab, setActiveTab] = useState('hot_money')
 
   // 弹窗关闭时重置状态
   useEffect(() => {
     if (!open) {
       setMultiGenerating(false)
       setMultiMsg(null)
+      setActiveTab('hot_money')
     }
   }, [open])
+
+  const handleReviewCreated = useCallback((reviewType: 'hot_money' | 'midline' | 'longterm') => {
+    setRefreshKey((k) => k + 1)
+    const targetTab = reviewType === 'hot_money' ? 'hot_money_review'
+      : reviewType === 'midline' ? 'midline_review'
+      : 'longterm_review'
+    setActiveTab(targetTab)
+    onSaved?.()
+  }, [onSaved])
 
   const handleMultiGenerate = useCallback(async () => {
     if (!tsCode || !stockName || !stockCode) return
@@ -1172,13 +1433,16 @@ export function HotMoneyViewDialog({
           <DialogDescription>保存并回顾每次 AI 分析结果</DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="hot_money" className="flex-1 flex flex-col min-h-0">
-          <TabsList className="shrink-0 w-full grid grid-cols-5">
-            <TabsTrigger value="hot_money">游资观点</TabsTrigger>
-            <TabsTrigger value="data_collection">数据收集</TabsTrigger>
-            <TabsTrigger value="midline">中线专家</TabsTrigger>
-            <TabsTrigger value="longterm">价值守望</TabsTrigger>
-            <TabsTrigger value="cio">CIO 指令</TabsTrigger>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+          <TabsList className="shrink-0 w-full grid grid-cols-8 text-xs">
+            <TabsTrigger value="hot_money" className="text-xs px-1">游资</TabsTrigger>
+            <TabsTrigger value="hot_money_review" className="text-xs px-1">游资复盘</TabsTrigger>
+            <TabsTrigger value="midline" className="text-xs px-1">中线</TabsTrigger>
+            <TabsTrigger value="midline_review" className="text-xs px-1">中线复盘</TabsTrigger>
+            <TabsTrigger value="longterm" className="text-xs px-1">价值</TabsTrigger>
+            <TabsTrigger value="longterm_review" className="text-xs px-1">价值复盘</TabsTrigger>
+            <TabsTrigger value="cio" className="text-xs px-1">CIO</TabsTrigger>
+            <TabsTrigger value="data_collection" className="text-xs px-1">数据</TabsTrigger>
           </TabsList>
 
           <div className="flex-1 overflow-y-auto min-h-0 mt-4 pr-1">
@@ -1191,6 +1455,51 @@ export function HotMoneyViewDialog({
                 templateKey="top_speculative_investor_v1"
                 promptContent={promptContent}
                 promptLoading={promptLoading}
+                open={open}
+                refreshKey={refreshKey}
+                onSaved={onSaved}
+                enableReview
+                reviewType="hot_money"
+                onReviewCreated={handleReviewCreated}
+              />
+            </TabsContent>
+
+            <TabsContent value="hot_money_review" className="mt-0">
+              <AnalysisTab
+                tsCode={tsCode}
+                stockName={stockName}
+                stockCode={stockCode}
+                analysisType="hot_money_review"
+                promptContent="复盘提示词随每次请求动态生成（包含原报告 JSON + 最新市场数据）。请在『游资』Tab 点击记录旁的复盘按钮触发。"
+                promptLoading={false}
+                open={open}
+                refreshKey={refreshKey}
+                onSaved={onSaved}
+              />
+            </TabsContent>
+
+            <TabsContent value="midline_review" className="mt-0">
+              <AnalysisTab
+                tsCode={tsCode}
+                stockName={stockName}
+                stockCode={stockCode}
+                analysisType="midline_review"
+                promptContent="复盘提示词随每次请求动态生成（包含原报告 JSON + 最新市场数据）。请在『中线』Tab 点击记录旁的复盘按钮触发。建议原报告发布 ≥20 天后复盘。"
+                promptLoading={false}
+                open={open}
+                refreshKey={refreshKey}
+                onSaved={onSaved}
+              />
+            </TabsContent>
+
+            <TabsContent value="longterm_review" className="mt-0">
+              <AnalysisTab
+                tsCode={tsCode}
+                stockName={stockName}
+                stockCode={stockCode}
+                analysisType="longterm_review"
+                promptContent="复盘提示词随每次请求动态生成（包含原报告 JSON + 最新市场数据）。请在『价值』Tab 点击记录旁的复盘按钮触发。建议原报告发布 ≥90 天后复盘。"
+                promptLoading={false}
                 open={open}
                 refreshKey={refreshKey}
                 onSaved={onSaved}
@@ -1223,6 +1532,9 @@ export function HotMoneyViewDialog({
                 open={open}
                 refreshKey={refreshKey}
                 onSaved={onSaved}
+                enableReview
+                reviewType="midline"
+                onReviewCreated={handleReviewCreated}
               />
             </TabsContent>
 
@@ -1238,6 +1550,9 @@ export function HotMoneyViewDialog({
                 open={open}
                 refreshKey={refreshKey}
                 onSaved={onSaved}
+                enableReview
+                reviewType="longterm"
+                onReviewCreated={handleReviewCreated}
               />
             </TabsContent>
 

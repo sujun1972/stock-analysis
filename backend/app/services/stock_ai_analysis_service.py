@@ -8,9 +8,12 @@ from app.services.ai_output_parser import extract_json_text, parse_ai_json
 
 ALLOWED_ANALYSIS_TYPES = {
     "hot_money_view",
+    "hot_money_review",
     "stock_data_collection",
     "midline_industry_expert",
+    "midline_review",
     "longterm_value_watcher",
+    "longterm_review",
     "cio_directive",
     "macro_risk_expert",
 }
@@ -18,8 +21,11 @@ ALLOWED_ANALYSIS_TYPES = {
 # 需要走 JSON 清洗 + 评分提取的分析类型集合
 JSON_ANALYSIS_TYPES = {
     "hot_money_view",
+    "hot_money_review",
     "midline_industry_expert",
+    "midline_review",
     "longterm_value_watcher",
+    "longterm_review",
     "cio_directive",
     "macro_risk_expert",
 }
@@ -93,6 +99,7 @@ class StockAiAnalysisService:
         ai_model: Optional[str],
         created_by: Optional[int],
         trade_date: Optional[str] = None,
+        original_analysis_id: Optional[int] = None,
     ) -> Dict:
         """校验并保存一条新的分析记录（每次保存都是新版本）"""
         if not ts_code or not ts_code.strip():
@@ -108,7 +115,7 @@ class StockAiAnalysisService:
             self.repo.save,
             ts_code.strip(), analysis_type, analysis_text.strip(),
             score, prompt_text, ai_provider, ai_model, created_by,
-            trade_date,
+            trade_date, original_analysis_id,
         )
 
     async def update_analysis(

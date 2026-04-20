@@ -6,6 +6,7 @@
 import asyncio
 import time
 import uuid
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -134,6 +135,57 @@ class GenerateAnalysisRequest(BaseModel):
 from app.services.batch_ai_analysis_service import (  # noqa: E402
     DEFAULT_TEMPLATE_KEYS as _DEFAULT_TEMPLATE_KEYS,
 )
+
+
+class GenerateReviewRequest(BaseModel):
+    ts_code: str = Field(..., description="股票代码，如 000001.SZ")
+    stock_name: str = Field(..., description="股票名称")
+    stock_code: str = Field(..., description="股票纯代码，如 000001")
+    original_analysis_id: int = Field(..., description="被复盘的原专家分析记录 ID")
+    review_type: str = Field(
+        "hot_money",
+        description="复盘类型：hot_money（短线）/ midline（中线）/ longterm（长线）",
+    )
+    force: bool = Field(
+        False,
+        description="跳过时间窗/数据前置条件校验（用于用户知情后强制触发）",
+    )
+
+
+# 复盘类型 → 配置映射。新增复盘类型时在此追加一行即可。
+# source_type: 被复盘记录必须是哪种 analysis_type
+# save_type:   复盘结果写入表时的 analysis_type
+# template_key: 复盘提示词模板 key
+# min_days_lag: 建议的最小复盘间隔（自然日）；force=False 时低于此阈值拒绝
+REVIEW_CONFIGS: dict = {
+    "hot_money": {
+        "source_type": "hot_money_view",
+        "save_type": "hot_money_review",
+        "template_key": "hot_money_review_v1",
+        "min_days_lag": 0,  # 短线 T+1 就可复盘
+        "min_days_lag_message": "",
+    },
+    "midline": {
+        "source_type": "midline_industry_expert",
+        "save_type": "midline_review",
+        "template_key": "midline_review_v1",
+        "min_days_lag": 20,
+        "min_days_lag_message": (
+            "中线复盘建议在原报告发布 20 个自然日后进行（至少跨越 1 个月的"
+            "板块景气度演变 / 业绩预告窗口）。如需强制复盘请勾选 force。"
+        ),
+    },
+    "longterm": {
+        "source_type": "longterm_value_watcher",
+        "save_type": "longterm_review",
+        "template_key": "longterm_review_v1",
+        "min_days_lag": 90,
+        "min_days_lag_message": (
+            "长线复盘建议在原报告发布 90 个自然日后进行（至少跨越 1 个季度，"
+            "覆盖新的财报披露 / ROE 更新）。如需强制复盘请勾选 force。"
+        ),
+    },
+}
 
 
 class GenerateMultiRequest(BaseModel):
@@ -428,6 +480,168 @@ async def generate_analysis(
     ).to_dict()
 
 
+@router.post("/generate-review")
+@handle_api_errors
+async def generate_review(
+    body: GenerateReviewRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """专家自评：基于原专家分析报告 + 当前最新数据，生成事后复盘分析。
+
+    支持三种复盘类型（review_type 指定）：
+    - hot_money：短线游资观点复盘（对照次日三档概率 / 席位信号 / 执行计划）
+    - midline：中线产业趋势复盘（对照板块景气度演变 / 业绩预告兑现）
+    - longterm：长线价值守望复盘（对照 ROE 兑现 / 护城河验证 / 估值修复进度）
+
+    时间窗校验：中线 >= 20 自然日、长线 >= 90 自然日，不足时返回 bad_request（force=True 跳过）。
+    """
+    from app.api.endpoints.prompt_templates import build_stock_prompt
+    from app.services.ai_service import AIStrategyService
+
+    # 1. 校验 review_type
+    cfg = REVIEW_CONFIGS.get(body.review_type)
+    if cfg is None:
+        return ApiResponse.bad_request(
+            message=f"不支持的 review_type: {body.review_type}，允许值: {list(REVIEW_CONFIGS)}"
+        ).to_dict()
+
+    # 2. 读取原分析记录
+    analysis_service = StockAiAnalysisService()
+    original = await asyncio.to_thread(analysis_service.repo.get_by_id, body.original_analysis_id)
+    if original is None:
+        return ApiResponse.not_found(message=f"原分析记录不存在 (id={body.original_analysis_id})").to_dict()
+    if original.get("analysis_type") != cfg["source_type"]:
+        return ApiResponse.bad_request(
+            message=f"{body.review_type} 复盘只支持 {cfg['source_type']} 类型，当前记录为 {original.get('analysis_type')}"
+        ).to_dict()
+    if (original.get("ts_code") or "").upper() != body.ts_code.upper():
+        return ApiResponse.bad_request(message="原记录 ts_code 与请求不一致").to_dict()
+
+    # 3. 推导原报告日期 + 时间窗校验
+    original_trade_date = original.get("trade_date")
+    if original_trade_date and len(original_trade_date) == 8:
+        original_date_display = f"{original_trade_date[:4]}-{original_trade_date[4:6]}-{original_trade_date[6:8]}"
+        try:
+            original_dt = datetime.strptime(original_trade_date, "%Y%m%d")
+        except ValueError:
+            original_dt = None
+    else:
+        created_at = original.get("created_at") or ""
+        original_date_display = created_at[:10] if isinstance(created_at, str) else str(created_at)[:10]
+        try:
+            original_dt = datetime.fromisoformat(created_at) if created_at else None
+        except (ValueError, TypeError):
+            original_dt = None
+
+    days_lag = (datetime.now() - original_dt).days if original_dt else None
+    if (
+        not body.force
+        and cfg["min_days_lag"] > 0
+        and days_lag is not None
+        and days_lag < cfg["min_days_lag"]
+    ):
+        return ApiResponse.bad_request(
+            message=(
+                f"原报告距今仅 {days_lag} 个自然日。{cfg['min_days_lag_message']}"
+            )
+        ).to_dict()
+
+    # 4. 构建复盘提示词
+    try:
+        prompt_data = await build_stock_prompt(
+            template_key=cfg["template_key"],
+            stock_name=body.stock_name,
+            stock_code=body.stock_code,
+            ts_code=body.ts_code,
+            created_by=current_user.id,
+            db=db,
+            allow_generate_data_collection=True,
+            extra_variables={
+                "original_analysis_date": original_date_display,
+                "original_analysis_json": original.get("analysis_text") or "",
+                "days_since_original": str(days_lag) if days_lag is not None else "未知",
+            },
+        )
+    except ValueError as e:
+        return ApiResponse.bad_request(message=str(e)).to_dict()
+    except Exception as e:
+        logger.error(f"[generate_review] 构建提示词失败: {e}", exc_info=True)
+        return ApiResponse.error(message=f"构建提示词失败: {e}", code=500).to_dict()
+
+    system_prompt = prompt_data["system_prompt"]
+    user_prompt = prompt_data["user_prompt"]
+    full_prompt = f"{system_prompt}\n\n{user_prompt}".strip() if system_prompt else user_prompt
+
+    # 5. 组装 provider 配置
+    ai_service = AIStrategyService()
+    provider_name = prompt_data["recommended_provider"]
+    provider_config = ai_service.get_provider_config(provider_name)
+    provider_config["temperature"] = prompt_data["recommended_temperature"]
+    provider_config["max_tokens"] = prompt_data["recommended_max_tokens"]
+
+    # 6. 调 LLM
+    call_id, start_time_log = _log_llm_start(
+        db, provider_name, provider_config,
+        prompt_text=full_prompt,
+        caller_function="generate_review",
+        ts_code=body.ts_code, user_id=current_user.id,
+        analysis_type=cfg["save_type"],
+    )
+
+    try:
+        client = ai_service.create_client(provider_name, provider_config)
+        start_time = time.time()
+        ai_text, tokens_used = await client.generate_strategy(full_prompt)
+        generation_time = time.time() - start_time
+        logger.info(
+            f"[generate_review] {body.review_type} / {body.ts_code} 复盘原记录 "
+            f"id={body.original_analysis_id} 生成完成: {len(ai_text)}字 / "
+            f"{tokens_used} tokens / {generation_time:.2f}s"
+        )
+    except Exception as e:
+        logger.error(f"[generate_review] AI 调用失败: {e}", exc_info=True)
+        _log_llm_failure(db, call_id, start_time_log, e)
+        return ApiResponse.error(message=f"AI 调用失败: {e}", code=500).to_dict()
+
+    _log_llm_success(db, call_id, start_time_log, ai_text, tokens_used)
+
+    # 7. JSON 清洗 + 评分提取
+    ai_text, extracted_score = _extract_json_and_score(ai_text)
+
+    # 8. 保存复盘结果，携带 original_analysis_id 指向原记录
+    try:
+        result = await analysis_service.save_analysis(
+            ts_code=body.ts_code,
+            analysis_type=cfg["save_type"],
+            analysis_text=ai_text,
+            score=extracted_score,
+            prompt_text=full_prompt,
+            ai_provider=provider_name,
+            ai_model=provider_config.get("model_name"),
+            created_by=current_user.id,
+            trade_date=prompt_data.get("trade_date"),
+            original_analysis_id=body.original_analysis_id,
+        )
+    except ValueError as e:
+        return ApiResponse.bad_request(message=str(e)).to_dict()
+
+    return ApiResponse.success(
+        data={
+            **result,
+            "analysis_text": ai_text,
+            "score": extracted_score,
+            "tokens_used": tokens_used,
+            "generation_time": round(generation_time, 2),
+            "original_analysis_id": body.original_analysis_id,
+            "original_analysis_date": original_date_display,
+            "days_since_original": days_lag,
+            "review_type": body.review_type,
+        },
+        message="复盘分析生成并保存成功",
+    ).to_dict()
+
+
 @router.post("/generate-multi")
 @handle_api_errors
 async def generate_multi_analysis(
@@ -490,6 +704,11 @@ class BatchAnalysisRequest(BaseModel):
         description="分析类型列表，默认 3 专家",
     )
     include_cio: bool = Field(True, description="是否追加 CIO 综合决策")
+    concurrency: Optional[int] = Field(
+        None,
+        ge=1, le=8,
+        description="股票层面并发数（1~8），不传走默认 4。提高可加速但占更多 LLM 配额",
+    )
 
 
 @router.post("/batch")
@@ -501,12 +720,21 @@ async def submit_batch_analysis(
     """提交批量 AI 分析任务，后端异步执行，返回 celery_task_id 供前端轮询。"""
     from app.services.stock_quote_cache import stock_quote_cache
     from app.services.task_history_helper import TaskHistoryHelper
-    from app.tasks.batch_ai_analysis_tasks import batch_ai_analysis_task, TASK_TYPE
+    from app.tasks.batch_ai_analysis_tasks import batch_ai_analysis_task, TASK_TYPE, MAX_BATCH_SIZE
 
     # 去重 + 规范化
     ts_codes = list(dict.fromkeys(c.strip().upper() for c in body.ts_codes if c and c.strip()))
     if not ts_codes:
         return ApiResponse.bad_request(message="ts_codes 不能为空").to_dict()
+
+    # 单批上限保护：超过 MAX_BATCH_SIZE 拒绝（任务级 soft_time_limit 7200s 是按此规模设计的）
+    if len(ts_codes) > MAX_BATCH_SIZE:
+        return ApiResponse.bad_request(
+            message=(
+                f"单次批量 AI 分析最多 {MAX_BATCH_SIZE} 只股票，本次提交 {len(ts_codes)} 只。"
+                f"请分批提交，或使用更小的选股策略缩减结果集。"
+            )
+        ).to_dict()
 
     # 校验 analysis_types
     invalid = [t for t in body.analysis_types if t not in _JSON_ANALYSIS_TYPES and t != "stock_data_collection"]
@@ -538,6 +766,7 @@ async def submit_batch_analysis(
             "ts_codes": ts_codes,
             "analysis_types": list(body.analysis_types),
             "include_cio": body.include_cio,
+            "concurrency": body.concurrency,
         },
         source="stocks_page",
     )
@@ -550,6 +779,7 @@ async def submit_batch_analysis(
             "analysis_types": list(body.analysis_types),
             "include_cio": body.include_cio,
             "user_id": current_user.id,
+            "concurrency": body.concurrency,
         },
     )
 

@@ -180,6 +180,23 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
 3. 前端 `HotMoneyViewDialog.tsx` 的 `SECTION_CONFIGS` 添加对应 `analysisType` 的 section 列表（title + labels 映射）
 4. `admin/types/prompt-template.ts` 的 `BUSINESS_TYPES` 和 `BUSINESS_TYPE_LABELS` 添加
 
+### 专家自评（事后复盘）架构
+
+各专家可对自己此前发出的报告做事后复盘（`POST /api/stock-ai-analysis/generate-review`）。复盘结果作为独立 `analysis_type` 写入 `stock_ai_analysis` 表，并通过 `original_analysis_id` 列指向被复盘的原记录。
+
+**REVIEW_CONFIGS**（在 `endpoints/stock_ai_analysis.py` 维护）：单一 endpoint 按 `review_type` 路由到不同 source/save 类型 + prompt 模板 + 时间窗约束。新增复盘类型在此追加一行即可。
+
+| review_type | source_type | save_type | 模板 | min_days_lag |
+|-------------|------------|-----------|------|--------------|
+| `hot_money` | `hot_money_view` | `hot_money_review` | `hot_money_review_v1` | 0（T+1 即可复盘） |
+| `midline` | `midline_industry_expert` | `midline_review` | `midline_review_v1` | 20（≥1 个月） |
+| `longterm` | `longterm_value_watcher` | `longterm_review` | `longterm_review_v1` | 90（≥1 个季度） |
+
+- **时间窗校验**：原报告距今 `< min_days_lag` 自然日时拒绝，错误消息含"建议..."关键词；前端 `handleReview` 检测到该关键词弹 `window.confirm` 询问是否 `force=true` 重试。
+- **`build_stock_prompt` 的 `extra_variables` 参数**：复盘端点通过该参数把 `{{ original_analysis_date }}` / `{{ original_analysis_json }}` / `{{ days_since_original }}` 注入复盘模板，避免在通用 `build_stock_prompt` 内硬编码复盘字段。
+- **复盘 prompt 评分语义**：`final_score.score` 评的是**原报告预测准确度**而非股票投资价值；中线/长线复盘模板含"时效降级规则"（时效不足时评分上限封顶）。
+- **前端 Tab 布局**：`HotMoneyViewDialog` 的 `TabsList` 用 `grid-cols-8` 排：游资 / 游资复盘 / 中线 / 中线复盘 / 价值 / 价值复盘 / CIO / 数据；游资/中线/价值三个原始 Tab 通过 `enableReview + reviewType` 在每条历史记录旁渲染橙色 `RotateCcw` 按钮触发复盘，成功后 `onReviewCreated(reviewType)` 让父组件切到对应复盘 Tab。
+
 ### Celery 任务架构
 
 - Worker：`celery_worker` 容器

@@ -150,8 +150,11 @@ export const BUSINESS_TYPES = {
   STOCK_ANALYSIS: 'stock_analysis',
   STOCK_DATA_COLLECTION: 'stock_data_collection',
   HOT_MONEY_VIEW: 'hot_money_view',
+  HOT_MONEY_REVIEW: 'hot_money_review',
   MIDLINE_INDUSTRY_EXPERT: 'midline_industry_expert',
+  MIDLINE_REVIEW: 'midline_review',
   LONGTERM_VALUE_WATCHER: 'longterm_value_watcher',
+  LONGTERM_REVIEW: 'longterm_review',
   CIO_DIRECTIVE: 'cio_directive',
   MACRO_RISK_EXPERT: 'macro_risk_expert',
 } as const
@@ -166,8 +169,11 @@ export const BUSINESS_TYPE_LABELS: Record<string, string> = {
   stock_analysis: '个股分析',
   stock_data_collection: '个股数据收集',
   hot_money_view: '顶级游资观点',
+  hot_money_review: '顶级游资观点·事后复盘',
   midline_industry_expert: '中线产业趋势专家观点',
+  midline_review: '中线产业趋势专家·事后复盘',
   longterm_value_watcher: '长线价值守望者观点',
+  longterm_review: '长线价值守望者·事后复盘',
   cio_directive: '首席投资官（CIO）指令',
   macro_risk_expert: '天眼宏观风险专家',
 }

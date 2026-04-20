@@ -364,6 +364,7 @@ async def build_stock_prompt(
     db,
     allow_generate_data_collection: bool = False,
     expert_outputs: Optional[dict] = None,
+    extra_variables: Optional[dict] = None,
 ) -> dict:
     """
     构建股票分析完整提示词（供 get_template_by_key 端点和 generate 端点共用）。
@@ -472,6 +473,11 @@ async def build_stock_prompt(
             variables[k] = expert_outputs[k]
         else:
             variables[k] = "（本次未提供该专家结论）"
+
+    # 复盘类模板（hot_money_review 等）需要注入原分析报告相关变量；
+    # 由调用端点按需传入，避免在此硬编码特殊字段名。
+    if extra_variables:
+        variables.update(extra_variables)
 
     system_prompt = data.get("system_prompt") or ""
     user_prompt = data.get("user_prompt_template") or ""

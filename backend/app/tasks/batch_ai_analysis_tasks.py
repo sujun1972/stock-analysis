@@ -6,16 +6,20 @@
 
 import asyncio
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
+from celery.exceptions import SoftTimeLimitExceeded
 from loguru import logger
 
 from app.celery_app import celery_app
 from app.tasks.extended_sync_tasks import run_async_in_celery
 
 
-# 股票层面并发数（每只内部还有 3-4 个 LLM 并行，总并发 ~8）
-STOCK_CONCURRENCY = 2
+# 股票层面默认并发数；端点可通过 concurrency 参数覆盖（每只内部还有 3-4 个 LLM 并行）
+DEFAULT_STOCK_CONCURRENCY = 4
+
+# 单批最大股票数。超过应在端点拒绝；这里作为最后兜底
+MAX_BATCH_SIZE = 200
 
 # 写入 celery_task_history.task_type 的常量，endpoint 查询"活跃批量任务"时用
 TASK_TYPE = "batch_ai_analysis"
@@ -25,8 +29,8 @@ TASK_TYPE = "batch_ai_analysis"
     bind=True,
     name="tasks.batch_ai_analysis",
     max_retries=0,
-    soft_time_limit=3600,   # 单任务最长 1 小时（粗估：20 只 ÷ 2并发 × 3 分钟 ≈ 30 分钟）
-    time_limit=3900,
+    soft_time_limit=7200,   # 2 小时（200 只 × ~30s 中位耗时 / 4 并发 ≈ 25 分钟，留充足裕度）
+    time_limit=7500,
 )
 def batch_ai_analysis_task(
     self,
@@ -35,20 +39,23 @@ def batch_ai_analysis_task(
     analysis_types: List[str],
     include_cio: bool,
     user_id: int,
+    concurrency: Optional[int] = None,
 ):
     """批量为多只股票生成 AI 分析。
 
     Args:
-        ts_codes: 股票 ts_code 列表
+        ts_codes: 股票 ts_code 列表（端点已限制 ≤ MAX_BATCH_SIZE）
         stock_names: ts_code -> 股票名称 映射（端点通过 StockQuoteCache 预填）
         analysis_types: 分析类型列表（不含 cio_directive，由 include_cio 控制）
         include_cio: 是否追加 CIO 综合决策
         user_id: 发起任务的用户 ID
+        concurrency: 股票层面并发数；None 时用 DEFAULT_STOCK_CONCURRENCY；端点可覆盖（1~8）
     """
     celery_task_id = self.request.id
+    effective_concurrency = max(1, min(concurrency or DEFAULT_STOCK_CONCURRENCY, 8))
     logger.info(
         f"[batch_ai_analysis] 任务启动 task_id={celery_task_id[:8]} "
-        f"user_id={user_id} total={len(ts_codes)} concurrency={STOCK_CONCURRENCY}"
+        f"user_id={user_id} total={len(ts_codes)} concurrency={effective_concurrency}"
     )
 
     return run_async_in_celery(
@@ -59,6 +66,7 @@ def batch_ai_analysis_task(
         analysis_types=analysis_types,
         include_cio=include_cio,
         user_id=user_id,
+        concurrency=effective_concurrency,
     )
 
 
@@ -70,8 +78,14 @@ async def _batch_run(
     analysis_types: List[str],
     include_cio: bool,
     user_id: int,
+    concurrency: int,
 ) -> Dict:
-    """异步编排：初始化明细 → Semaphore 并发执行 → 每只完成后回写进度。"""
+    """异步编排：初始化明细 → Semaphore 并发执行 → 每只完成后回写进度。
+
+    SoftTimeLimitExceeded 由 Celery soft_time_limit 触发；此时把所有 pending/running
+    状态的条目标记为 timeout_skipped，并返回部分成功结果（task_success 信号会写
+    status='success'，前端 metadata.items 仍可看到完整明细）。
+    """
     from app.repositories.celery_task_history_repository import CeleryTaskHistoryRepository
     from app.services.batch_ai_analysis_service import run_multi_expert_for_stock
 
@@ -91,7 +105,18 @@ async def _batch_run(
     ]
     total = len(items)
     state_lock = asyncio.Lock()   # 保护 items[] 和 counters 的并发写入
-    counters = {"completed": 0, "success": 0, "failed": 0}
+    counters = {"completed": 0, "success": 0, "failed": 0, "timeout_skipped": 0}
+
+    async def _flush_progress():
+        await asyncio.to_thread(
+            repo.update_batch_progress,
+            celery_task_id,
+            completed_items=counters["completed"],
+            success_items=counters["success"],
+            failed_items=counters["failed"] + counters["timeout_skipped"],
+            progress=int(counters["completed"] * 100 / total) if total else 100,
+            metadata={"items": items, "concurrency": concurrency},
+        )
 
     # 初始化进度快照（提交端点生成 task_id 后已 INSERT 记录，这里 UPDATE 首次快照）
     await asyncio.to_thread(
@@ -102,10 +127,10 @@ async def _batch_run(
         success_items=0,
         failed_items=0,
         progress=0,
-        metadata={"items": items, "concurrency": STOCK_CONCURRENCY},
+        metadata={"items": items, "concurrency": concurrency},
     )
 
-    sem = asyncio.Semaphore(STOCK_CONCURRENCY)
+    sem = asyncio.Semaphore(concurrency)
 
     async def _process_one(item: Dict):
         async with sem:
@@ -116,7 +141,7 @@ async def _batch_run(
             await asyncio.to_thread(
                 repo.update_batch_progress,
                 celery_task_id,
-                metadata={"items": items, "concurrency": STOCK_CONCURRENCY},
+                metadata={"items": items, "concurrency": concurrency},
             )
 
             ts_code = item["ts_code"]
@@ -152,6 +177,15 @@ async def _batch_run(
                         counters["failed"] += 1
                     else:
                         counters["success"] += 1
+            except SoftTimeLimitExceeded:
+                # 任务级超时；标记当前条目为超时并冒泡到外层 except 统一收尾
+                async with state_lock:
+                    item["status"] = "timeout_skipped"
+                    item["error"] = "任务总超时被中断"
+                    item["duration_sec"] = round(
+                        (datetime.now() - started_at).total_seconds(), 1
+                    )
+                raise
             except Exception as e:  # noqa: BLE001
                 logger.error(f"[batch_ai_analysis] {ts_code} 失败: {e}", exc_info=True)
                 async with state_lock:
@@ -164,25 +198,36 @@ async def _batch_run(
                     counters["failed"] += 1
 
             # 每只完成后回写分桶计数 + 整体 progress
-            await asyncio.to_thread(
-                repo.update_batch_progress,
-                celery_task_id,
-                completed_items=counters["completed"],
-                success_items=counters["success"],
-                failed_items=counters["failed"],
-                progress=int(counters["completed"] * 100 / total) if total else 100,
-                metadata={"items": items, "concurrency": STOCK_CONCURRENCY},
-            )
+            await _flush_progress()
 
-    await asyncio.gather(*[_process_one(item) for item in items])
+    try:
+        await asyncio.gather(*[_process_one(item) for item in items])
+        timed_out = False
+    except SoftTimeLimitExceeded:
+        # 把所有还未完成的条目标记为 timeout_skipped；保留已 success/error 的不变
+        async with state_lock:
+            for it in items:
+                if it["status"] in ("pending", "running"):
+                    it["status"] = "timeout_skipped"
+                    it["error"] = it["error"] or "任务总超时被中断"
+                    counters["timeout_skipped"] += 1
+        await _flush_progress()
+        timed_out = True
+        logger.warning(
+            f"[batch_ai_analysis] 任务超时中断 task_id={celery_task_id[:8]} "
+            f"completed={counters['completed']}/{total} timeout_skipped={counters['timeout_skipped']}"
+        )
 
     logger.info(
-        f"[batch_ai_analysis] 任务完成 task_id={celery_task_id[:8]} "
-        f"total={total} success={counters['success']} failed={counters['failed']}"
+        f"[batch_ai_analysis] 任务结束 task_id={celery_task_id[:8]} "
+        f"total={total} success={counters['success']} failed={counters['failed']} "
+        f"timeout_skipped={counters['timeout_skipped']} timed_out={timed_out}"
     )
 
     return {
         "total": total,
         "success": counters["success"],
         "failed": counters["failed"],
+        "timeout_skipped": counters["timeout_skipped"],
+        "timed_out": timed_out,
     }

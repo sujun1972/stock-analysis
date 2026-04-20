@@ -74,6 +74,7 @@ class ApiClient {
   updateStockAnalysis = stocksApi.updateStockAnalysis
   deleteStockAnalysis = stocksApi.deleteStockAnalysis
   generateStockAnalysis = stocksApi.generateStockAnalysis
+  generateReviewAnalysis = stocksApi.generateReviewAnalysis
   generateMultiAnalysis = stocksApi.generateMultiAnalysis
   submitBatchAnalysis = stocksApi.submitBatchAnalysis
   getBatchAnalysisProgress = stocksApi.getBatchAnalysisProgress

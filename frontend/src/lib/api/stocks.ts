@@ -344,6 +344,24 @@ export async function generateStockAnalysis(params: {
   return apiPost('/api/stock-ai-analysis/generate', params)
 }
 
+export async function generateReviewAnalysis(params: {
+  ts_code: string
+  stock_name: string
+  stock_code: string
+  original_analysis_id: number
+  review_type?: 'hot_money' | 'midline' | 'longterm'
+  force?: boolean
+}): Promise<ApiResponse<{
+  analysis_text: string
+  score?: number
+  original_analysis_id: number
+  original_analysis_date: string
+  days_since_original: number | null
+  review_type: string
+}>> {
+  return apiPost('/api/stock-ai-analysis/generate-review', params)
+}
+
 export async function generateMultiAnalysis(params: {
   ts_code: string
   stock_name: string
