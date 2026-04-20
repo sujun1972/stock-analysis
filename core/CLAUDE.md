@@ -144,7 +144,7 @@ if not response.is_success():
 df = response.data
 ```
 
-**添加新 Provider 方法**（在 `core/src/providers/tushare/provider.py`）：
+**添加新 Tushare Provider 方法**（放在 `core/src/providers/tushare/_mixins/` 对应功能域 mixin）：
 
 ```python
 def get_your_data(self, ts_code=None, trade_date=None, start_date=None, end_date=None,
@@ -159,6 +159,17 @@ def get_your_data(self, ts_code=None, trade_date=None, start_date=None, end_date
         )
     )
 ```
+
+**添加新 AkShare Provider 方法**（放在 `core/src/providers/akshare/_mixins/` 对应功能域 mixin）：
+
+AkShare 已采用 Mixin 模式拆分（参考 `_mixins/news_and_anns.py`）。新增数据域时：
+
+1. 在 `_mixins/` 下新建功能域文件，定义 `XxxMixin` 类
+2. 在 `_mixins/__init__.py` 导出
+3. 在 `provider.py` 的 `AkShareProvider` 多重继承链中加入（**Mixin 在前，`BaseDataProvider` 在最后**）
+4. 方法内调 `self.api_client.execute(self.api_client.ak.some_function, ...)` 走重试机制，返回 `Response`
+
+AkShare 的常见坑：部分接口（如 `stock_notice_report` / `stock_individual_notice_report`）在区间内无数据时会抛 `KeyError('代码')`（内部 pandas 空 DF 索引失败）。Mixin 方法应把它识别为"区间内无数据"的**正常语义**，降级为 `Response.warning(data=空 DataFrame)`，而非当作错误抛出。
 
 ---
 

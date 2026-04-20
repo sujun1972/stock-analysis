@@ -1,7 +1,7 @@
 pandas>=1.5.0
 numpy>=1.21.0
 pyarrow>=10.0.0
-akshare>=1.12.0
+akshare==1.18.55  # 锁定版本：news_and_anns mixin 对接的 stock_individual_notice_report / stock_telegraph_cls / news_cctv 等接口签名以该版本为准
 yfinance>=0.2.18
 tushare>=1.2.89
 TA-Lib>=0.4.28

@@ -9,7 +9,7 @@ pandas>=1.5.0
 numpy>=1.21.0
 
 # 数据源
-akshare>=1.12.0
+akshare==1.18.55  # 锁定版本：news_and_anns mixin 对接的 stock_individual_notice_report / stock_telegraph_cls / news_cctv 等接口签名以该版本为准
 yfinance>=0.2.18
 tushare>=1.2.89
 
@@ -78,6 +78,11 @@ aiosmtplib>=3.0.0  # 异步SMTP客户端
 email-validator>=2.1.0  # 邮箱验证
 jinja2>=3.1.0  # Phase 2: 模板渲染引擎
 requests>=2.31.0  # Phase 2: Telegram Bot HTTP 请求
+
+# 新闻公告全文抓取（news_anns Phase 1.5）
+pdfplumber>=0.10.0   # PDF 正文提取
+beautifulsoup4>=4.12.0  # HTML 正文提取（lxml 已在 pandas 依赖中）
+lxml>=4.9.0             # HTML 解析器
 
 # LangChain（Phase 1: 统一LLM客户端层, Phase 3: Agent + Tool）
 langchain>=0.3.0                 # 主包（AgentExecutor、create_react_agent 等）

@@ -127,6 +127,10 @@ const routeLabelMap: Record<string, string> = {
   'limit-step': '连板天梯',
   'limit-cpt': '最强板块统计',
 
+  // 新闻公告
+  'news-anns': '新闻公告',
+  'stock-anns': '公司公告',
+
   // 基础数据子路由
   'stock-list': '股票列表',
   'stock-st': 'ST股票列表',
@@ -253,6 +257,10 @@ const routeIconMap: Record<string, React.ComponentType<{ className?: string }>> 
   'dc-index': BarChart3,
   'dc-member': Layers,
   'dc-daily': LineChart,
+
+  // 新闻公告
+  'news-anns': Bell,
+  'stock-anns': ScrollText,
 
   // 基础数据子路由
   'stock-list': Database,

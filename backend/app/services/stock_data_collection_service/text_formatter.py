@@ -69,6 +69,11 @@ def format_as_text(data: Dict) -> str:
     _format_shareholder(lines, data.get('shareholder', {}))
 
     # ================================================================
+    # 三B、近期公司公告（事件面，来自 AkShare 东方财富聚合）
+    # ================================================================
+    _format_recent_announcements(lines, data.get('recent_announcements') or {})
+
+    # ================================================================
     # 四、技术指标（YAML 格式）
     # ================================================================
     _format_technical(lines, data)
@@ -79,6 +84,44 @@ def format_as_text(data: Dict) -> str:
     _format_financial_risk(lines, data)
 
     return '\n'.join(lines)
+
+
+def _format_recent_announcements(lines: list, anns: Dict) -> None:
+    """渲染近 N 天公司公告列表（标题 / 类型 / 日期）。
+
+    只给中性事实，不做情感判断。数据缺失时明确写"数据不足"，区分"没数据"与"没事件"。
+    """
+    lines.append("")
+    lines.append("## 三B、近期公司公告（事件面）")
+    lines.append("")
+
+    if not anns or not anns.get('data_available'):
+        lines.append("- 数据不足：该股票在 `stock_anns` 表中无公告记录（可能尚未触发同步）。")
+        lines.append("")
+        return
+
+    items = anns.get('items') or []
+    days = anns.get('days') or 30
+    total = anns.get('total_in_window') or 0
+    latest = anns.get('latest_date')
+    earliest = anns.get('earliest_date')
+
+    if not items:
+        lines.append(f"- 近 {days} 天无新公告（已覆盖范围 {earliest or 'N/A'} ~ {latest or 'N/A'}）。")
+        lines.append("")
+        return
+
+    lines.append(f"近 {days} 天共 {total} 条公告（按日期降序，最多展示前 {len(items)} 条）：")
+    lines.append("")
+    lines.append("| 日期 | 类型 | 标题 |")
+    lines.append("|------|------|------|")
+    for r in items:
+        date = (r.get('ann_date') or '').strip()
+        anno_type = (r.get('anno_type') or '—').strip()
+        # 转义 Markdown 表格分隔符
+        title_safe = (r.get('title') or '').strip().replace('|', '｜')
+        lines.append(f"| {date} | {anno_type} | {title_safe} |")
+    lines.append("")
 
 
 # ------------------------------------------------------------------

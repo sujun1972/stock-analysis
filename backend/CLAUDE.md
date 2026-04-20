@@ -708,6 +708,24 @@ for item in items:
 
 ---
 
+## AkShare 数据源变体（免费源，非 Tushare 链路）
+
+AkShare 接口签名与 Tushare 差异很大（无统一 `limit/offset` 翻页，部分接口只接受单一日期参数），**不能继承 `TushareSyncBase`**。参考 `app/services/news_anns/stock_anns_sync_service.py` 模板：
+
+1. **Provider**：在 `core/src/providers/akshare/_mixins/` 新建功能域 mixin（见 core/CLAUDE.md）
+2. **Service**：放在 `backend/app/services/news_anns/` 或新子包
+   - 手写 `sync_incremental(start_date?, end_date?)` → 逐交易日循环 `AkShareProvider.get_xxx(date)` → `bulk_upsert`
+   - 手写 `sync_by_stock(ts_code, days)` 支持被动同步
+   - 手写 `sync_full_history(redis_client, ...)` 按交易日并发 + Redis Set 续继
+   - 定义类常量 `TABLE_KEY` / `FULL_HISTORY_START_DATE` / `FULL_HISTORY_PROGRESS_KEY` / `FULL_HISTORY_LOCK_KEY`
+   - 手动调 `sync_history_repo.create()` / `.complete()`
+3. **Celery 任务**：仍可用 `_task_factory` 的 `make_incremental_task` / `make_full_history_task`，把 `raw_sync_method` 指向 `sync_incremental` 即可（AkShare 无多业务参数可穿透）
+4. **被动同步任务**：单独写 `@celery_app.task` + `run_async_in_celery`（签名不兼容工厂）
+5. **sync_configs 分类**：用 `新闻公告`（或新增独立分类，同步 `task_metadata.TASK_CATEGORIES`），`passive_sync_enabled=TRUE` + `passive_sync_task_name='tasks.sync_xxx_single'`
+6. **Service 层重试**：Service 自己做的非 Provider 爬虫（如 PDF/HTML 抓取）用 `app.services.news_anns.AkShareRetryDecorator`（指数退避 + 限流识别 + 同步/异步通用）；Provider 方法本身有 `AkShareAPIClient.execute` 的 Provider 层重试，两者可叠加
+
+---
+
 ## AI 分析输出解析（ai_output_parser + Pydantic 模型）
 
 AI 返回的 JSON 通过统一的解析管道处理，替代各 Service 中分散的正则提取。

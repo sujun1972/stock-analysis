@@ -15,11 +15,12 @@ from .api_client import AkShareAPIClient
 from .data_converter import AkShareDataConverter
 from .config import AkShareConfig
 from .exceptions import AkShareDataError
+from ._mixins import NewsAndAnnsMixin
 
 logger = get_logger(__name__)
 
 
-class AkShareProvider(BaseDataProvider):
+class AkShareProvider(NewsAndAnnsMixin, BaseDataProvider):
     """
     AkShare 数据提供者
 

@@ -614,6 +614,49 @@ async def get_nine_turn(ts_code: str) -> str:
 # 工具注册表（供 Agent 绑定使用）
 # ------------------------------------------------------------------
 
+@tool
+async def get_recent_anns(ts_code: str, days: int = 30) -> str:
+    """获取股票近 N 天的公司公告元数据（来源：AkShare 东方财富聚合，免费）。
+
+    返回 Markdown 表格（日期 / 类型 / 标题 / URL），仅含元数据不含正文；正文需另行抓取。
+    适用场景：判断个股是否发生重大事件（减持/回购/业绩/诉讼/重大合同等），补全纯量价+财报
+    数据无法覆盖的"事件面"。数据表为 `stock_anns`，由 `tasks.sync_stock_anns` 每交易日增量同步。
+
+    参数：
+      - ts_code: 股票代码（'300750.SZ' 或纯 6 位 '300750'）
+      - days:    回看天数（默认 30）
+    """
+    from app.services.stock_data_collection_service import collectors
+
+    try:
+        data = await collectors.get_recent_announcements(ts_code, days=days, limit=50)
+    except Exception as e:
+        logger.warning(f"[tool:get_recent_anns] {ts_code} 异常: {e}")
+        return f"获取近期公告失败: {e}"
+
+    if not data.get('data_available'):
+        return f"{ts_code} 在 stock_anns 表中暂无记录（可能尚未触发同步，或该股票代码无对应数据）。"
+    items = data.get('items') or []
+    if not items:
+        latest = data.get('latest_date') or 'N/A'
+        earliest = data.get('earliest_date') or 'N/A'
+        return f"{ts_code} 近 {days} 天无新公告（表内已覆盖范围 {earliest} ~ {latest}）。"
+
+    header_lines = [
+        f"**{ts_code} 近 {days} 天公告（共 {data.get('total_in_window', 0)} 条）**",
+        "",
+        "| 日期 | 类型 | 标题 | URL |",
+        "|------|------|------|-----|",
+    ]
+    for r in items:
+        date = (r.get('ann_date') or '').strip()
+        anno_type = (r.get('anno_type') or '—').strip()
+        title = (r.get('title') or '').strip().replace('|', '｜')
+        url = r.get('url') or ''
+        header_lines.append(f"| {date} | {anno_type} | {title} | {url} |")
+    return "\n".join(header_lines)
+
+
 CIO_TOOLS = [
     get_basic_market,
     get_capital_flow,
@@ -622,5 +665,6 @@ CIO_TOOLS = [
     get_financial_reports,
     get_risk_alerts,
     get_nine_turn,
+    get_recent_anns,
 ]
-"""CIO Agent 可用的全部 7 个数据查询工具"""
+"""CIO Agent 可用的 8 个数据查询工具（含公司公告，news_anns Phase 1）"""

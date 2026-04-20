@@ -997,6 +997,37 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'description': '检查通知系统运行状态',
         'category': '报告通知',
         'display_order': 1030
+    },
+
+    # ============================================
+    # 新闻公告任务（display_order: 600-649）
+    # ============================================
+    'tasks.sync_stock_anns': {
+        'task': 'tasks.sync_stock_anns',
+        'name': '公司公告（增量）',
+        'description': '同步 A 股公司公告（来源：AkShare 东方财富聚合，免费替代 Tushare anns_d）。逐交易日拉全市场公告并入库，默认回看 7 天；单日接口耗时 60~120s。',
+        'category': '新闻公告',
+        'display_order': 600,
+        'points_consumption': 0,
+        'default_params': {'start_date': None, 'end_date': None}
+    },
+    'tasks.sync_stock_anns_full_history': {
+        'task': 'tasks.sync_stock_anns_full_history',
+        'name': '公司公告（全量历史）',
+        'description': '全量同步历史公告，按交易日并发 + Redis Set 续继。全市场接口单日 ~90s，1500 个交易日约 7.5 小时。可在 sync_configs 缩短起始日期以控制耗时。',
+        'category': '新闻公告',
+        'display_order': 601,
+        'points_consumption': 0,
+        'default_params': {'start_date': None, 'concurrency': 5}
+    },
+    'tasks.sync_stock_anns_single': {
+        'task': 'tasks.sync_stock_anns_single',
+        'name': '公司公告（被动单只）',
+        'description': '单只股票公告被动同步（用户打开 AI 分析弹窗时静默触发），走个股接口约 1-3s / 股。',
+        'category': '新闻公告',
+        'display_order': 602,
+        'points_consumption': 0,
+        'default_params': {'ts_code': None, 'days': 90}
     }
 }
 
@@ -1012,6 +1043,7 @@ TASK_CATEGORIES = [
     {'name': '两融及转融通', 'order': 5},
     {'name': '特色数据', 'order': 6},
     {'name': '打板专题', 'order': 7},
+    {'name': '新闻公告', 'order': 7.5},
     {'name': '市场情绪', 'order': 8},
     {'name': '盘前分析', 'order': 9},
     {'name': '财务数据', 'order': 10},

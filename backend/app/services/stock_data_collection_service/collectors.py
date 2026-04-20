@@ -1919,3 +1919,52 @@ async def get_auction_baseline(ts_code: str) -> Dict:
         'open_auction_baseline': _compute_baseline(auction_o_rows),
         'close_auction_baseline': _compute_baseline(auction_c_rows),
     }
+
+
+# ------------------------------------------------------------------
+# 新闻公告（近 N 天公司公告）— 供个股专家 + CIO Agent 引用事件面
+# ------------------------------------------------------------------
+
+async def get_recent_announcements(ts_code: str, days: int = 30, limit: int = 20) -> Dict:
+    """近 N 天的公司公告元数据（title + date + type + url），不含正文。
+
+    数据源：`stock_anns` 表（由 AkShare 同步，见 news_anns_tasks）。
+
+    输出字段：
+      - items: [{ann_date, anno_type, title, url, has_content}]
+      - total_in_window: int
+      - days: int（实际回看天数）
+      - latest_date / earliest_date: 表中数据的最新/最早公告日
+      - data_available: bool（False 表示该股票在表中无数据，可能尚未被同步过）
+    """
+    from app.repositories.stock_anns_repository import StockAnnsRepository
+
+    repo = StockAnnsRepository()
+    try:
+        rows = await asyncio.to_thread(repo.query_by_stock, ts_code, int(days), int(limit))
+    except Exception as e:
+        logger.warning(f"[collectors] get_recent_announcements({ts_code}) 查询失败: {e}")
+        return {'items': [], 'total_in_window': 0, 'days': int(days), 'data_available': False}
+
+    if not rows:
+        return {'items': [], 'total_in_window': 0, 'days': int(days), 'data_available': False}
+
+    items = [
+        {
+            'ann_date': r.get('ann_date'),
+            'anno_type': r.get('anno_type'),
+            'title': r.get('title'),
+            'url': r.get('url'),
+            'has_content': r.get('has_content', False),
+        }
+        for r in rows
+    ]
+    dates = [r.get('ann_date') for r in rows if r.get('ann_date')]
+    return {
+        'items': items,
+        'total_in_window': len(items),
+        'days': int(days),
+        'latest_date': max(dates) if dates else None,
+        'earliest_date': min(dates) if dates else None,
+        'data_available': True,
+    }

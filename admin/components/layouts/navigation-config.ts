@@ -405,6 +405,18 @@ export const navItems: NavItem[] = [
     ]
   },
   {
+    name: '新闻公告',
+    href: '/news-anns',
+    icon: Bell,
+    children: [
+      {
+        name: '公司公告',
+        href: '/news-anns/stock-anns',
+        icon: ScrollText
+      }
+    ]
+  },
+  {
     name: '用户管理',
     href: '/users',
     icon: Users

@@ -60,6 +60,15 @@ export { LimitCptApiClient, limitCptApi } from './limit-cpt'
 export type { LimitCptParams, LimitCptData, LimitCptStatistics } from './limit-cpt'
 export { ReportRcApiClient, reportRcApi } from './report-rc'
 export type { ReportRcParams, ReportRcData, ReportRcStatistics, TopRatedStock } from './report-rc'
+export { StockAnnsApiClient, stockAnnsApi } from './stock-anns'
+export type {
+  StockAnnsItem,
+  StockAnnsQueryParams,
+  StockAnnsListResponse,
+  StockAnnsContent,
+  AnnoTypeStat,
+  FetchContentEntry,
+} from './stock-anns'
 export { CyqPerfApiClient, cyqPerfApi } from './cyq-perf-api'
 export type { CyqPerfParams, CyqPerfData, CyqPerfStatistics } from './cyq-perf-api'
 export { CyqChipsApiClient, cyqChipsApi } from './cyq-chips-api'

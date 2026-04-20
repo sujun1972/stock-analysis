@@ -97,6 +97,8 @@ FULL_SYNC_REDIS_KEYS: Dict[str, str] = {
     "dc_index_region":       "sync:dc_index:full_history:progress:地域板块",
     "dc_member":             "sync:dc_member:full_history:progress",
     "dc_daily":              "sync:dc_daily:full_history:progress",
+    # 新闻公告
+    "stock_anns":            "sync:stock_anns:full_history:progress",
 }
 
 
