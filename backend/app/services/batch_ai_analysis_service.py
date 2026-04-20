@@ -21,7 +21,7 @@ from app.core.database import SessionLocal
 DEFAULT_TEMPLATE_KEYS: Dict[str, str] = {
     "hot_money_view": "top_speculative_investor_v1",
     "midline_industry_expert": "midline_industry_expert_v1",
-    "longterm_value_watcher": "longterm_value_watcher_v1",
+    "longterm_value_watcher": "longterm_value_watcher_v3",
     "cio_directive": "cio_directive_v1",
     "macro_risk_expert": "macro_risk_expert_v1",
 }

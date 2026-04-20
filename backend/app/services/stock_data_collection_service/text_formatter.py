@@ -29,6 +29,16 @@ def format_as_text(data: Dict) -> str:
     _format_basic_market(lines, basic, data.get('financial') or {})
 
     # ================================================================
+    # 一B、股息与现金回报（长线价值的"债性"回报锚，原框架完全缺失）
+    # ================================================================
+    _format_dividend_section(lines, data.get('dividend') or {})
+
+    # ================================================================
+    # 一C、卖方盈利预测（第三方独立视角，填补机构评级分歧盲区）
+    # ================================================================
+    _format_analyst_consensus_section(lines, data.get('analyst_consensus') or {})
+
+    # ================================================================
     # 二、资金流向
     # ================================================================
     _format_capital_flow(lines, data)
@@ -108,7 +118,11 @@ def _format_basic_market(lines: list, basic: Dict, financial: Dict = None):
             )
     lines.append(f"| 成交额 | {fmt_amount(basic.get('amount'))} |")
     lines.append(f"| 换手率 | {fmt(basic.get('turnover_rate'))}% |")
-    lines.append(f"| PE-TTM | {fmt_pe(basic.get('pe_ttm'))} |")
+    # PE 双窗口分位（3 年近周期 vs 10 年全周期）+ 估值通道 — 辅助 helper 会打印 "| PE-TTM | X.XX |"
+    _render_valuation_dual_window(
+        lines, basic.get('pe_valuation'), current_value=basic.get('pe_ttm'),
+        label='PE', window_band_label='PE Band',
+    )
 
     # Forward PE 前置：PE-TTM 基于过去 12 个月滚动盈利（含低基数旧季度），业绩一旦大幅预增，
     # PE-TTM 的历史分位会虚高。并列展示可避免"只看 PE-TTM 99% 分位就判为极度高估"。
@@ -124,31 +138,11 @@ def _format_basic_market(lines: list, basic: Dict, financial: Dict = None):
                 f"（详见第五节 Forward PE 推演） |"
             )
 
-    pe_pct = basic.get('pe_percentile_3y')
-    if pe_pct is not None:
-        band_label = basic.get('pe_band_label', '')
-        suffix = f" — {band_label}" if band_label else ''
-        lines.append(
-            f"| PE近3年分位 | {fmt(pe_pct, 1)}%（样本{basic.get('pe_sample_count', 0)}个交易日）{suffix} |"
-        )
-        pe_band = basic.get('pe_band') or {}
-        if pe_band:
-            current_pe = basic.get('pe_ttm')
-            cur_str = f"{current_pe:.2f}" if current_pe else 'N/A'
-            lines.append(
-                f"| PE Band(3年) | 下轨P10={pe_band.get('p10')}, 中轨P50={pe_band.get('p50')}, "
-                f"上轨P90={pe_band.get('p90')}, 极端P99={pe_band.get('p99')} "
-                f"[range {pe_band.get('min')}~{pe_band.get('max')}]; 当前 PE={cur_str} |"
-            )
-            # 当前 PE 与 3 年 P90 的偏离度（仅做事实陈述，不下"透支/钝化"等结论）
-            if pe_pct >= 95 and current_pe and pe_band.get('p90') and current_pe > pe_band['p90']:
-                over_p90_pct = round((current_pe - pe_band['p90']) / pe_band['p90'] * 100, 1)
-                lines.append(
-                    f"| PE 与 P90 偏离度 | 当前 PE {cur_str} 较 3 年 P90({pe_band['p90']}) "
-                    f"{over_p90_pct:+.1f}%；分位 {pe_pct}% |"
-                )
-
-    lines.append(f"| PB | {fmt(basic.get('pb'))} |")
+    # PB 双窗口分位（0.42 PB 这种"深度破净"的安全边际维度，早期 prompt 完全缺失）
+    _render_valuation_dual_window(
+        lines, basic.get('pb_valuation'), current_value=basic.get('pb'),
+        label='PB', window_band_label='PB Band',
+    )
     total_mv = basic.get('total_mv')   # 万元
     circ_mv = basic.get('circ_mv')     # 万元
     lines.append(f"| 总市值 | {fmt_wan(total_mv)} |")
@@ -1274,3 +1268,233 @@ def _format_limit_history(lines: list, history: Dict):
                 f"{ev.get('open_times', 0)} | {pct_str} | {t1_str} |"
             )
         lines.append("")
+
+
+# ------------------------------------------------------------------
+# 估值双窗口渲染（PE/PB 共用）
+# ------------------------------------------------------------------
+
+def _render_valuation_dual_window(
+    lines: list,
+    valuation: Dict,
+    current_value,
+    label: str,
+    window_band_label: str,
+) -> None:
+    """
+    渲染估值分位双窗口块。
+    - `valuation` 为 None/空时仅渲染一行裸值（兼容 PB 历史缺失场景）
+    - 正常渲染："{label} | 当前值" + "{label} 近3年分位" + "{label} Band(3年)"
+      + "{label} 近10年分位" + "{label} Band(10年)" + 可选分歧行
+    """
+    current_str = fmt(current_value) if current_value is not None else 'N/A'
+
+    valuation = valuation or {}
+    w3 = valuation.get('window_3y') or {}
+    w10 = valuation.get('window_10y') or {}
+
+    # 基础值行（PE/PB 的当前值统一展示）
+    if label == 'PE':
+        lines.append(f"| {label}-TTM | {fmt_pe(current_value)} |")
+    else:
+        lines.append(f"| {label} | {current_str} |")
+
+    if not w3 and not w10:
+        return  # 历史数据不足，不渲染分位
+
+    def _render_window(win: Dict, window_name: str, years_note: str = ''):
+        pct = win.get('percentile')
+        if pct is None:
+            return
+        band_label = win.get('band_label', '')
+        suffix = f" — {band_label}" if band_label else ''
+        sample_note = f"（样本{win.get('sample_count', 0)}个交易日{years_note}）"
+        lines.append(
+            f"| {label}近{window_name}分位 | {fmt(pct, 1)}%{sample_note}{suffix} |"
+        )
+        band = win.get('band') or {}
+        if band:
+            lines.append(
+                f"| {window_band_label}({window_name}) | 下轨P10={band.get('p10')}, "
+                f"中轨P50={band.get('p50')}, 上轨P90={band.get('p90')}, "
+                f"极端P99={band.get('p99')} [range {band.get('min')}~{band.get('max')}]; "
+                f"当前 {label}={current_str} |"
+            )
+
+    _render_window(w3, '3年')
+
+    years_available = w10.get('years_available')
+    if years_available is not None and years_available < 8:
+        years_note = f"，实际覆盖 {years_available} 年（上市时长不足 10 年）"
+    else:
+        years_note = ''
+    _render_window(w10, '10年', years_note)
+
+    divergence = valuation.get('divergence')
+    if divergence:
+        lines.append(
+            f"| {label} 分位分歧 | {divergence.get('note')}（仅事实陈述，"
+            f"需结合盈利趋势与周期位置判断） |"
+        )
+
+
+# ------------------------------------------------------------------
+# 股息（Dividend）章节渲染
+# ------------------------------------------------------------------
+
+def _format_dividend_section(lines: list, dividend: Dict) -> None:
+    """渲染"## 一B、股息与现金回报"章节。
+
+    `dividend` 结构由 collectors.get_dividend_context() 产出，含股息率 TTM、
+    最近实施年度（含分红率）、最新预案、连续分红年数、近 6 年派息历史。
+    数据缺失时整节不渲染。
+    """
+    if not dividend:
+        return
+    lines.append("## 一B、股息与现金回报")
+    lines.append("")
+
+    dv_ttm = dividend.get('dv_ttm')
+    dv_ratio = dividend.get('dv_ratio')
+    latest = dividend.get('latest_year') or {}
+    latest_plan = dividend.get('latest_plan')
+    history = dividend.get('history') or []
+    consecutive_years = dividend.get('consecutive_years')
+
+    lines.append("| 指标 | 数值 |")
+    lines.append("|------|------|")
+    lines.append(f"| 股息率 TTM（dv_ttm） | {fmt(dv_ttm)}% |")
+    if dv_ratio is not None and dv_ratio != dv_ttm:
+        lines.append(f"| 股息率（dv_ratio，近一期年度口径） | {fmt(dv_ratio)}% |")
+
+    if latest:
+        end_date = latest.get('end_date', '')
+        ann_date = latest.get('ann_date', '')
+        eps_div = latest.get('cash_div_tax')
+        payout = latest.get('payout_ratio')
+        eps_str = fmt(eps_div, 4) if eps_div is not None else 'N/A'
+        lines.append(
+            f"| 最近实施年度（报告期 {end_date}，公告日 {ann_date}） | "
+            f"每股现金分红（含税） {eps_str} 元 |"
+        )
+        if payout is not None:
+            lines.append(f"| 分红率（现金分红/归母净利润，对应报告期） | {fmt(payout, 1)}% |")
+
+    if latest_plan:
+        p_end = latest_plan.get('end_date', '')
+        p_ann = latest_plan.get('ann_date', '')
+        p_div = latest_plan.get('cash_div_tax')
+        p_div_str = fmt(p_div, 4) if p_div is not None else 'N/A'
+        lines.append(
+            f"| 最新分红预案（未实施，报告期 {p_end}，公告日 {p_ann}） | "
+            f"每股拟派 {p_div_str} 元 |"
+        )
+
+    if consecutive_years is not None:
+        lines.append(f"| 连续年度现金分红年数 | {consecutive_years} 年 |")
+
+    if history:
+        lines.append("")
+        lines.append("**近 N 年每股现金分红（含税，单位：元/股，按报告期末倒序）：**")
+        lines.append("")
+        lines.append("| 报告期 | 每股派息(含税) | 状态 |")
+        lines.append("|--------|---------------|------|")
+        for h in history:
+            end_d = h.get('end_date', '')
+            div = h.get('cash_div_tax')
+            proc = h.get('div_proc', '')
+            div_str = fmt(div, 4) if div is not None else '0.0000'
+            lines.append(f"| {end_d} | {div_str} | {proc} |")
+    lines.append("")
+
+
+# ------------------------------------------------------------------
+# 卖方盈利预测（券商一致预期）章节渲染
+# ------------------------------------------------------------------
+
+def _format_analyst_consensus_section(lines: list, ac: Dict) -> None:
+    """
+    渲染"## 一C、卖方盈利预测（券商一致预期，近 60 日）"章节。
+    输入结构由 collectors.get_analyst_consensus() 产出。
+    数据缺失时整节不渲染，避免无效占位信息误导 LLM。
+    """
+    if not ac or not ac.get('report_count'):
+        return
+
+    lines.append("## 一C、卖方盈利预测（近 60 日券商共识）")
+    lines.append("")
+
+    report_count = ac.get('report_count', 0)
+    org_count = ac.get('org_count', 0)
+    latest_dt = ac.get('latest_report_date', '')
+    window = ac.get('window_days', 60)
+
+    lines.append("| 指标 | 数值 |")
+    lines.append("|------|------|")
+    lines.append(f"| 覆盖窗口 | 近 {window} 日 |")
+    lines.append(f"| 报告总数 | {report_count} 份 |")
+    lines.append(f"| 覆盖机构数 | {org_count} 家 |")
+    if latest_dt:
+        lines.append(f"| 最新报告日 | {latest_dt} |")
+
+    # 1. 评级分布
+    rd = ac.get('rating_distribution') or {}
+    if rd:
+        lines.append("")
+        lines.append("**评级分布（每家机构取最新一份报告）：**")
+        lines.append("")
+        lines.append("| 评级 | 机构数 |")
+        lines.append("|------|--------|")
+        for label in ('买入', '增持', '中性', '减持/卖出', '未知'):
+            cnt = rd.get(label, 0)
+            if cnt > 0:
+                lines.append(f"| {label} | {cnt} |")
+
+    # 2. EPS 一致预期（按年度）
+    eps_rows = ac.get('eps_consensus') or []
+    if eps_rows:
+        lines.append("")
+        lines.append("**一致预期 EPS（元/股，按预测年度聚合，同机构同年度取最新一份）：**")
+        lines.append("")
+        lines.append("| 预测年度 | 覆盖机构 | 中位数 | 区间 [min, max] |")
+        lines.append("|----------|---------|--------|-----------------|")
+        for e in eps_rows:
+            q = e.get('quarter_key', '')
+            lines.append(
+                f"| {q} | {e.get('count', 0)} | "
+                f"{fmt(e.get('median'), 3)} | "
+                f"[{fmt(e.get('min'), 3)}, {fmt(e.get('max'), 3)}] |"
+            )
+
+    # 3. 目标价（仅列有效目标价的机构）
+    tps = ac.get('target_price_latest') or []
+    tp_stats = ac.get('target_price_stats') or {}
+    if tps and tp_stats:
+        current_price = ac.get('current_price_ref')
+        price_ref = f"{current_price} 元" if current_price else 'N/A'
+        lines.append("")
+        lines.append(
+            f"**目标价共识（每家机构最新报告，当前股价 {price_ref}；已过滤单位异常值）：**"
+        )
+        lines.append("")
+        lines.append("| 机构 | 评级 | 目标价（元） | 较当前价空间 | 报告日 |")
+        lines.append("|------|------|-------------|-------------|--------|")
+        for t in tps:
+            up = t.get('upside_pct')
+            up_str = f"{up:+.1f}%" if up is not None else 'N/A'
+            lines.append(
+                f"| {t.get('org_name', '')} | {t.get('rating', '')} | "
+                f"{fmt(t.get('target_price'))} | {up_str} | {t.get('report_date', '')} |"
+            )
+
+        median_upside = tp_stats.get('median_upside_pct')
+        median_upside_str = f"{median_upside:+.1f}%" if median_upside is not None else 'N/A'
+        lines.append("")
+        lines.append(
+            f"> **目标价共识统计**（{tp_stats.get('count', 0)} 家）："
+            f"中位 {fmt(tp_stats.get('median'))} 元 / "
+            f"区间 [{fmt(tp_stats.get('min'))}, {fmt(tp_stats.get('max'))}] / "
+            f"中位目标价相对当前价空间 {median_upside_str}"
+        )
+
+    lines.append("")

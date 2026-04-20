@@ -95,7 +95,7 @@ CIOAgentService                      ← backend/app/services/cio_agent_service.
 create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（LangGraph）
     ↓
 7 个 LangChain Tool                  ← backend/app/services/langchain_tools.py
-    ├── get_basic_market             基础盘面（价格/估值分位+PE Band/大盘相对强度/财务+滞后天数/行业/筹码/回购）
+    ├── get_basic_market             基础盘面（价格/PE-PB 双窗口分位+估值通道/大盘相对强度/财务+滞后天数/行业/筹码/回购）
     ├── get_capital_flow             资金流向（主力分档：超大单/大单/中单/小单；近5/10日资金vs价格；北向滞后标注）
     ├── get_shareholder_info         股东信息（人数变化+滞后天数、减持、解禁）
     ├── get_technical_indicators     技术指标（MA/RSI/MACD/布林/K线/量价；含涨停日专属语义、明日布林上轨推演）
@@ -103,11 +103,15 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
     ├── get_risk_alerts              风险警示（ST、质押）
     └── get_nine_turn                TD 序列（即神奇九转，第9根为变盘窗口）
 
-`StockDataCollectionService.collect_and_format()` 主链路另含四个维度尚未挂为 LangChain Tool；如需 CIO Agent 主动查询可在 `langchain_tools.py` 追加对应工具：
+`StockDataCollectionService.collect_and_format()` 主链路另含六个维度尚未挂为 LangChain Tool；如需 CIO Agent 主动查询可在 `langchain_tools.py` 追加对应工具：
 - **smart_money**：融资融券明细 + 龙虎榜事件（含席位性质标记 `_SEAT_TAGS` / `_SEAT_SUBSTRING_TAGS`；无上榜时 `on_billboard_60d=False` 显式标记，避免 LLM 误判为数据缺失）
 - **limit_ecology**：涨停生态（最近交易日全市场涨停/跌停/炸板 + 连板天梯 Top5 + 最强板块 Top5 + 本股当日涨停身位）
 - **limit_history**：个股近 60 日涨停基因（涨停次数 / T+1 胜率 + 平均溢价 / 最近涨停距今交易日数）
 - **auction_baseline**：竞价基准对比（当日开盘/收盘竞价成交额 vs 近 20 日均值倍数，识别盘前抢筹/冷场）
+- **dividend**：股息率 TTM + 最近实施年度（含税派息 + 分红率）+ 最新预案 + 连续分红年数 + 近 6 年派息历史（长线价值的"债性回报锚"）
+- **analyst_consensus**：近 60 日券商一致预期（基于 `report_rc` 表）— 机构覆盖数 + 评级分布 + EPS 共识（按年度聚合）+ 目标价中位数/空间（`min_price` 取值，`tp` 字段单位异常已过滤，目标价 > 当前价×4 视为污染剔除）
+
+**PE / PB 估值分位双窗口（v2 起）**：`get_basic_market` 输出 `pe_valuation` / `pb_valuation`，各含 `window_3y` + `window_10y`（近周期 vs 全周期）。当两窗口分位差 ≥ 30pct 时附加 `divergence.note` 中性事实（由 LLM 判断是"估值泡沫"还是"盈利塌陷导致分母效应"）。长线专家 prompt v3 强制消费这两对分位 + 股息 + 卖方共识，避免单一 PE 分位对周期股的系统性误判。
 ```
 
 `get_technical_indicators` 内部委托三个独立分析服务（纯计算，无 IO）：

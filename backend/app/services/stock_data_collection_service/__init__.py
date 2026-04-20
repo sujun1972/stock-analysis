@@ -43,16 +43,20 @@ class StockDataCollectionService:
             self._get_limit_ecology(ts_code),
             self._get_limit_history(ts_code),
             self._get_auction_baseline(ts_code),
+            self._get_dividend_context(ts_code),
+            self._get_analyst_consensus(ts_code),
             return_exceptions=True,
         )
 
         labels = [
             'basic', 'capital', 'shareholder', 'technical', 'financial',
             'risk', 'nine_turn', 'auction', 'smart_money',
-            'limit_ecology', 'limit_history', 'auction_baseline',
+            'limit_ecology', 'limit_history', 'auction_baseline', 'dividend',
+            'analyst_consensus',
         ]
         (basic, capital, shareholder, technical, financial, risk, nine_turn,
-         auction, smart_money, limit_ecology, limit_history, auction_baseline) = [
+         auction, smart_money, limit_ecology, limit_history, auction_baseline,
+         dividend, analyst_consensus) = [
             self._unwrap(v, label) for v, label in zip(results, labels)
         ]
 
@@ -72,6 +76,8 @@ class StockDataCollectionService:
             "limit_ecology": limit_ecology,
             "limit_history": limit_history,
             "auction_baseline": auction_baseline,
+            "dividend": dividend,
+            "analyst_consensus": analyst_consensus,
         }
 
     async def collect_and_format(self, ts_code: str, stock_name: str) -> tuple:
@@ -133,3 +139,9 @@ class StockDataCollectionService:
 
     async def _get_auction_baseline(self, ts_code: str) -> Dict:
         return await collectors.get_auction_baseline(ts_code)
+
+    async def _get_dividend_context(self, ts_code: str) -> Dict:
+        return await collectors.get_dividend_context(ts_code)
+
+    async def _get_analyst_consensus(self, ts_code: str) -> Dict:
+        return await collectors.get_analyst_consensus(ts_code)

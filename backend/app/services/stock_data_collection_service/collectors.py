@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 
 from loguru import logger
 
-from .formatters import days_since, format_date_dashed, quantile, safe_float
+from .formatters import days_since, format_date_dashed, parse_date_loose, quantile, safe_float
 
 
 # ------------------------------------------------------------------
@@ -38,16 +38,18 @@ async def get_basic_market(ts_code: str, pure_code: str) -> Dict:
     end_dash = today.strftime('%Y-%m-%d')
     start_yyyymmdd = (today - timedelta(days=14)).strftime('%Y%m%d')
     end_yyyymmdd = today.strftime('%Y%m%d')
-    pe_start_3y = (today - timedelta(days=365 * 3)).strftime('%Y%m%d')
+    # 估值分位双窗口：3 年（近周期视角）+ 10 年（全周期视角）
+    # 3 年窗口在行业下行期会因分母缩水虚高分位；10 年窗口可识别周期底部
+    pe_pb_start_10y = (today - timedelta(days=365 * 10)).strftime('%Y%m%d')
     start_365d = (today - timedelta(days=365)).strftime('%Y%m%d')
 
-    daily_df, basic_data, stock_info, cyq_data, fina_data, pe_history, repurchase_data = await asyncio.gather(
+    daily_df, basic_data, stock_info, cyq_data, fina_data, valuation_history_10y, repurchase_data = await asyncio.gather(
         asyncio.to_thread(daily_repo.get_by_code_and_date_range, ts_code, start_dash, end_dash),
         asyncio.to_thread(basic_repo.get_by_code_and_date_range, ts_code, start_yyyymmdd, end_yyyymmdd, 5),
         asyncio.to_thread(stock_repo.get_full_by_ts_code, ts_code),
         asyncio.to_thread(cyq_repo.get_by_date_range, start_yyyymmdd, end_yyyymmdd, ts_code, 1, 1),
         asyncio.to_thread(fina_repo.get_by_code, ts_code, None, None, 4),
-        asyncio.to_thread(basic_repo.get_by_code_and_date_range, ts_code, pe_start_3y, end_yyyymmdd, 2000),
+        asyncio.to_thread(basic_repo.get_by_code_and_date_range, ts_code, pe_pb_start_10y, end_yyyymmdd, 5000),
         asyncio.to_thread(repurchase_repo.get_by_date_range, start_365d, end_yyyymmdd, ts_code, None, 10, 0),
     )
 
@@ -110,46 +112,38 @@ async def get_basic_market(ts_code: str, pure_code: str) -> Dict:
             'or_yoy': safe_float(latest_fina.get('or_yoy')),
         }
 
-    # PE-TTM 近3年估值分位 + PE Band（高/中/低位估值通道）
-    if pe_history and result.get('pe_ttm') is not None:
-        pe_values = sorted([
-            safe_float(r.get('pe_ttm'))
-            for r in pe_history
-            if safe_float(r.get('pe_ttm')) is not None
-            and safe_float(r.get('pe_ttm')) > 0
-        ])
-        if len(pe_values) >= 30:
-            current_pe = result['pe_ttm']
-            if current_pe and current_pe > 0:
-                lower_count = sum(1 for v in pe_values if v < current_pe)
-                percentile = round(lower_count / len(pe_values) * 100, 1)
-                result['pe_percentile_3y'] = percentile
-                result['pe_sample_count'] = len(pe_values)
+    # 估值分位（PE-TTM / PB）双窗口：3 年（近周期）+ 10 年（全周期）+ 估值通道
+    # 设计意图：单一窗口（尤其 3 年）对周期股存在"盈利塌陷导致分母变小、分位虚高"陷阱。
+    # 同时给出 10 年窗口后，LLM 可识别"3 年分位 vs 10 年分位"的分歧并作出更稳健判断。
+    if valuation_history_10y and (
+        result.get('pe_ttm') is not None or result.get('pb') is not None
+    ):
+        # 按 trade_date 降序切分 3 年子集（daily_basic 查询已按 DESC 返回）
+        three_year_cutoff = (today - timedelta(days=365 * 3)).strftime('%Y%m%d')
+        history_3y = [
+            r for r in valuation_history_10y
+            if str(r.get('trade_date', '')) >= three_year_cutoff
+        ]
+        history_10y = valuation_history_10y
 
-                # 估值档位中性标签（仅描述分位区间，不做高/低估判断，由 AI 自行解读）
-                if percentile >= 95:
-                    band_label = '≥95%分位区间'
-                elif percentile >= 80:
-                    band_label = '80~95%分位区间'
-                elif percentile >= 60:
-                    band_label = '60~80%分位区间'
-                elif percentile >= 40:
-                    band_label = '40~60%分位区间'
-                elif percentile >= 20:
-                    band_label = '20~40%分位区间'
-                else:
-                    band_label = '<20%分位区间'
-                result['pe_band_label'] = band_label
+        result['pe_valuation'] = _compute_valuation_percentile(
+            history_3y, history_10y, current_value=result.get('pe_ttm'),
+            value_key='pe_ttm', require_positive=True,
+        )
+        result['pb_valuation'] = _compute_valuation_percentile(
+            history_3y, history_10y, current_value=result.get('pb'),
+            value_key='pb', require_positive=True,
+        )
 
-                # PE Band 通道数值（10/50/90 分位 = 估值通道下/中/上轨）
-                result['pe_band'] = {
-                    'p10': quantile(pe_values, 0.10),
-                    'p50': quantile(pe_values, 0.50),
-                    'p90': quantile(pe_values, 0.90),
-                    'p99': quantile(pe_values, 0.99),
-                    'min': round(pe_values[0], 2),
-                    'max': round(pe_values[-1], 2),
-                }
+        # 向后兼容：langchain_tools.get_basic_market 的 CIO Agent 工具仍按旧键读取
+        # PE 3 年分位，这里把 pe_valuation.window_3y 展平成 pe_percentile_3y 等旧字段
+        pe_view = result.get('pe_valuation') or {}
+        pe_3y = pe_view.get('window_3y') or {}
+        if pe_3y.get('percentile') is not None:
+            result['pe_percentile_3y'] = pe_3y.get('percentile')
+            result['pe_sample_count'] = pe_3y.get('sample_count')
+            result['pe_band_label'] = pe_3y.get('band_label')
+            result['pe_band'] = pe_3y.get('band')
 
     # 东财行业板块及近5交易日涨跌幅
     industry_bk = await _get_industry_board(ts_code)
@@ -203,6 +197,136 @@ async def get_basic_market(ts_code: str, pure_code: str) -> Dict:
         }
 
     return result
+
+
+def _compute_valuation_window(history: list, value_key: str, require_positive: bool) -> Optional[Dict]:
+    """对一段历史数据计算分位指标 + 估值通道（P10/P50/P90/P99）。"""
+    vals = []
+    for r in history:
+        v = safe_float(r.get(value_key))
+        if v is None:
+            continue
+        if require_positive and v <= 0:
+            continue
+        vals.append(v)
+    if len(vals) < 30:
+        return None
+    vals.sort()
+    return {
+        'sample_count': len(vals),
+        'values_sorted': vals,
+        'band': {
+            'p10': quantile(vals, 0.10),
+            'p50': quantile(vals, 0.50),
+            'p90': quantile(vals, 0.90),
+            'p99': quantile(vals, 0.99),
+            'min': round(vals[0], 2),
+            'max': round(vals[-1], 2),
+        },
+    }
+
+
+def _percentile_from_sorted(sorted_vals: list, current: float) -> Optional[float]:
+    if not sorted_vals or current is None:
+        return None
+    lower = sum(1 for v in sorted_vals if v < current)
+    return round(lower / len(sorted_vals) * 100, 1)
+
+
+def _band_label(pct: Optional[float]) -> str:
+    if pct is None:
+        return ''
+    if pct >= 95:
+        return '≥95%分位区间'
+    if pct >= 80:
+        return '80~95%分位区间'
+    if pct >= 60:
+        return '60~80%分位区间'
+    if pct >= 40:
+        return '40~60%分位区间'
+    if pct >= 20:
+        return '20~40%分位区间'
+    return '<20%分位区间'
+
+
+def _compute_valuation_percentile(
+    history_3y: list,
+    history_10y: list,
+    current_value: Optional[float],
+    value_key: str,
+    require_positive: bool = True,
+) -> Dict:
+    """
+    计算 3 年 / 10 年双窗口估值分位。
+
+    返回结构:
+        {
+          'current': <当前值>,
+          'window_3y':  {percentile, sample_count, band_label, band: {...}},
+          'window_10y': {percentile, sample_count, band_label, band: {...}, years_available},
+          'divergence': {
+              'abs_pct_diff': float,             # |3年分位 - 10年分位|
+              'direction': '3y_higher' / '10y_higher' / 'aligned',
+              'note': 一句话中性事实陈述（仅 >=30pct 偏离时出）
+          } | None,
+        }
+    注意：10 年窗口不足时按实际可用年数给，并在 `years_available` 标注。
+    """
+    out: Dict[str, Any] = {'current': current_value}
+
+    if current_value is None or (require_positive and current_value <= 0):
+        return out
+
+    w3 = _compute_valuation_window(history_3y, value_key, require_positive)
+    w10 = _compute_valuation_window(history_10y, value_key, require_positive)
+
+    def _fmt_window(win: Optional[Dict]) -> Optional[Dict]:
+        if not win:
+            return None
+        pct = _percentile_from_sorted(win['values_sorted'], current_value)
+        return {
+            'percentile': pct,
+            'sample_count': win['sample_count'],
+            'band_label': _band_label(pct),
+            'band': win['band'],
+        }
+
+    window_3y = _fmt_window(w3)
+    window_10y = _fmt_window(w10)
+    if window_3y:
+        out['window_3y'] = window_3y
+    if window_10y:
+        # 标注真实覆盖年数（首尾交易日距今差），让 AI 知道样本是否充足
+        first_td_raw = history_10y[-1].get('trade_date') if history_10y else None
+        last_td_raw = history_10y[0].get('trade_date') if history_10y else None
+        first_td = parse_date_loose(first_td_raw)
+        last_td = parse_date_loose(last_td_raw)
+        years_avail = None
+        if first_td and last_td:
+            years_avail = round((last_td - first_td).days / 365.0, 1)
+        window_10y['years_available'] = years_avail
+        out['window_10y'] = window_10y
+
+    # 分位分歧：仅当 >=30pct 差距才输出中性提示；由 AI 自行判断是否为周期效应
+    if window_3y and window_10y:
+        p3 = window_3y.get('percentile')
+        p10 = window_10y.get('percentile')
+        if p3 is not None and p10 is not None:
+            diff = round(p3 - p10, 1)
+            abs_diff = abs(diff)
+            if abs_diff >= 30:
+                direction = '3y_higher' if diff > 0 else '10y_higher'
+                out['divergence'] = {
+                    'abs_pct_diff': abs_diff,
+                    'direction': direction,
+                    'note': (
+                        f'3 年分位（{p3}%）较 10 年分位（{p10}%）{"高" if diff > 0 else "低"} '
+                        f'{abs_diff} pct，样本窗口选择差异显著'
+                    ),
+                }
+            else:
+                out['divergence'] = None
+    return out
 
 
 async def _get_industry_board(ts_code: str) -> Optional[Dict]:
@@ -624,6 +748,369 @@ async def get_shareholder_info(ts_code: str) -> Dict:
         ]
 
     return result
+
+
+# ------------------------------------------------------------------
+# 三B、股息与现金回报
+# ------------------------------------------------------------------
+
+async def get_dividend_context(ts_code: str) -> Dict:
+    """
+    收集股息与分红数据，用于长线价值分析补全"分红回报"维度。
+
+    数据源：
+      - daily_basic.dv_ttm / dv_ratio — 最近一日股息率（%），口径为 TTM / 近一年度
+      - dividend 表 — 分红派息明细（cash_div_tax 单位：元/股，每股派息含税）
+      - income.n_income_attr_p — 归母净利润，用于推算分红率
+
+    返回结构：
+      {
+        'dv_ttm': 5.56,                    # 股息率 TTM（%）
+        'dv_ratio': 5.56,                  # 股息率（近一期年度口径，%）
+        'latest_year': {                   # 最近 1 个已实施年度
+          'end_date': 'YYYYMMDD',
+          'ann_date': 'YYYYMMDD',
+          'cash_div_tax': 0.2715,          # 每股派息（含税，元）
+          'payout_ratio': 28.75,           # 分红率（%）
+        },
+        'history': [                       # 近 5 年每股派息（报告期末倒序）
+          {'end_date': 'YYYYMMDD', 'cash_div_tax': 0.2715, 'div_proc': '实施'},
+          ...
+        ],
+        'consecutive_years': 5,            # 连续实施现金分红的年数
+        'latest_plan': {...} | None,       # 最新未实施的年度预案
+      }
+    """
+    from app.repositories.daily_basic_repository import DailyBasicRepository
+    from app.repositories.dividend_repository import DividendRepository
+    from app.repositories.income_repository import IncomeRepository
+
+    today = datetime.now()
+    start_yyyymmdd = (today - timedelta(days=14)).strftime('%Y%m%d')
+    end_yyyymmdd = today.strftime('%Y%m%d')
+    # 近 6 年年度分红（覆盖"连续分红 N 年"判断）
+    start_6y = (today - timedelta(days=365 * 6)).strftime('%Y%m%d')
+
+    basic_data, dividend_rows, income_rows = await asyncio.gather(
+        asyncio.to_thread(
+            DailyBasicRepository().get_by_code_and_date_range,
+            ts_code, start_yyyymmdd, end_yyyymmdd, 5,
+        ),
+        asyncio.to_thread(
+            DividendRepository().get_by_ts_code,
+            ts_code, start_6y, end_yyyymmdd, 40,
+        ),
+        asyncio.to_thread(
+            IncomeRepository().get_by_date_range,
+            start_6y, end_yyyymmdd, ts_code, '1', None, 20,
+        ),
+    )
+
+    result: Dict[str, Any] = {}
+
+    # 1. 股息率（dv_ttm / dv_ratio）
+    if basic_data:
+        b0 = basic_data[0]
+        result['dv_ttm'] = safe_float(b0.get('dv_ttm'))
+        result['dv_ratio'] = safe_float(b0.get('dv_ratio'))
+
+    # 2. 年报期现金分红明细（仅保留报告期末为 YYYY1231 的年度分红，剔除中期预案）
+    annual_dividends = [
+        r for r in (dividend_rows or [])
+        if str(r.get('end_date', '')).endswith('1231')
+    ]
+    # 按 end_date desc 排序已由 repo 保证；这里再按 end_date + 状态双排序防御
+    annual_dividends.sort(
+        key=lambda r: (str(r.get('end_date', '')), 0 if r.get('div_proc') == '实施' else 1),
+        reverse=True,
+    )
+
+    # 3. 年度归母净利润（用于推算分红率）
+    income_by_year: Dict[str, float] = {}
+    for r in (income_rows or []):
+        end_d = str(r.get('end_date', ''))
+        if end_d.endswith('1231'):
+            np_val = safe_float(r.get('n_income_attr_p'))
+            if np_val is not None:
+                income_by_year[end_d] = np_val
+
+    # 4. 从 daily_basic 拿最新 total_share（单位：万股）用于分红率估算
+    total_share_wan = None
+    if basic_data:
+        total_share_wan = safe_float(basic_data[0].get('total_share'))
+
+    # 5. 组装 history + 识别最新"实施年"和最新"预案年"
+    history: list = []
+    latest_year = None
+    latest_plan = None
+    seen_end_dates = set()
+    for r in annual_dividends:
+        end_d = str(r.get('end_date', ''))
+        if end_d in seen_end_dates:
+            continue
+        seen_end_dates.add(end_d)
+        proc = r.get('div_proc', '')
+        cash_div = safe_float(r.get('cash_div_tax'))
+        history.append({
+            'end_date': end_d,
+            'cash_div_tax': cash_div,
+            'div_proc': proc,
+            'ann_date': str(r.get('ann_date', '')),
+        })
+        if proc == '实施' and latest_year is None and cash_div is not None and cash_div > 0:
+            payout_ratio = None
+            net_profit = income_by_year.get(end_d)
+            if net_profit and total_share_wan and cash_div:
+                # cash_div (元/股) × total_share (万股) × 1e4 = 总分红（元）
+                total_div = cash_div * total_share_wan * 1e4
+                if net_profit > 0:
+                    payout_ratio = round(total_div / net_profit * 100, 2)
+            latest_year = {
+                'end_date': end_d,
+                'ann_date': str(r.get('ann_date', '')),
+                'cash_div_tax': cash_div,
+                'payout_ratio': payout_ratio,
+            }
+        elif proc == '预案' and latest_plan is None and cash_div is not None and cash_div > 0:
+            latest_plan = {
+                'end_date': end_d,
+                'ann_date': str(r.get('ann_date', '')),
+                'cash_div_tax': cash_div,
+            }
+
+    if latest_year:
+        result['latest_year'] = latest_year
+    if latest_plan:
+        result['latest_plan'] = latest_plan
+
+    # 6. 连续分红年数：从 history 中找"实施"且金额 >0 的连续年度数
+    consecutive = 0
+    last_year_int: Optional[int] = None
+    for h in history:
+        end_d = h['end_date']
+        if h.get('div_proc') == '实施' and (h.get('cash_div_tax') or 0) > 0:
+            try:
+                yr = int(end_d[:4])
+            except (ValueError, TypeError):
+                break
+            if last_year_int is None:
+                consecutive = 1
+                last_year_int = yr
+            elif last_year_int - yr == 1:
+                consecutive += 1
+                last_year_int = yr
+            else:
+                break
+    if consecutive > 0:
+        result['consecutive_years'] = consecutive
+
+    # 7. 截断 history 到最近 6 年；仅保留实施/预案两类
+    if history:
+        result['history'] = [h for h in history if h.get('div_proc') in ('实施', '预案')][:6]
+
+    return result
+
+
+# ------------------------------------------------------------------
+# 三C、卖方盈利预测（券商一致预期）
+# ------------------------------------------------------------------
+
+# 清洗规则：report_rc.tp 字段单位异常（实际为市值/总股本的衍生值，数量级 10^6）。
+# 目标价应从 min_price 取（数量级合理，如 7.78 / 5.41 / 6.00）。
+# 异常保护：若 min_price 缺失或 > 当前价 × 4（机构目标价不会超过当前价 4 倍），剔除该目标价。
+_ANALYST_TARGET_PRICE_MAX_MULTIPLIER = 4.0
+
+# 评级归类（A 股研报"增持/买入/跑赢行业"等大量同义表述，统一 4 档便于 AI 解读）
+_ANALYST_RATING_BULLISH = ('买入', '强烈推荐', '推荐', 'Strong Buy', 'Buy')
+_ANALYST_RATING_OVERWEIGHT = ('增持', '谨慎推荐', '跑赢行业', '优于大市', 'Outperform')
+_ANALYST_RATING_NEUTRAL = ('中性', '持有', '观望', 'Hold', 'Neutral')
+_ANALYST_RATING_BEARISH = ('减持', '卖出', '跑输行业', '弱于大市', 'Sell', 'Underperform')
+
+
+def _classify_rating(rating: Optional[str]) -> str:
+    if not rating:
+        return '未知'
+    r = str(rating).strip()
+    for kw in _ANALYST_RATING_BULLISH:
+        if kw in r:
+            return '买入'
+    for kw in _ANALYST_RATING_OVERWEIGHT:
+        if kw in r:
+            return '增持'
+    for kw in _ANALYST_RATING_NEUTRAL:
+        if kw in r:
+            return '中性'
+    for kw in _ANALYST_RATING_BEARISH:
+        if kw in r:
+            return '减持/卖出'
+    return '未知'
+
+
+async def get_analyst_consensus(ts_code: str) -> Dict:
+    """
+    收集近 60 日券商卖方盈利预测与评级共识，作为"第三方独立视角"注入数据层。
+
+    用途：解决"LLM 看不到机构评级分歧"这一系统性盲区。中国建筑案例中，机构
+    给出的是"买入"评级共识（目标价 5.41~7.78 元，当前价 4.88 元），但仅依赖
+    PE 分位 + 业绩 YoY 的三专家系统无法感知这一信息。
+
+    返回结构:
+      {
+        'report_count': 21,                    # 近 60 日总报告数
+        'org_count': 7,                        # 覆盖机构数
+        'window_days': 60,
+        'latest_report_date': 'YYYYMMDD',      # 最近一份报告日
+        'rating_distribution': {               # 评级分布（归类后）
+          '买入': 5, '增持': 2, '中性': 0, '减持/卖出': 0, '未知': 0,
+        },
+        'eps_consensus': [                     # 按预测年度聚合的一致预期 EPS
+          {
+            'quarter_key': '2026Q4',          # Tushare 口径：YYYYQ4 = 全年预测
+            'count': 7, 'median': 0.94, 'min': 0.88, 'max': 1.05,
+          },
+          ...
+        ],
+        'target_price_latest': [               # 每家机构最新一份报告的目标价
+          {'org_name': '中信建投', 'rating': '买入', 'target_price': 7.78,
+           'report_date': 'YYYYMMDD', 'upside_pct': 59.4},
+          ...
+        ],
+        'target_price_stats': {
+          'median': 6.45, 'min': 5.41, 'max': 7.78, 'count': 5,
+          'median_upside_pct': 32.2,           # 中位目标价相对当前价的上涨空间 %
+        },
+      }
+    数据缺失/全部异常时返回 {} 兼容空状态。
+    """
+    from app.repositories.report_rc_repository import ReportRcRepository
+    from app.repositories.stock_daily_repository import StockDailyRepository
+
+    today = datetime.now()
+    start_60d = (today - timedelta(days=60)).strftime('%Y%m%d')
+    end_today = today.strftime('%Y%m%d')
+
+    rows, daily_df = await asyncio.gather(
+        asyncio.to_thread(
+            ReportRcRepository().get_by_date_range,
+            start_60d, end_today, None, ts_code, None, 1, 500,
+        ),
+        asyncio.to_thread(
+            StockDailyRepository().get_by_code_and_date_range,
+            ts_code,
+            (today - timedelta(days=14)).strftime('%Y-%m-%d'),
+            today.strftime('%Y-%m-%d'),
+        ),
+    )
+
+    if not rows:
+        return {}
+
+    current_price: Optional[float] = None
+    if daily_df is not None and not daily_df.empty:
+        current_price = safe_float(daily_df.iloc[-1].get('close'))
+
+    # 1. 评级分布：按 (org_name) 取最新一份报告的评级（避免一家机构一天多条重复计票）
+    latest_report_per_org: Dict[str, Dict] = {}
+    for r in rows:
+        org = r.get('org_name')
+        if not org:
+            continue
+        rdate = str(r.get('report_date', ''))
+        existing = latest_report_per_org.get(org)
+        if existing is None or rdate > str(existing.get('report_date', '')):
+            latest_report_per_org[org] = r
+
+    rating_distribution: Dict[str, int] = {
+        '买入': 0, '增持': 0, '中性': 0, '减持/卖出': 0, '未知': 0,
+    }
+    for r in latest_report_per_org.values():
+        key = _classify_rating(r.get('rating'))
+        rating_distribution[key] = rating_distribution.get(key, 0) + 1
+
+    # 2. EPS 一致预期：按 quarter 分组（quarter 形如 '2026Q4' 表示 2026 年全年预测）
+    #    同一机构同一 quarter 取最新 report_date
+    latest_eps: Dict[tuple, Dict] = {}
+    for r in rows:
+        org = r.get('org_name')
+        q = r.get('quarter')
+        eps_val = safe_float(r.get('eps'))
+        if not org or not q or eps_val is None:
+            continue
+        key = (org, q)
+        existing = latest_eps.get(key)
+        rdate = str(r.get('report_date', ''))
+        if existing is None or rdate > str(existing.get('report_date', '')):
+            latest_eps[key] = r
+
+    eps_by_quarter: Dict[str, list] = {}
+    for (_, q), r in latest_eps.items():
+        eps_val = safe_float(r.get('eps'))
+        if eps_val is not None:
+            eps_by_quarter.setdefault(q, []).append(eps_val)
+
+    eps_consensus: list = []
+    for q in sorted(eps_by_quarter.keys()):
+        vals = sorted(eps_by_quarter[q])
+        if not vals:
+            continue
+        eps_consensus.append({
+            'quarter_key': q,
+            'count': len(vals),
+            'median': round(vals[len(vals) // 2], 3),
+            'min': round(vals[0], 3),
+            'max': round(vals[-1], 3),
+        })
+
+    # 3. 目标价：每家机构取最新一份报告中有效的 min_price
+    target_prices: list = []
+    for org, r in latest_report_per_org.items():
+        tp = safe_float(r.get('min_price'))
+        if tp is None or tp <= 0:
+            continue
+        # 异常保护：目标价不应 > 当前价 × MAX_MULTIPLIER（否则必然是单位错误或数据污染）
+        if current_price and current_price > 0 and tp > current_price * _ANALYST_TARGET_PRICE_MAX_MULTIPLIER:
+            continue
+        upside = None
+        if current_price and current_price > 0:
+            upside = round((tp - current_price) / current_price * 100, 1)
+        target_prices.append({
+            'org_name': org,
+            'rating': _classify_rating(r.get('rating')),
+            'target_price': round(tp, 2),
+            'report_date': str(r.get('report_date', '')),
+            'upside_pct': upside,
+        })
+    target_prices.sort(key=lambda x: x['target_price'], reverse=True)
+
+    tp_vals = sorted(x['target_price'] for x in target_prices)
+    target_price_stats = None
+    if tp_vals:
+        median_tp = tp_vals[len(tp_vals) // 2]
+        median_upside = None
+        if current_price and current_price > 0:
+            median_upside = round((median_tp - current_price) / current_price * 100, 1)
+        target_price_stats = {
+            'count': len(tp_vals),
+            'median': round(median_tp, 2),
+            'min': round(tp_vals[0], 2),
+            'max': round(tp_vals[-1], 2),
+            'median_upside_pct': median_upside,
+        }
+
+    # 4. 最新报告日
+    latest_report_date = max((str(r.get('report_date', '')) for r in rows), default='')
+
+    return {
+        'report_count': len(rows),
+        'org_count': len(latest_report_per_org),
+        'window_days': 60,
+        'latest_report_date': latest_report_date,
+        'current_price_ref': current_price,
+        'rating_distribution': rating_distribution,
+        'eps_consensus': eps_consensus,
+        'target_price_latest': target_prices,
+        'target_price_stats': target_price_stats,
+    }
 
 
 # ------------------------------------------------------------------
