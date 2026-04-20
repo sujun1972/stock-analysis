@@ -69,6 +69,20 @@ export type {
   AnnoTypeStat,
   FetchContentEntry,
 } from './stock-anns'
+export { NewsFlashApiClient, newsFlashApi } from './news-flash'
+export type {
+  NewsFlashItem,
+  NewsFlashSourceStat,
+  NewsFlashQueryParams,
+  NewsFlashListResponse,
+} from './news-flash'
+export { CctvNewsApiClient, cctvNewsApi } from './cctv-news'
+export type {
+  CctvNewsItem,
+  CctvNewsDateStat,
+  CctvNewsQueryParams,
+  CctvNewsListResponse,
+} from './cctv-news'
 export { CyqPerfApiClient, cyqPerfApi } from './cyq-perf-api'
 export type { CyqPerfParams, CyqPerfData, CyqPerfStatistics } from './cyq-perf-api'
 export { CyqChipsApiClient, cyqChipsApi } from './cyq-chips-api'

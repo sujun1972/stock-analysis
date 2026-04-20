@@ -46,6 +46,7 @@ class StockDataCollectionService:
             self._get_dividend_context(ts_code),
             self._get_analyst_consensus(ts_code),
             self._get_recent_announcements(ts_code),
+            self._get_recent_news(ts_code),
             return_exceptions=True,
         )
 
@@ -53,11 +54,11 @@ class StockDataCollectionService:
             'basic', 'capital', 'shareholder', 'technical', 'financial',
             'risk', 'nine_turn', 'auction', 'smart_money',
             'limit_ecology', 'limit_history', 'auction_baseline', 'dividend',
-            'analyst_consensus', 'recent_announcements',
+            'analyst_consensus', 'recent_announcements', 'recent_news',
         ]
         (basic, capital, shareholder, technical, financial, risk, nine_turn,
          auction, smart_money, limit_ecology, limit_history, auction_baseline,
-         dividend, analyst_consensus, recent_announcements) = [
+         dividend, analyst_consensus, recent_announcements, recent_news) = [
             self._unwrap(v, label) for v, label in zip(results, labels)
         ]
 
@@ -80,6 +81,7 @@ class StockDataCollectionService:
             "dividend": dividend,
             "analyst_consensus": analyst_consensus,
             "recent_announcements": recent_announcements,
+            "recent_news": recent_news,
         }
 
     async def collect_and_format(self, ts_code: str, stock_name: str) -> tuple:
@@ -151,3 +153,7 @@ class StockDataCollectionService:
     async def _get_recent_announcements(self, ts_code: str, days: int = 30, limit: int = 20) -> Dict:
         """近 N 天公司公告（来源：stock_anns 表，AkShare 同步）。"""
         return await collectors.get_recent_announcements(ts_code, days=days, limit=limit)
+
+    async def _get_recent_news(self, ts_code: str, days: int = 7, limit: int = 30) -> Dict:
+        """近 N 天与该股关联的财经快讯（来源：news_flash 表，AkShare Phase 2）。"""
+        return await collectors.get_recent_news(ts_code, days=days, limit=limit)

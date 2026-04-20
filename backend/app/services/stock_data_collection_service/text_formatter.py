@@ -74,6 +74,11 @@ def format_as_text(data: Dict) -> str:
     _format_recent_announcements(lines, data.get('recent_announcements') or {})
 
     # ================================================================
+    # 三C、近期关联快讯（来自 AkShare 财新 + 东财个股新闻）
+    # ================================================================
+    _format_recent_news(lines, data.get('recent_news') or {})
+
+    # ================================================================
     # 四、技术指标（YAML 格式）
     # ================================================================
     _format_technical(lines, data)
@@ -84,6 +89,45 @@ def format_as_text(data: Dict) -> str:
     _format_financial_risk(lines, data)
 
     return '\n'.join(lines)
+
+
+def _format_recent_news(lines: list, news: Dict) -> None:
+    """渲染近 N 天与该股关联的财经快讯（来自 news_flash 表）。
+
+    数据层原则：只给时间 + 来源 + 标题 + 摘要（摘要 ≤ 80 字），不做情感判断。
+    缺失时显式写"数据不足"，区分"没数据"与"没事件"。
+    """
+    lines.append("")
+    lines.append("## 三C、近期关联快讯（事件面·财经动态）")
+    lines.append("")
+
+    if not news or not news.get('data_available'):
+        lines.append("- 数据不足：该股票在 `news_flash` 表中无关联快讯（可能尚未触发同步，或近期无覆盖）。")
+        lines.append("")
+        return
+
+    items = news.get('items') or []
+    days = news.get('days') or 7
+    total = news.get('total_in_window') or 0
+
+    if not items:
+        lines.append(f"- 近 {days} 天无关联快讯。")
+        lines.append("")
+        return
+
+    lines.append(f"近 {days} 天共 {total} 条关联快讯（按时间降序，最多展示前 {len(items)} 条）：")
+    lines.append("")
+    lines.append("| 时间 | 来源 | 标题 | 摘要 |")
+    lines.append("|------|------|------|------|")
+    for r in items:
+        t = (r.get('publish_time') or '').strip().replace('T', ' ')[:16]
+        src = (r.get('source') or '—').strip()
+        title_safe = (r.get('title') or '').strip().replace('|', '｜')
+        summary = (r.get('summary') or '').strip().replace('|', '｜').replace('\n', ' ')
+        if len(summary) > 80:
+            summary = summary[:80] + '…'
+        lines.append(f"| {t} | {src} | {title_safe} | {summary} |")
+    lines.append("")
 
 
 def _format_recent_announcements(lines: list, anns: Dict) -> None:

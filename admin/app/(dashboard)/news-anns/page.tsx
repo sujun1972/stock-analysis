@@ -2,7 +2,7 @@
 
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ScrollText } from 'lucide-react'
+import { ScrollText, Newspaper, Tv } from 'lucide-react'
 import Link from 'next/link'
 
 const modules = [
@@ -13,6 +13,20 @@ const modules = [
     href: '/news-anns/stock-anns',
     color: 'text-blue-600'
   },
+  {
+    title: '财经快讯',
+    description: '财新要闻精选（宏观/产业快讯）+ 东财个股新闻，带关联股票反查。免费替代 Tushare news / major_news',
+    icon: Newspaper,
+    href: '/news-anns/news-flash',
+    color: 'text-orange-600'
+  },
+  {
+    title: '新闻联播',
+    description: 'CCTV 新闻联播文字稿（按自然日），宏观政策信号背景。免费替代 Tushare cctv_news',
+    icon: Tv,
+    href: '/news-anns/cctv-news',
+    color: 'text-red-600'
+  },
 ]
 
 export default function NewsAnnsIndexPage() {
@@ -20,7 +34,7 @@ export default function NewsAnnsIndexPage() {
     <div className="space-y-6">
       <PageHeader
         title="新闻公告"
-        description="新闻资讯 & 公司公告数据源（Phase 1：公司公告；Phase 2 将补全财经快讯 + 新闻联播）"
+        description="新闻资讯 & 公司公告数据源（Phase 1 公司公告 + Phase 2 财经快讯 / 新闻联播，全部基于 AkShare 免费接口）"
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

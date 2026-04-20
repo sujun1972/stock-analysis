@@ -99,6 +99,8 @@ FULL_SYNC_REDIS_KEYS: Dict[str, str] = {
     "dc_daily":              "sync:dc_daily:full_history:progress",
     # 新闻公告
     "stock_anns":            "sync:stock_anns:full_history:progress",
+    "news_flash":            "sync:news_flash:full_history:progress",
+    "cctv_news":             "sync:cctv_news:full_history:progress",
 }
 
 

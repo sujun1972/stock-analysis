@@ -1922,7 +1922,100 @@ async def get_auction_baseline(ts_code: str) -> Dict:
 
 
 # ------------------------------------------------------------------
-# 新闻公告（近 N 天公司公告）— 供个股专家 + CIO Agent 引用事件面
+# 财经快讯 + 新闻联播 — 供个股专家 + CIO Agent 引用事件/宏观面（news_anns Phase 2）
+# ------------------------------------------------------------------
+
+async def get_recent_news(ts_code: str, days: int = 7, limit: int = 30) -> Dict:
+    """近 N 天与该股关联的财经快讯（元数据不含正文）。
+
+    数据源：`news_flash` 表（AkShare 财新要闻 + 东财个股新闻，GIN 数组索引按
+    `related_ts_codes` 反查）。
+
+    输出字段：
+      - items: [{publish_time, source, title, summary, url, tags}]
+      - total_in_window: int
+      - days: int
+      - data_available: bool（False 表示该股票在表中无关联快讯）
+    """
+    from app.repositories.news_flash_repository import NewsFlashRepository
+
+    repo = NewsFlashRepository()
+    try:
+        rows = await asyncio.to_thread(repo.query_by_stock, ts_code, int(days), int(limit))
+    except Exception as e:
+        logger.warning(f"[collectors] get_recent_news({ts_code}) 查询失败: {e}")
+        return {'items': [], 'total_in_window': 0, 'days': int(days), 'data_available': False}
+
+    if not rows:
+        return {'items': [], 'total_in_window': 0, 'days': int(days), 'data_available': False}
+
+    items = [
+        {
+            'publish_time': r.get('publish_time'),
+            'source': r.get('source'),
+            'title': r.get('title'),
+            'summary': r.get('summary'),
+            'url': r.get('url'),
+            'tags': r.get('tags', []),
+        }
+        for r in rows
+    ]
+    return {
+        'items': items,
+        'total_in_window': len(items),
+        'days': int(days),
+        'data_available': True,
+    }
+
+
+async def get_today_cctv_news(date: Optional[str] = None, lookback_days: int = 3, limit: int = 60) -> Dict:
+    """指定日期 / 最近 N 天的新闻联播摘要（宏观上下文）。
+
+    数据源：`cctv_news` 表（AkShare `news_cctv` 同步）。
+    - 若传 `date`，返回该日全部条目；
+    - 若不传，返回近 `lookback_days` 天的全部条目（按日期降序）。
+
+    输出字段：
+      - items: [{news_date, seq_no, title, content}]
+      - total: int
+      - query_type: 'single_day' / 'recent_window'
+      - data_available: bool
+    """
+    from app.repositories.cctv_news_repository import CctvNewsRepository
+
+    repo = CctvNewsRepository()
+    try:
+        if date:
+            rows = await asyncio.to_thread(repo.query_by_date, date, int(limit))
+            query_type = 'single_day'
+        else:
+            from datetime import datetime, timedelta
+            end = datetime.now().strftime('%Y-%m-%d')
+            start = (datetime.now() - timedelta(days=int(lookback_days))).strftime('%Y-%m-%d')
+            rows = await asyncio.to_thread(
+                repo.query_by_filters,
+                start_date=start, end_date=end, keyword=None,
+                page=1, page_size=int(limit),
+                sort_by='news_date', sort_order='desc',
+            )
+            query_type = 'recent_window'
+    except Exception as e:
+        logger.warning(f"[collectors] get_today_cctv_news 查询失败: {e}")
+        return {'items': [], 'total': 0, 'query_type': 'error', 'data_available': False}
+
+    if not rows:
+        return {'items': [], 'total': 0, 'query_type': query_type, 'data_available': False}
+
+    return {
+        'items': rows,
+        'total': len(rows),
+        'query_type': query_type,
+        'data_available': True,
+    }
+
+
+# ------------------------------------------------------------------
+# 公司公告 — 供个股专家 + CIO Agent 引用事件面（news_anns Phase 1）
 # ------------------------------------------------------------------
 
 async def get_recent_announcements(ts_code: str, days: int = 30, limit: int = 20) -> Dict:

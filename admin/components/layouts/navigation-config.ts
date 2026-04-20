@@ -12,6 +12,8 @@ import {
   Zap,
   Clock,
   ScrollText,
+  Newspaper,
+  Tv,
   Brain,
   Bell,
   Flame,
@@ -413,6 +415,16 @@ export const navItems: NavItem[] = [
         name: '公司公告',
         href: '/news-anns/stock-anns',
         icon: ScrollText
+      },
+      {
+        name: '财经快讯',
+        href: '/news-anns/news-flash',
+        icon: Newspaper
+      },
+      {
+        name: '新闻联播',
+        href: '/news-anns/cctv-news',
+        icon: Tv
       }
     ]
   },

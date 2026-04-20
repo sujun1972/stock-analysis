@@ -94,7 +94,7 @@ CIOAgentService                      ← backend/app/services/cio_agent_service.
     ↓
 create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（LangGraph）
     ↓
-8 个 LangChain Tool                  ← backend/app/services/langchain_tools.py
+10 个 LangChain Tool                 ← backend/app/services/langchain_tools.py
     ├── get_basic_market             基础盘面（价格/PE-PB 双窗口分位+估值通道/大盘相对强度/财务+滞后天数/行业/筹码/回购）
     ├── get_capital_flow             资金流向（主力分档：超大单/大单/中单/小单；近5/10日资金vs价格；北向滞后标注）
     ├── get_shareholder_info         股东信息（人数变化+滞后天数、减持、解禁）
@@ -102,9 +102,11 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
     ├── get_financial_reports        财报披露日期 + 业绩预告(24个月) + Forward PE 推演
     ├── get_risk_alerts              风险警示（ST、质押）
     ├── get_nine_turn                TD 序列（即神奇九转，第9根为变盘窗口）
-    └── get_recent_anns              近 N 天公司公告（标题/类型/日期/URL，来自 AkShare 东方财富聚合）
+    ├── get_recent_anns              近 N 天公司公告（标题/类型/日期/URL，来自 AkShare 东方财富聚合）
+    ├── get_recent_news              近 N 天关联财经快讯（财新要闻 + 东财个股新闻，news_flash 表 GIN 数组反查）
+    └── get_today_cctv_news          新闻联播文字稿（指定日或最近 N 天；宏观/政策信号背景）
 
-`StockDataCollectionService.collect_and_format()` 主链路另含六个维度尚未挂为 LangChain Tool；如需 CIO Agent 主动查询可在 `langchain_tools.py` 追加对应工具（`get_recent_anns` 已按该模式挂载）：
+`StockDataCollectionService.collect_and_format()` 主链路另含六个维度尚未挂为 LangChain Tool；如需 CIO Agent 主动查询可在 `langchain_tools.py` 追加对应工具（`get_recent_anns` / `get_recent_news` / `get_today_cctv_news` 已按该模式挂载）：
 - **smart_money**：融资融券明细 + 龙虎榜事件（含席位性质标记 `_SEAT_TAGS` / `_SEAT_SUBSTRING_TAGS`；无上榜时 `on_billboard_60d=False` 显式标记，避免 LLM 误判为数据缺失）
 - **limit_ecology**：涨停生态（最近交易日全市场涨停/跌停/炸板 + 连板天梯 Top5 + 最强板块 Top5 + 本股当日涨停身位）
 - **limit_history**：个股近 60 日涨停基因（涨停次数 / T+1 胜率 + 平均溢价 / 最近涨停距今交易日数）
@@ -112,6 +114,7 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
 - **dividend**：股息率 TTM + 最近实施年度（含税派息 + 分红率）+ 最新预案 + 连续分红年数 + 近 6 年派息历史（长线价值的"债性回报锚"）
 - **analyst_consensus**：近 60 日券商一致预期（基于 `report_rc` 表）— 机构覆盖数 + 评级分布 + EPS 共识（按年度聚合）+ 目标价中位数/空间（`min_price` 取值，`tp` 字段单位异常已过滤，目标价 > 当前价×4 视为污染剔除）
 - **recent_announcements**：近 30 天公司公告（标题/类型/日期/URL，元数据，来自 `stock_anns` 表 / AkShare 东方财富聚合）；text_formatter 渲染到"三B、近期公司公告"段，CIO Agent 通过 `get_recent_anns` 工具按需查询
+- **recent_news**：近 7 天关联财经快讯（`news_flash` 表 / AkShare 财新要闻 + 东财个股新闻），GIN 数组索引按 `related_ts_codes` 反查；text_formatter 渲染到"三C、近期关联快讯"段，CIO Agent 通过 `get_recent_news` 工具按需查询。caixin 来源无关联股，由 `StockCodeExtractor`（正则 + `stock_basic` 白名单双校验）从 title/summary 抽取后写入
 
 **PE / PB 估值分位双窗口（v2 起）**：`get_basic_market` 输出 `pe_valuation` / `pb_valuation`，各含 `window_3y` + `window_10y`（近周期 vs 全周期）。当两窗口分位差 ≥ 30pct 时附加 `divergence.note` 中性事实（由 LLM 判断是"估值泡沫"还是"盈利塌陷导致分母效应"）。长线专家 prompt v3 强制消费这两对分位 + 股息 + 卖方共识，避免单一 PE 分位对周期股的系统性误判。
 ```
@@ -236,15 +239,22 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
 
 **sync_configs 表**（`db_init/migrations/105_create_sync_configs.sql`）是所有数据表同步配置的单一数据源，驱动同步配置页面（`/settings/sync-config`）的展示和操作。
 
-**AkShare 数据源独立同步路径**（Phase 1 起引入，代表表：`stock_anns` 公司公告）：
+**AkShare 数据源独立同步路径**（现已覆盖公司公告 / 财经快讯 / 新闻联播）：
 
-部分数据源走 AkShare 免费接口而非 Tushare 付费接口。AkShare 接口签名（无 `limit/offset`，无统一 `start_date/end_date`）与 `TushareSyncBase.run_incremental_sync` 不兼容，需手写 Service 流程：
+| 表 | 数据来源（AkShare 接口） | 增量语义 | 全量能力 |
+|----|---------------------|---------|---------|
+| `stock_anns` | `stock_notice_report` + `stock_individual_notice_report` | 逐交易日拉全市场公告 | 按交易日并发 + Redis Set 续继 |
+| `news_flash` | `stock_news_main_cx`（caixin）+ `stock_news_em`（eastmoney 个股） | 高频增量（无日期参数） | 退化为单次增量（无历史能力） |
+| `cctv_news` | `news_cctv` | 按自然日逐日回看 N 天 | 按日并发 + Redis Set 续继 |
 
-- **Provider**：在 `core/src/providers/akshare/_mixins/` 下新建功能域 mixin（如 `news_and_anns.py`），挂到 `AkShareProvider` 的多重继承链上
-- **Service**：放在 `backend/app/services/news_anns/`（或新子包），**不继承** `TushareSyncBase`；手写 `sync_incremental` / `sync_by_stock` / `sync_full_history` 三个入口，并手动调用 `sync_history_repo.create` / `.complete`
+AkShare 接口签名（无 `limit/offset`，无统一 `start_date/end_date`，部分接口按自然日而非交易日）与 `TushareSyncBase.run_incremental_sync` 不兼容，需手写 Service 流程：
+
+- **Provider**：在 `core/src/providers/akshare/_mixins/` 下新建功能域 mixin（如 `news_and_anns.py`），挂到 `AkShareProvider` 的多重继承链上。多 schema 共存时用 `_call_and_wrap(normalizer=..., empty_factory=..., call_context=...)` 复用错误处理样板，不为每个数据域复制一份
+- **Service**：放在 `backend/app/services/news_anns/`（或新子包），**不继承** `TushareSyncBase`；手写 `sync_incremental` / `sync_by_stock` / `sync_full_history` 三个入口，并手动调用 `sync_history_repo.create` / `.complete`。接口无历史能力时 `sync_full_history` 退化为单次增量（参考 `news_flash_sync_service`），按钮仅兼容同步配置页
 - **Celery 任务**：仍可用 `_task_factory.make_incremental_task` / `make_full_history_task`，把 `raw_sync_method` 指回 `sync_incremental`，参考 `backend/app/tasks/news_anns_tasks.py`
-- **sync_configs**：分类 `新闻公告`（与 Tushare 数据源并列），`passive_sync_enabled=true` 支持单只被动同步（Celery 任务 `tasks.sync_stock_anns_single`）
+- **sync_configs**：分类 `新闻公告`（与 Tushare 数据源并列），`passive_sync_enabled=true` 支持单只被动同步（如 `tasks.sync_stock_anns_single` / `tasks.sync_news_flash_single`）
 - **Service 层重试**：Service 自己做的非 Provider 爬虫（如 `anns_content_fetcher` 抓 PDF/HTML 正文）用 `app.services.news_anns.AkShareRetryDecorator` —— 指数退避 + 限流识别 + 失败告警，支持同步/异步函数
+- **文本 → ts_code 抽取**：`StockCodeExtractor`（`app.services.news_anns.stock_code_extractor`）提供"正则 + `stock_basic` 白名单"双校验，覆盖上市/退市/暂停三种状态。`.extract_from_items(items)` 就地为 dict 列表填充 `related_ts_codes`，合并已有与正则抽取结果。caixin 快讯因原始接口无关联股，必须经此抽取才能 GIN 反查
 
 ## 已移除功能（2026-03-25）
 

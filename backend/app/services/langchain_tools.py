@@ -657,6 +657,91 @@ async def get_recent_anns(ts_code: str, days: int = 30) -> str:
     return "\n".join(header_lines)
 
 
+@tool
+async def get_recent_news(ts_code: str, days: int = 7) -> str:
+    """获取该股近 N 天关联的财经快讯（财新要闻 + 东财个股新闻聚合）。
+
+    数据源：`news_flash` 表，GIN 数组索引按 `related_ts_codes` 反查。
+    返回 Markdown 表格（时间 / 来源 / 标题 / 摘要），适合判断"除公告之外的舆情面"：
+    产业动态、监管表态、媒体报道、行业分析等。与 `get_recent_anns` 互补——
+    公告走 cninfo/eastmoney 聚合，本工具走财经媒体快讯，两者覆盖事件面不同侧。
+
+    参数：
+      - ts_code: 股票代码（'300750.SZ' 或纯 6 位 '300750'）
+      - days:    回看天数（默认 7）
+    """
+    from app.services.stock_data_collection_service import collectors
+
+    try:
+        data = await collectors.get_recent_news(ts_code, days=days, limit=30)
+    except Exception as e:
+        logger.warning(f"[tool:get_recent_news] {ts_code} 异常: {e}")
+        return f"获取近期快讯失败: {e}"
+
+    if not data.get('data_available'):
+        return f"{ts_code} 在 news_flash 表中暂无关联快讯（可能尚未触发同步，或近 {days} 天无覆盖）。"
+    items = data.get('items') or []
+    if not items:
+        return f"{ts_code} 近 {days} 天无关联快讯。"
+
+    lines = [
+        f"**{ts_code} 近 {days} 天关联快讯（共 {data.get('total_in_window', 0)} 条）**",
+        "",
+        "| 时间 | 来源 | 标题 | 摘要 |",
+        "|------|------|------|------|",
+    ]
+    for r in items:
+        t = (r.get('publish_time') or '').strip().replace('T', ' ')[:16]
+        src = (r.get('source') or '—').strip()
+        title = (r.get('title') or '').strip().replace('|', '｜')
+        summary = (r.get('summary') or '').strip().replace('|', '｜').replace('\n', ' ')
+        if len(summary) > 120:
+            summary = summary[:120] + '…'
+        lines.append(f"| {t} | {src} | {title} | {summary} |")
+    return "\n".join(lines)
+
+
+@tool
+async def get_today_cctv_news(date: str = "", lookback_days: int = 3) -> str:
+    """获取指定日期或最近 N 天的新闻联播文字稿（宏观背景 / 政策信号）。
+
+    数据源：`cctv_news` 表（AkShare `news_cctv` 同步）。
+    适用场景：宏观风险专家判断当下政策倾向、监管基调、国际局势；CIO 做跨股
+    宏观定位（如供给侧、军工、新能源等主题的联播曝光度）。
+
+    参数：
+      - date:          指定单日 'YYYY-MM-DD' 或 'YYYYMMDD'；留空则走 lookback_days 模式
+      - lookback_days: 不传 date 时回看最近 N 天（默认 3）
+    """
+    from app.services.stock_data_collection_service import collectors
+
+    try:
+        query_date = date.strip() if date else None
+        data = await collectors.get_today_cctv_news(date=query_date, lookback_days=int(lookback_days), limit=60)
+    except Exception as e:
+        logger.warning(f"[tool:get_today_cctv_news] 异常: {e}")
+        return f"获取新闻联播失败: {e}"
+
+    if not data.get('data_available'):
+        if query_date:
+            return f"{query_date} 无新闻联播记录（可能为放假日或尚未同步）。"
+        return f"近 {lookback_days} 天无新闻联播记录（可能尚未触发同步）。"
+
+    items = data.get('items') or []
+    header = (
+        f"**新闻联播 {query_date}**"
+        if query_date
+        else f"**新闻联播近 {lookback_days} 天（共 {len(items)} 条）**"
+    )
+    lines = [header, "", "| 日期 | 序号 | 标题 |", "|------|------|------|"]
+    for r in items:
+        d = (r.get('news_date') or '').strip()
+        seq = r.get('seq_no') or ''
+        title = (r.get('title') or '').strip().replace('|', '｜')
+        lines.append(f"| {d} | {seq} | {title} |")
+    return "\n".join(lines)
+
+
 CIO_TOOLS = [
     get_basic_market,
     get_capital_flow,
@@ -666,5 +751,7 @@ CIO_TOOLS = [
     get_risk_alerts,
     get_nine_turn,
     get_recent_anns,
+    get_recent_news,        # news_anns Phase 2
+    get_today_cctv_news,    # news_anns Phase 2
 ]
-"""CIO Agent 可用的 8 个数据查询工具（含公司公告，news_anns Phase 1）"""
+"""CIO Agent 可用的数据查询工具（含公告、快讯、联播 = news_anns Phase 1 + 2）"""

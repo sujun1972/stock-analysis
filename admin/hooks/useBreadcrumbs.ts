@@ -27,6 +27,8 @@ import {
   Zap,
   Clock,
   ScrollText,
+  Newspaper,
+  Tv,
   Brain,
   Bell,
   Flame,
@@ -130,6 +132,8 @@ const routeLabelMap: Record<string, string> = {
   // 新闻公告
   'news-anns': '新闻公告',
   'stock-anns': '公司公告',
+  'news-flash': '财经快讯',
+  'cctv-news': '新闻联播',
 
   // 基础数据子路由
   'stock-list': '股票列表',
@@ -261,6 +265,8 @@ const routeIconMap: Record<string, React.ComponentType<{ className?: string }>> 
   // 新闻公告
   'news-anns': Bell,
   'stock-anns': ScrollText,
+  'news-flash': Newspaper,
+  'cctv-news': Tv,
 
   // 基础数据子路由
   'stock-list': Database,

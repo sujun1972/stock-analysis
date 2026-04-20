@@ -1028,6 +1028,55 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 602,
         'points_consumption': 0,
         'default_params': {'ts_code': None, 'days': 90}
+    },
+
+    # Phase 2: 财经快讯
+    'tasks.sync_news_flash': {
+        'task': 'tasks.sync_news_flash',
+        'name': '财经快讯（增量）',
+        'description': '同步财新要闻精选（AkShare stock_news_main_cx，替代 Tushare news）。接口无日期参数，建议每 30 分钟执行一次以持续积累。',
+        'category': '新闻公告',
+        'display_order': 610,
+        'points_consumption': 0,
+        'default_params': {'start_date': None, 'end_date': None}
+    },
+    'tasks.sync_news_flash_full_history': {
+        'task': 'tasks.sync_news_flash_full_history',
+        'name': '财经快讯（全量）',
+        'description': 'AkShare 快讯接口无历史参数，全量等价于一次增量；按钮仅为兼容同步配置页面。',
+        'category': '新闻公告',
+        'display_order': 611,
+        'points_consumption': 0,
+        'default_params': {'start_date': None, 'concurrency': 1}
+    },
+    'tasks.sync_news_flash_single': {
+        'task': 'tasks.sync_news_flash_single',
+        'name': '财经快讯（被动单只）',
+        'description': '单只股票被动同步东财个股新闻（ak.stock_news_em），走搜索接口约 1-2s / 股。',
+        'category': '新闻公告',
+        'display_order': 612,
+        'points_consumption': 0,
+        'default_params': {'ts_code': None, 'days': 7}
+    },
+
+    # Phase 2: 新闻联播
+    'tasks.sync_cctv_news': {
+        'task': 'tasks.sync_cctv_news',
+        'name': '新闻联播（增量）',
+        'description': '同步新闻联播文字稿（AkShare news_cctv，替代 Tushare cctv_news）。按自然日抓取，默认回看 3 天；单日接口 3-8s。',
+        'category': '新闻公告',
+        'display_order': 620,
+        'points_consumption': 0,
+        'default_params': {'start_date': None, 'end_date': None}
+    },
+    'tasks.sync_cctv_news_full_history': {
+        'task': 'tasks.sync_cctv_news_full_history',
+        'name': '新闻联播（全量历史）',
+        'description': '按日并发 + Redis Set 续继；全量覆盖近 5 年约 1500 日、3-4 小时。可在 sync_configs 缩短起始日期以控制耗时。',
+        'category': '新闻公告',
+        'display_order': 621,
+        'points_consumption': 0,
+        'default_params': {'start_date': None, 'concurrency': 1}
     }
 }
 
