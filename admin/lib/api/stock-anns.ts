@@ -18,6 +18,13 @@ export interface StockAnnsItem {
   has_content: boolean
   content_fetched_at: string | null
   created_at?: string | null
+  // 舆情打分字段（未打分时全部为 null）
+  event_tags?: string[] | null
+  sentiment_score?: number | null
+  sentiment_impact?: 'bullish' | 'bearish' | 'neutral' | null
+  scoring_reason?: string | null
+  score_model?: string | null
+  scored_at?: string | null
 }
 
 

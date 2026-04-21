@@ -1957,6 +1957,11 @@ async def get_recent_news(ts_code: str, days: int = 7, limit: int = 30) -> Dict:
             'summary': r.get('summary'),
             'url': r.get('url'),
             'tags': r.get('tags', []),
+            # 舆情打分字段
+            'sentiment_score': r.get('sentiment_score'),
+            'sentiment_impact': r.get('sentiment_impact'),
+            'sentiment_tags': r.get('sentiment_tags', []),
+            'scoring_reason': r.get('scoring_reason'),
         }
         for r in rows
     ]
@@ -2049,6 +2054,11 @@ async def get_recent_announcements(ts_code: str, days: int = 30, limit: int = 20
             'title': r.get('title'),
             'url': r.get('url'),
             'has_content': r.get('has_content', False),
+            # 舆情打分字段
+            'event_tags': r.get('event_tags', []),
+            'sentiment_score': r.get('sentiment_score'),
+            'sentiment_impact': r.get('sentiment_impact'),
+            'scoring_reason': r.get('scoring_reason'),
         }
         for r in rows
     ]

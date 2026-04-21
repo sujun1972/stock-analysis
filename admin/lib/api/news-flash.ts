@@ -17,6 +17,13 @@ export interface NewsFlashItem {
   tags: string[]
   related_ts_codes: string[]
   created_at: string | null
+  // 舆情打分字段（未打分时全部为 null）
+  sentiment_score?: number | null
+  sentiment_impact?: 'bullish' | 'bearish' | 'neutral' | null
+  sentiment_tags?: string[] | null
+  scoring_reason?: string | null
+  score_model?: string | null
+  scored_at?: string | null
 }
 
 

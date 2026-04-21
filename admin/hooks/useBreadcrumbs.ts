@@ -134,6 +134,7 @@ const routeLabelMap: Record<string, string> = {
   'stock-anns': '公司公告',
   'news-flash': '财经快讯',
   'cctv-news': '新闻联播',
+  'macro-indicators': '宏观经济指标',
 
   // 基础数据子路由
   'stock-list': '股票列表',
@@ -267,6 +268,7 @@ const routeIconMap: Record<string, React.ComponentType<{ className?: string }>> 
   'stock-anns': ScrollText,
   'news-flash': Newspaper,
   'cctv-news': Tv,
+  'macro-indicators': BarChart3,
 
   // 基础数据子路由
   'stock-list': Database,

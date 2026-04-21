@@ -645,15 +645,24 @@ async def get_recent_anns(ts_code: str, days: int = 30) -> str:
     header_lines = [
         f"**{ts_code} 近 {days} 天公告（共 {data.get('total_in_window', 0)} 条）**",
         "",
-        "| 日期 | 类型 | 标题 | URL |",
-        "|------|------|------|-----|",
+        "| 日期 | 类型 | 事件标签 | 情绪 | 标题 | URL |",
+        "|------|------|---------|------|------|-----|",
     ]
     for r in items:
         date = (r.get('ann_date') or '').strip()
         anno_type = (r.get('anno_type') or '—').strip()
         title = (r.get('title') or '').strip().replace('|', '｜')
         url = r.get('url') or ''
-        header_lines.append(f"| {date} | {anno_type} | {title} | {url} |")
+        event_tags = r.get('event_tags') or []
+        tags_str = ','.join(event_tags) if event_tags else '—'
+        impact = r.get('sentiment_impact')
+        score = r.get('sentiment_score')
+        if impact and score is not None:
+            arrow = '🟢' if impact == 'bullish' else ('🔴' if impact == 'bearish' else '⚪')
+            sent_str = f"{arrow}{score:+.2f}"
+        else:
+            sent_str = '未打分'
+        header_lines.append(f"| {date} | {anno_type} | {tags_str} | {sent_str} | {title} | {url} |")
     return "\n".join(header_lines)
 
 
@@ -687,8 +696,8 @@ async def get_recent_news(ts_code: str, days: int = 7) -> str:
     lines = [
         f"**{ts_code} 近 {days} 天关联快讯（共 {data.get('total_in_window', 0)} 条）**",
         "",
-        "| 时间 | 来源 | 标题 | 摘要 |",
-        "|------|------|------|------|",
+        "| 时间 | 来源 | 情绪 | 主题 | 标题 | 摘要 |",
+        "|------|------|------|------|------|------|",
     ]
     for r in items:
         t = (r.get('publish_time') or '').strip().replace('T', ' ')[:16]
@@ -697,7 +706,16 @@ async def get_recent_news(ts_code: str, days: int = 7) -> str:
         summary = (r.get('summary') or '').strip().replace('|', '｜').replace('\n', ' ')
         if len(summary) > 120:
             summary = summary[:120] + '…'
-        lines.append(f"| {t} | {src} | {title} | {summary} |")
+        impact = r.get('sentiment_impact')
+        score = r.get('sentiment_score')
+        if impact and score is not None:
+            arrow = '🟢' if impact == 'bullish' else ('🔴' if impact == 'bearish' else '⚪')
+            sent_str = f"{arrow}{score:+.2f}"
+        else:
+            sent_str = '未打分'
+        theme_tags = r.get('sentiment_tags') or []
+        theme_str = ','.join(theme_tags) if theme_tags else '—'
+        lines.append(f"| {t} | {src} | {sent_str} | {theme_str} | {title} | {summary} |")
     return "\n".join(lines)
 
 

@@ -15,6 +15,11 @@ Phase 2（财经快讯 + 新闻联播）：
 Phase 3（宏观经济指标）：
   - tasks.sync_macro_indicators               增量（CPI/PPI/PMI/M2/新增社融/GDP/Shibor，全历史 UPSERT）
   - tasks.sync_macro_indicators_full_history  同 sync_macro_indicators（AkShare 接口无日期参数）
+
+Phase 5（舆情情绪打分）：
+  - tasks.score_stock_anns_sentiment   公告批量打分（每次 30 条，未打分的按 ann_date 降序）
+  - tasks.score_news_flash_sentiment   快讯批量打分（每次 30 条，related_ts_codes 非空）
+  两个任务可同步完成后由 Service 层触发，也可定时扫尾。
 """
 
 from __future__ import annotations
@@ -220,3 +225,53 @@ sync_macro_indicators_full_history_task = make_full_history_task(
     accept_strategy_param=False,
     accept_max_rpm=False,
 )
+
+
+# ==================================================================
+# Phase 5: 舆情情绪打分
+# ==================================================================
+
+# 单次批量 30 条，LLM 调用 5-20s；定时 30min 扫一次尾，同步后可主动触发
+_SENTIMENT_BATCH_SIZE = 30
+
+
+@celery_app.task(
+    bind=True,
+    name="tasks.score_stock_anns_sentiment",
+    max_retries=0,
+    soft_time_limit=300,
+    time_limit=360,
+)
+def score_stock_anns_sentiment_task(self, limit: int = _SENTIMENT_BATCH_SIZE, provider: str = None):
+    """公告舆情批量打分（事件标签 + 情绪 + 影响方向）。"""
+    from app.services.news_anns.sentiment_scoring_service import get_sentiment_scoring_service
+
+    logger.info(f"[Celery] 公告舆情打分 limit={limit} provider={provider}")
+    try:
+        service = get_sentiment_scoring_service()
+        return run_async_in_celery(service.run_batch_anns, limit=int(limit), provider=provider)
+    except Exception as exc:
+        logger.error(f"公告舆情打分异常: {exc}")
+        logger.error(traceback.format_exc())
+        raise
+
+
+@celery_app.task(
+    bind=True,
+    name="tasks.score_news_flash_sentiment",
+    max_retries=0,
+    soft_time_limit=300,
+    time_limit=360,
+)
+def score_news_flash_sentiment_task(self, limit: int = _SENTIMENT_BATCH_SIZE, provider: str = None):
+    """快讯舆情批量打分（情绪 + 主题标签；仅 related_ts_codes 非空）。"""
+    from app.services.news_anns.sentiment_scoring_service import get_sentiment_scoring_service
+
+    logger.info(f"[Celery] 快讯舆情打分 limit={limit} provider={provider}")
+    try:
+        service = get_sentiment_scoring_service()
+        return run_async_in_celery(service.run_batch_news, limit=int(limit), provider=provider)
+    except Exception as exc:
+        logger.error(f"快讯舆情打分异常: {exc}")
+        logger.error(traceback.format_exc())
+        raise

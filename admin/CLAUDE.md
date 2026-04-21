@@ -510,7 +510,18 @@ const CATEGORY_ORDER = [
 
 新增分类时同步更新此常量，保持与 `AdminLayout.tsx` 侧边菜单一致。
 
-**`新闻公告`分类**（AkShare 免费数据源）：Phase 1 交付公司公告（`stock_anns`），路由 `/news-anns/stock-anns`。与 Tushare 链路并列独立分类，前端列表页通过 `stockAnnsApi`（`lib/api/stock-anns.ts`）访问后端 `/api/stock-anns` 端点。导航图标用 `Bell` + `ScrollText`，已在 `navigation-config.ts` 和 `useBreadcrumbs.ts` 登记。
+**`新闻公告`分类**（AkShare 免费数据源）：共 4 个子页，路由前缀 `/news-anns/`。
+
+| 路由 | 后端 API | 说明 |
+|------|---------|------|
+| `/news-anns/stock-anns` | `/api/stock-anns` | 公司公告列表（含舆情打分：事件标签 + 情绪） |
+| `/news-anns/news-flash` | `/api/news-flash` | 财经快讯（含情绪 + 主题标签） |
+| `/news-anns/cctv-news` | `/api/cctv-news` | 新闻联播文字稿 |
+| `/news-anns/macro-indicators` | `/api/macro-indicators` | 宏观经济指标（快照卡片 + 时序图 + 列表） |
+
+导航图标统一放在 `navigation-config.ts` + `useBreadcrumbs.ts` 两处登记。新增子页时同步 3 个地方：导航 / 面包屑 / 父页（`/news-anns/page.tsx`）的卡片。
+
+**舆情打分展示约定**：`SentimentBadge`（`components/common/SentimentBadge.tsx`）统一渲染情绪徽章（🟢 bullish / 🔴 bearish / ⚪ neutral / 灰色"未打分"）。公告列表加 "事件标签"列（蓝色 pill），快讯列表加 "主题" 列（紫色 pill）。
 
 ---
 
@@ -655,10 +666,17 @@ Admin 的 `/settings/prompt-templates` 页面通过 `BUSINESS_TYPE_LABELS`（`ad
 | `longterm_value_watcher` | 长线价值守望者观点 |
 | `cio_directive` | 首席投资官（CIO）指令 |
 | `macro_risk_expert` | 天眼宏观风险专家 |
+| `sentiment_scoring` | 舆情情绪打分（公告 / 快讯批量） |
+
+**同步维护的 3 处映射**（新增 `business_type` 必须全改）：
+- 后端：`backend/app/schemas/llm_call_log.py` 的 `BusinessType` 枚举
+- admin Prompt 管理：`admin/types/prompt-template.ts` 的 `BUSINESS_TYPES` + `BUSINESS_TYPE_LABELS`
+- admin LLM 调用日志：`admin/lib/llm-logs-api.ts` 的 `businessTypeMap` + `LLMCallLogQuery.business_type` 联合类型
 
 **数据库初始化**：
 - 策略类型模板：运行 `backend/scripts/migrate_strategy_prompt_templates.py`
 - 专家观点模板（游资/中线/长线/CIO）：运行 `backend/scripts/migrate_expert_view_templates.py`
 - 宏观风险专家模板：运行 `backend/scripts/migrate_macro_risk_expert_template.py`
+- 舆情打分模板（公告 + 快讯）：运行 `backend/scripts/migrate_sentiment_scoring_templates.py`
 
 **后端查找逻辑**（`ai_service.py`）：`_STRATEGY_TYPE_BUSINESS_TYPE` 字典将 `strategy_type`（`entry`/`exit`/`stock_selection`）映射到 `business_type`，`AIStrategyService._load_db_prompt()` 据此加载对应模板；模板缺失时降级使用 `STRATEGY_TYPE_FRAMEWORKS` 硬编码片段。

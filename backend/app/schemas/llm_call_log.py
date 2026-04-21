@@ -15,6 +15,7 @@ class BusinessType(str, Enum):
     PREMARKET_ANALYSIS = "premarket_analysis"
     STRATEGY_GENERATION = "strategy_generation"
     STOCK_EXPERT_ANALYSIS = "stock_expert_analysis"
+    SENTIMENT_SCORING = "sentiment_scoring"  # 公告/快讯批量情绪打分
 
 
 class CallStatus(str, Enum):

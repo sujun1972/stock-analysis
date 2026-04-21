@@ -131,7 +131,8 @@ class StockAnnsRepository(BaseRepository):
         self._enforce_limit(limit)
         query = f"""
             SELECT ts_code, ann_date, title, anno_type, stock_name, url, source,
-                   (content IS NOT NULL) AS has_content, content_fetched_at
+                   (content IS NOT NULL) AS has_content, content_fetched_at,
+                   event_tags, sentiment_score, sentiment_impact, scoring_reason, score_model, scored_at
             FROM {self.TABLE_NAME}
             WHERE ts_code = %s
               AND ann_date >= CURRENT_DATE - (%s::INT * INTERVAL '1 day')
@@ -147,7 +148,8 @@ class StockAnnsRepository(BaseRepository):
         date_fmt = self._ensure_dash_date(ann_date)
         query = f"""
             SELECT ts_code, ann_date, title, anno_type, stock_name, url, source,
-                   (content IS NOT NULL) AS has_content, content_fetched_at
+                   (content IS NOT NULL) AS has_content, content_fetched_at,
+                   event_tags, sentiment_score, sentiment_impact, scoring_reason, score_model, scored_at
             FROM {self.TABLE_NAME}
             WHERE ann_date = %s
             ORDER BY ts_code, title
@@ -179,7 +181,9 @@ class StockAnnsRepository(BaseRepository):
         offset = max(0, (int(page) - 1) * int(page_size))
         query = f"""
             SELECT ts_code, ann_date, title, anno_type, stock_name, url, source,
-                   (content IS NOT NULL) AS has_content, content_fetched_at, created_at
+                   (content IS NOT NULL) AS has_content, content_fetched_at,
+                   event_tags, sentiment_score, sentiment_impact, scoring_reason, score_model, scored_at,
+                   created_at
             FROM {self.TABLE_NAME}
             WHERE {where}
             {order_clause}
@@ -236,6 +240,80 @@ class StockAnnsRepository(BaseRepository):
         """
         rows = self.execute_query(query, (int(days), int(limit)))
         return [{'anno_type': r[0], 'count': int(r[1])} for r in rows]
+
+    def get_unscored_batch(self, limit: int = 30) -> List[Dict]:
+        """取未打分的公告批次（Phase 5 舆情打分）。
+
+        条件：`scored_at IS NULL`（走 idx_stock_anns_unscored 部分索引）；
+        只取 `ts_code` 非空且 `title` 非空的记录；按 ann_date 降序"先打新"。
+        返回字段供 LLM prompt 使用：id/title/anno_type/stock_name。
+        `id` 是合成主键 `ts_code|ann_date|title`（回写时解包）。
+        """
+        self._enforce_limit(limit)
+        query = f"""
+            SELECT ts_code, ann_date, title, anno_type, stock_name
+            FROM {self.TABLE_NAME}
+            WHERE scored_at IS NULL
+              AND ts_code IS NOT NULL AND ts_code <> ''
+              AND title IS NOT NULL AND title <> ''
+            ORDER BY ann_date DESC, ts_code, title
+            LIMIT %s
+        """
+        rows = self.execute_query(query, (int(limit),))
+        return [
+            {
+                'id': f"{r[0]}|{r[1].strftime('%Y-%m-%d') if hasattr(r[1], 'strftime') else r[1]}|{r[2]}",
+                'ts_code': r[0],
+                'ann_date': r[1].strftime('%Y-%m-%d') if hasattr(r[1], 'strftime') else str(r[1]),
+                'title': r[2],
+                'anno_type': r[3],
+                'stock_name': r[4],
+            }
+            for r in rows
+        ]
+
+    def bulk_update_scores(self, scores: List[Dict[str, Any]]) -> int:
+        """批量回写舆情打分结果。
+
+        每个 dict 至少含：id（ts_code|ann_date|title）、event_tags、sentiment_score、
+        sentiment_impact、scoring_reason、score_model。
+        `scored_at` 由数据库 CURRENT_TIMESTAMP 写入。
+        """
+        if not scores:
+            return 0
+        updates: List[tuple] = []
+        for s in scores:
+            parts = str(s.get('id') or '').split('|', 2)
+            if len(parts) != 3:
+                continue
+            ts_code, ann_date, title = parts
+            event_tags = s.get('event_tags') or None
+            if event_tags is not None and not isinstance(event_tags, list):
+                event_tags = list(event_tags)
+            updates.append((
+                event_tags,
+                _to_py(s.get('sentiment_score')),
+                _to_py(s.get('sentiment_impact')),
+                _to_py(s.get('scoring_reason')),
+                _to_py(s.get('score_model')),
+                ts_code,
+                self._ensure_dash_date(ann_date),
+                title,
+            ))
+        if not updates:
+            return 0
+        query = f"""
+            UPDATE {self.TABLE_NAME}
+            SET event_tags       = %s,
+                sentiment_score  = %s,
+                sentiment_impact = %s,
+                scoring_reason   = %s,
+                score_model      = %s,
+                scored_at        = CURRENT_TIMESTAMP,
+                updated_at       = CURRENT_TIMESTAMP
+            WHERE ts_code = %s AND ann_date = %s AND title = %s
+        """
+        return self.execute_batch(query, updates)
 
     def get_missing_content_urls(self, limit: int = 5) -> List[Dict]:
         """返回尚未抓取正文的 URL（content_fetched_at IS NULL 且 url IS NOT NULL）。
@@ -335,6 +413,17 @@ class StockAnnsRepository(BaseRepository):
             'has_content': bool(row[7]),
             'content_fetched_at': row[8].isoformat() if row[8] else None,
         }
-        if include_created and len(row) > 9:
-            d['created_at'] = row[9].isoformat() if row[9] else None
+        # 舆情打分列（6 列：event_tags / sentiment_score / sentiment_impact /
+        # scoring_reason / score_model / scored_at），查询 SQL 均已固定带上
+        if len(row) > 14:
+            d['event_tags'] = list(row[9]) if row[9] else []
+            score = row[10]
+            d['sentiment_score'] = float(score) if score is not None else None
+            d['sentiment_impact'] = row[11]
+            d['scoring_reason'] = row[12]
+            d['score_model'] = row[13]
+            d['scored_at'] = row[14].isoformat() if row[14] else None
+        # include_created 的版本在最后一列带 created_at
+        if include_created and len(row) > 15:
+            d['created_at'] = row[15].isoformat() if row[15] else None
         return d

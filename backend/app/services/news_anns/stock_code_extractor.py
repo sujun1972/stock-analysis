@@ -105,16 +105,28 @@ class StockCodeExtractor:
         约定每条 dict 至少包含 `title` / `summary` 之一；已有 `related_ts_codes` 则合并去重。
         用于 Service 层批量处理：eastmoney 来源已自带 [ts_code]，caixin 来源需 extract。
         """
+        pure_map = _cache.pure_to_ts()
         for item in items:
             existing = item.get('related_ts_codes') or []
             # AkShare 返回的 tuple / numpy array 统一成 list
             if not isinstance(existing, list):
                 existing = list(existing)
+            # 兜底：existing 里混入 6 位纯数字的历史数据，通过白名单补全为 ts_code
+            normalized_existing: List[str] = []
+            for tc in existing:
+                if tc is None:
+                    continue
+                s = str(tc).strip().upper()
+                if not s:
+                    continue
+                if '.' not in s and s.isdigit() and len(s) == 6:
+                    s = pure_map.get(s, s)
+                normalized_existing.append(s)
             text_parts = [str(item.get('title') or ''), str(item.get('summary') or '')]
             extracted = StockCodeExtractor.extract(' '.join(text_parts))
             merged: List[str] = []
             seen: Set[str] = set()
-            for tc in (*existing, *extracted):
+            for tc in (*normalized_existing, *extracted):
                 if tc and tc not in seen:
                     seen.add(tc)
                     merged.append(tc)

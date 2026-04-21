@@ -117,6 +117,9 @@ class StockAnnsSyncService:
                 self.sync_history_repo.complete,
                 history_id, status, total_records, last_success_date or end_date, err_msg,
             )
+            # 同步后主动触发一次舆情打分（挑一批未打分的）；失败不影响主流程
+            if total_records > 0:
+                self._trigger_sentiment_scoring()
             return {
                 "status": status,
                 "records": total_records,
@@ -180,6 +183,8 @@ class StockAnnsSyncService:
 
         count = await asyncio.to_thread(self.anns_repo.bulk_upsert, df)
         logger.info(f"[stock_anns] 被动同步 {ts_code} 入库 {count} 条（近 {days} 天）")
+        if count > 0:
+            self._trigger_sentiment_scoring()
         return {"status": "success", "records": count, "ts_code": ts_code, "days": int(days)}
 
     # -------------------------------------------------
@@ -320,3 +325,17 @@ class StockAnnsSyncService:
     async def get_recent_by_stock(self, ts_code: str, days: int = 30, limit: int = 50) -> List[Dict]:
         """CIO Tool / 个股专家使用：最近 N 天的公告列表。"""
         return await asyncio.to_thread(self.anns_repo.query_by_stock, ts_code, int(days), int(limit))
+
+    # -------------------------------------------------
+    # 舆情打分触发（同步完成后主动派发 Celery 任务）
+    # -------------------------------------------------
+
+    @staticmethod
+    def _trigger_sentiment_scoring() -> None:
+        """send_task 派发避免顶层 import 任务模块造成循环依赖。"""
+        try:
+            from app.celery_app import celery_app
+            celery_app.send_task('tasks.score_stock_anns_sentiment')
+            logger.debug("[stock_anns] 已派发 tasks.score_stock_anns_sentiment")
+        except Exception as e:
+            logger.warning(f"[stock_anns] 派发舆情打分任务失败（不影响主流程）: {e}")

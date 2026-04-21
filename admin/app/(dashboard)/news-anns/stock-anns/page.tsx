@@ -10,6 +10,7 @@ import { DataTable, Column } from '@/components/common/DataTable'
 import { DatePicker } from '@/components/ui/date-picker'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { BulkOpsButtons } from '@/components/common/BulkOpsButtons'
+import { SentimentBadge } from '@/components/common/SentimentBadge'
 import { useDataPage } from '@/hooks/useDataPage'
 import { stockAnnsApi, type StockAnnsItem, type AnnoTypeStat } from '@/lib/api'
 import { toDateStr } from '@/lib/date-utils'
@@ -93,6 +94,40 @@ export default function StockAnnsPage() {
       key: 'anno_type',
       header: '类型',
       accessor: (row) => row.anno_type || '—',
+      width: 140,
+    },
+    {
+      key: 'sentiment',
+      header: '情绪',
+      accessor: (row) => (
+        <SentimentBadge
+          score={row.sentiment_score}
+          impact={row.sentiment_impact}
+          reason={row.scoring_reason}
+        />
+      ),
+      width: 90,
+      cellClassName: 'text-center whitespace-nowrap',
+    },
+    {
+      key: 'event_tags',
+      header: '事件标签',
+      accessor: (row) => {
+        const tags = row.event_tags || []
+        if (tags.length === 0) return <span className="text-gray-400">—</span>
+        return (
+          <div className="flex flex-wrap gap-1">
+            {tags.map((t) => (
+              <span
+                key={t}
+                className="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-xs text-blue-700"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        )
+      },
       width: 140,
       cellClassName: 'whitespace-nowrap',
     },

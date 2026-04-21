@@ -157,6 +157,7 @@ export const BUSINESS_TYPES = {
   LONGTERM_REVIEW: 'longterm_review',
   CIO_DIRECTIVE: 'cio_directive',
   MACRO_RISK_EXPERT: 'macro_risk_expert',
+  SENTIMENT_SCORING: 'sentiment_scoring',
 } as const
 
 export const BUSINESS_TYPE_LABELS: Record<string, string> = {
@@ -176,4 +177,5 @@ export const BUSINESS_TYPE_LABELS: Record<string, string> = {
   longterm_review: '长线价值守望者·事后复盘',
   cio_directive: '首席投资官（CIO）指令',
   macro_risk_expert: '天眼宏观风险专家',
+  sentiment_scoring: '舆情情绪打分',
 }

@@ -1097,6 +1097,26 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 631,
         'points_consumption': 0,
         'default_params': {'start_date': None, 'concurrency': 1}
+    },
+
+    # Phase 5: 舆情情绪打分
+    'tasks.score_stock_anns_sentiment': {
+        'task': 'tasks.score_stock_anns_sentiment',
+        'name': '公告舆情打分（批量）',
+        'description': '批量给未打分公告打事件标签 + 情绪分（单次 30 条，Prompt 模板 anns_sentiment_v1）。同步后 Service 自动触发，也可定时扫尾。',
+        'category': '新闻公告',
+        'display_order': 640,
+        'points_consumption': 0,
+        'default_params': {'limit': 30, 'provider': None}
+    },
+    'tasks.score_news_flash_sentiment': {
+        'task': 'tasks.score_news_flash_sentiment',
+        'name': '快讯舆情打分（批量）',
+        'description': '批量给 related_ts_codes 非空的未打分快讯打情绪分 + 主题标签（单次 30 条，Prompt 模板 news_flash_sentiment_v1）。',
+        'category': '新闻公告',
+        'display_order': 641,
+        'points_consumption': 0,
+        'default_params': {'limit': 30, 'provider': None}
     }
 }
 

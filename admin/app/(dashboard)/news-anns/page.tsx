@@ -2,7 +2,7 @@
 
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ScrollText, Newspaper, Tv } from 'lucide-react'
+import { ScrollText, Newspaper, Tv, BarChart3 } from 'lucide-react'
 import Link from 'next/link'
 
 const modules = [
@@ -27,6 +27,13 @@ const modules = [
     href: '/news-anns/cctv-news',
     color: 'text-red-600'
   },
+  {
+    title: '宏观经济指标',
+    description: 'CPI / PPI / PMI / M2 / 社融 / GDP / Shibor 等量化宏观指标，供宏观风险专家 + CIO 引用。免费替代 Tushare eco_cal',
+    icon: BarChart3,
+    href: '/news-anns/macro-indicators',
+    color: 'text-green-600'
+  },
 ]
 
 export default function NewsAnnsIndexPage() {
@@ -34,7 +41,7 @@ export default function NewsAnnsIndexPage() {
     <div className="space-y-6">
       <PageHeader
         title="新闻公告"
-        description="新闻资讯 & 公司公告数据源（Phase 1 公司公告 + Phase 2 财经快讯 / 新闻联播，全部基于 AkShare 免费接口）"
+        description="新闻资讯 & 公司公告数据源（公告 / 快讯 / 新闻联播 / 宏观指标，全部基于 AkShare 免费接口）"
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

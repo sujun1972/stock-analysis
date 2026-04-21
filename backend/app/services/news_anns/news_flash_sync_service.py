@@ -79,6 +79,9 @@ class NewsFlashSyncService:
                 self.sync_history_repo.complete,
                 history_id, 'success', records, today, None,
             )
+            # 同步后主动触发一次舆情打分（挑一批未打分的）；失败不影响主流程
+            if records > 0:
+                self._trigger_sentiment_scoring()
             return {"status": "success", "records": records, "source": "caixin"}
         except Exception as e:
             logger.error(f"[news_flash] 增量同步失败: {e}")
@@ -139,6 +142,8 @@ class NewsFlashSyncService:
         df2 = pd.DataFrame(items, columns=df.columns)
         count = await asyncio.to_thread(self.repo.bulk_upsert, df2)
         logger.info(f"[news_flash] 被动同步 {ts_code} 入库 {count} 条")
+        if count > 0:
+            self._trigger_sentiment_scoring()
         return {"status": "success", "records": count, "ts_code": ts_code}
 
     # -------------------------------------------------
@@ -208,3 +213,17 @@ class NewsFlashSyncService:
     async def get_recent_by_stock(self, ts_code: str, days: int = 7, limit: int = 50):
         """CIO Tool / 个股专家使用：该股最近 N 天快讯。"""
         return await asyncio.to_thread(self.repo.query_by_stock, ts_code, int(days), int(limit))
+
+    # -------------------------------------------------
+    # 舆情打分触发（同步完成后主动派发 Celery 任务）
+    # -------------------------------------------------
+
+    @staticmethod
+    def _trigger_sentiment_scoring() -> None:
+        """send_task 派发避免顶层 import 任务模块造成循环依赖。"""
+        try:
+            from app.celery_app import celery_app
+            celery_app.send_task('tasks.score_news_flash_sentiment')
+            logger.debug("[news_flash] 已派发 tasks.score_news_flash_sentiment")
+        except Exception as e:
+            logger.warning(f"[news_flash] 派发舆情打分任务失败（不影响主流程）: {e}")

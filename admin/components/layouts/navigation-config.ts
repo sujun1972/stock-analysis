@@ -425,6 +425,11 @@ export const navItems: NavItem[] = [
         name: '新闻联播',
         href: '/news-anns/cctv-news',
         icon: Tv
+      },
+      {
+        name: '宏观经济指标',
+        href: '/news-anns/macro-indicators',
+        icon: BarChart3
       }
     ]
   },

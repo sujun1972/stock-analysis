@@ -83,6 +83,16 @@ export type {
   CctvNewsQueryParams,
   CctvNewsListResponse,
 } from './cctv-news'
+export { MacroIndicatorsApiClient, macroIndicatorsApi, MACRO_INDICATOR_LABELS } from './macro-indicators'
+export type {
+  MacroIndicatorItem,
+  MacroIndicatorSummary,
+  MacroIndicatorQueryParams,
+  MacroIndicatorListResponse,
+  MacroIndicatorSeriesResponse,
+  MacroSnapshotLatest,
+  MacroSnapshotResponse,
+} from './macro-indicators'
 export { CyqPerfApiClient, cyqPerfApi } from './cyq-perf-api'
 export type { CyqPerfParams, CyqPerfData, CyqPerfStatistics } from './cyq-perf-api'
 export { CyqChipsApiClient, cyqChipsApi } from './cyq-chips-api'
