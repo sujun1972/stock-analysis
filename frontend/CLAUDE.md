@@ -165,7 +165,7 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 | `stock_selection_strategy_id` | 选股策略 ID | 后端执行策略后 WHERE IN 过滤 |
 | `list` | 自选列表 ID | 后端 WHERE IN 子查询过滤，与其他条件可叠加 |
 | `page` / `pageSize` | 分页 | 默认 page=1, pageSize=20 |
-| `sortBy` / `sortOrder` | 排序 | 默认 pct_change desc；支持 `pct_change`/`score_hot_money`/`score_midline`/`score_longterm`，后端 LEFT JOIN 排序 |
+| `sortBy` / `sortOrder` | 排序 | 默认 pct_change desc；支持 `pct_change`/`score_hot_money`/`score_midline`/`score_longterm`/`cio_last_date`，后端 LEFT JOIN 排序。`cio_last_date` 按 `stock_ai_analysis.created_at`（CIO 最新报告日期）排序而非 score |
 
 **关键约束**：
 - 市场筛选中，上海主板/深圳主板在 DB 中均存为 `market='主板'`，通过 `exchange` 字段区分（`SSE`/`SZSE`）
@@ -227,7 +227,7 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 **Markdown 渲染**：`HotMoneyViewDialog.tsx` 使用 `react-markdown` + `remark-gfm` 渲染非 JSON 分析文本（如数据收集结果），支持 GFM 表格、标题、列表、代码块等完整 Markdown 语法。`markdownComponents` 常量定义自定义样式，`p` 和 `li` 中额外处理【标签】高亮。
 
-**股票列表评分列**：`/stocks` 页面表格显示三列 AI 评分：游资（`latest_analysis_hot_money.score`）、中线（`latest_analysis_midline.score`）、价值（`latest_analysis_longterm.score`）。后端 `enrich_stock_list_multi()` 通过 `asyncio.gather` 并发批量查询三种类型，一次注入到 `StockInfo` 对象。
+**股票列表评分列 + CIO 日期列**：`/stocks` 页面表格显示三列 AI 评分 + CIO 最新报告日期列：游资（`latest_analysis_hot_money.score`）、中线（`latest_analysis_midline.score`）、价值（`latest_analysis_longterm.score`）、CIO日期（`latest_analysis_cio.created_at`，仅日期，不显示 score）。后端 `enrich_stock_list_multi()` 通过 `asyncio.gather` 并发批量查询四种类型，一次注入到 `StockInfo` 对象。CIO 日期列支持服务端排序（sort_by=`cio_last_date`，按 `created_at` DESC/ASC，NULL 置末）。
 
 `stock_ai_analysis` 表通过 `analysis_type` 字段区分类型，后端 `ALLOWED_ANALYSIS_TYPES` 枚举控制允许写入的类型——**新增分析类型时必须同时更新后端 Service 中的 `ALLOWED_ANALYSIS_TYPES`**，以及 `_JSON_ANALYSIS_TYPES`（`stock_ai_analysis.py`）、`admin/types/prompt-template.ts` 中的 `BUSINESS_TYPES` 和 `BUSINESS_TYPE_LABELS`。
 

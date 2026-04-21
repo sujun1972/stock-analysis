@@ -225,8 +225,8 @@ class StockAiAnalysisService:
 
     async def enrich_stock_list_multi(self, items: List[Dict]) -> List[Dict]:
         """
-        并发批量注入游资观点、中线专家、价值守望者三种类型的最新评分摘要。
-        各自注入字段：latest_analysis_hot_money / latest_analysis_midline / latest_analysis_longterm
+        并发批量注入游资观点、中线专家、价值守望者、CIO 四种类型的最新评分摘要。
+        各自注入字段：latest_analysis_hot_money / latest_analysis_midline / latest_analysis_longterm / latest_analysis_cio
         """
         ts_codes = [item["ts_code"] for item in items if item.get("ts_code")]
         if not ts_codes:
@@ -236,6 +236,7 @@ class StockAiAnalysisService:
             ("hot_money_view",        "latest_analysis_hot_money"),
             ("midline_industry_expert","latest_analysis_midline"),
             ("longterm_value_watcher", "latest_analysis_longterm"),
+            ("cio_directive",          "latest_analysis_cio"),
         ]
 
         try:

@@ -107,7 +107,7 @@ async def get_concepts(
     return ApiResponse.success(data={'items': items, 'total': total}).to_dict()
 
 
-# sort_by 参数值 → stock_ai_analysis.analysis_type 映射
+# sort_by 参数值 → stock_ai_analysis.analysis_type 映射（按 score 排序）
 ANALYSIS_SORT_MAP = {
     "score_hot_money": "hot_money_view",
     "score_midline": "midline_industry_expert",
@@ -128,7 +128,7 @@ async def get_stock_list(
     stock_selection_strategy_id: Optional[int] = Query(None, description="选股策略ID，执行策略后仅返回选中的股票"),
     user_stock_list_id: Optional[int] = Query(None, description="自选列表ID，仅返回该列表中的股票"),
     include_analysis: bool = Query(False, description="是否附带每只股票的最新AI分析摘要（游资观点评分等）"),
-    sort_by: Optional[str] = Query(None, description="排序字段: code, pct_change, score_hot_money, score_midline, score_longterm"),
+    sort_by: Optional[str] = Query(None, description="排序字段: code, pct_change, score_hot_money, score_midline, score_longterm, cio_last_date"),
     sort_order: Optional[str] = Query(None, description="排序方向: asc, desc"),
     limit: int = Query(30, ge=1, le=100, description="每页记录数"),
     offset: int = Query(0, ge=0, description="偏移量"),
@@ -262,6 +262,17 @@ async def get_stock_list(
         """
         sort_join_params.append(analysis_type_for_sort)
         order_clause = f"ORDER BY sort_score.score {order_dir} NULLS LAST, sb.code"
+    elif sort_by == "cio_last_date":
+        # 按 CIO 最新报告的 created_at 排序（仅日期维度，不涉及 score）
+        sort_join = """
+            LEFT JOIN (
+                SELECT DISTINCT ON (ts_code) ts_code, created_at
+                FROM stock_ai_analysis
+                WHERE analysis_type = 'cio_directive'
+                ORDER BY ts_code, created_at DESC
+            ) sort_cio ON sort_cio.ts_code = sb.ts_code
+        """
+        order_clause = f"ORDER BY sort_cio.created_at {order_dir} NULLS LAST, sb.code"
     elif sort_by == "pct_change":
         sort_join = "LEFT JOIN stock_realtime sr ON sr.code = sb.code"
         order_clause = f"ORDER BY sr.pct_change {order_dir} NULLS LAST, sb.code"

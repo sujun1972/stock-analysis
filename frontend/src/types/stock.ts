@@ -67,6 +67,12 @@ export interface StockInfo {
     version: number
     created_at: string
   } | null
+  latest_analysis_cio?: {
+    id: number
+    score: number | null
+    version: number
+    created_at: string
+  } | null
 }
 
 // 行情面板数据类型（stock_realtime + daily_basic 合并）

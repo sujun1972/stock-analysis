@@ -93,6 +93,13 @@ export const StockTableRow = React.memo(function StockTableRow({
           )}
         </td>
       ))}
+      <td className="px-4 py-4 whitespace-nowrap text-right text-xs text-gray-600 dark:text-gray-400" onClick={(e) => e.stopPropagation()}>
+        {stock.latest_analysis_cio?.created_at ? (
+          stock.latest_analysis_cio.created_at.slice(0, 10)
+        ) : (
+          <span className="text-gray-300 dark:text-gray-600">—</span>
+        )}
+      </td>
       <td className="px-4 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
         {isAnalyzing ? (
           <span

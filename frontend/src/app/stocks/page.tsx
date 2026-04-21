@@ -663,7 +663,7 @@ function StocksPageContent() {
                         )}
                       </button>
                     </th>
-                    {([['score_hot_money', '游资'], ['score_midline', '中线'], ['score_longterm', '价值']] as const).map(([key, label]) => (
+                    {([['score_hot_money', '游资'], ['score_midline', '中线'], ['score_longterm', '价值'], ['cio_last_date', 'CIO日期']] as const).map(([key, label]) => (
                       <th key={key} className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         <button onClick={() => handleSortClick(key)} className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200">
                           {label}
