@@ -110,6 +110,7 @@ async def run_multi_expert_for_stock(
     from app.services.stock_ai_analysis_service import (
         StockAiAnalysisService,
         extract_json_and_score,
+        extract_cio_followup_triggers,
         JSON_ANALYSIS_TYPES,
     )
 
@@ -285,6 +286,7 @@ async def run_multi_expert_for_stock(
                 _log_llm_success(db, cio_call_id, cio_start_time_log, cio_text, cio_tokens)
 
                 cio_text, cio_score = extract_json_and_score(cio_text)
+                cio_followup_triggers = extract_cio_followup_triggers(cio_text)
 
                 cio_saved = await StockAiAnalysisService().save_analysis(
                     ts_code=ts_code,
@@ -296,6 +298,7 @@ async def run_multi_expert_for_stock(
                     ai_model=prep["provider_config"].get("model_name"),
                     created_by=user_id,
                     trade_date=trade_date,
+                    followup_triggers=cio_followup_triggers,
                 )
 
                 cio_result = {
@@ -307,6 +310,7 @@ async def run_multi_expert_for_stock(
                     "generation_time": round(cio_gen_time, 2),
                     "agent_tool_calls": agent_result.get("tool_calls", []),
                     "agent_iterations": agent_result.get("iterations", 0),
+                    "followup_triggers": cio_followup_triggers,
                 }
             except Exception as e:
                 logger.error(f"[run_multi_expert] {ts_code} CIO Agent 综合决策失败: {e}", exc_info=True)

@@ -152,13 +152,17 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
 
 - **触发方式**：`analysis_type == "cio_directive"` 时自动走 Agent 路径（`/generate` 和 `/generate-multi` 端点）
 - **非 CIO 类型**不走 Agent，保持现有直接调用方式
-- **max_iterations**：5 轮（通过 LangGraph `recursion_limit` 控制）
-- **超时**：120 秒
+- **max_iterations**：12 轮（LangGraph `recursion_limit = MAX_ITERATIONS * 2 + 3 = 27`）。LangGraph 计的是**节点执行次数**而非工具轮次，每次 tool 调用消耗约 2 节点 + 首尾各 1 节点 LLM 决策，修改 `MAX_ITERATIONS` 时公式须同步
+- **超时**：180 秒
+- **递归上限降级**：`GraphRecursionError` 触发时走 `_fallback_direct_generate()` 无工具直出（跳过 tool-calling 循环，直接让 LLM 基于三专家文本 + 数据收集生成 JSON），避免整个一键分析失败；降级响应带 `fallback: "recursion_limit_direct"` 标识
+- **CIO prompt 硬约束**：工具调用上限 3 次、默认不调；`followup_triggers.time_triggers.event_ref` 只能引用已提供文本中出现的事件，禁止调工具二次查询（`cio_directive_v1` 模板的 system_prompt 硬写死）
+- **输出格式**：JSON（与其他 4 位专家对齐，前端 `StructuredAnalysisContent` 结构化渲染），顶层字段 `multi_dimension_scan / cross_dimension_analysis / core_drivers / core_risks / rating_and_action / followup_triggers / final_score`
+- **复查触发器持久化**：CIO 输出的 `followup_triggers` 由 `extract_cio_followup_triggers()` 提取后单独写入 `stock_ai_analysis.followup_triggers`（JSONB 列），同时注入 `latest_analysis_cio.followup_triggers` 供 `/stocks` 列表页"下次关注"列渲染
 - **Expert Summaries**：`/generate-multi` 的 `include_cio=true` 时，前面专家的输出摘要会注入 Agent 的用户消息
 
 ### 个股专家 Prompt 模板规范
 
-所有个股 JSON 分析类型（`hot_money_view` / `midline_industry_expert` / `longterm_value_watcher` / `macro_risk_expert`）的 prompt 模板（`llm_prompt_templates` 表）共享以下约定：
+所有个股 JSON 分析类型（`hot_money_view` / `midline_industry_expert` / `longterm_value_watcher` / `macro_risk_expert` / `cio_directive`）的 prompt 模板（`llm_prompt_templates` 表）共享以下约定：
 
 **模板变量**（由 `build_stock_prompt()` 在 `backend/app/api/endpoints/prompt_templates.py` 注入）：
 - `{{ stock_name_and_code }}`：目标股票名称+代码

@@ -72,7 +72,33 @@ export interface StockInfo {
     score: number | null
     version: number
     created_at: string
+    followup_triggers?: CioFollowupTriggers | null
   } | null
+}
+
+// CIO 复查触发器：由 CIO 综合分析输出，驱动事件/价位触发下一轮复查
+export interface CioTimeTrigger {
+  type?: 'event' | 'fixed_date'
+  event_ref?: string        // 事件类型关键词（如 quarterly_earnings / lockup_expiry / announcement）
+  expected_date?: string    // YYYY-MM-DD
+  days_from_today?: number
+  reason?: string           // 为什么要等这个事件
+  priority?: 'high' | 'medium' | 'low'
+}
+
+export interface CioPriceTrigger {
+  direction: 'break_up' | 'break_down'
+  price?: number            // 触发价位（数字；无有效价位时省略）
+  price_basis?: string      // 锚定依据（MA/布林/前高前低/缺口等）
+  action_hint?: string      // 触发后建议动作
+  valid_until?: string      // YYYY-MM-DD
+  priority?: 'high' | 'medium' | 'low'
+}
+
+export interface CioFollowupTriggers {
+  time_triggers?: CioTimeTrigger[]
+  price_triggers?: CioPriceTrigger[]
+  review_horizon_days?: number | null
 }
 
 // 行情面板数据类型（stock_realtime + daily_basic 合并）

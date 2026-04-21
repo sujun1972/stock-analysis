@@ -24,11 +24,17 @@ from app.core.exceptions import AIServiceError
 class CIOAgentService:
     """CIO Agent 服务：创建并执行 CIO Agent。"""
 
-    MAX_ITERATIONS = 5
-    """Agent 最大工具调用轮次（通过 LangGraph recursion_limit 控制，每轮 2 步）"""
+    MAX_ITERATIONS = 12
+    """Agent 最大工具调用轮次。
+    LangGraph recursion_limit 计的是节点执行次数，每次 tool 调用 ≈ 2 节点，
+    加上首尾两次 LLM 决策节点。CIO v1.2 JSON schema 下实测 DeepSeek 会
+    主动调 4-7 个工具（核心是 get_recent_anns / get_financial_reports /
+    get_shareholder_info 以锚定 followup_triggers 的 event_ref），需留足预算。
+    公式 recursion_limit = MAX_ITERATIONS * 2 + 3 在 run_agent 中使用。
+    """
 
-    AGENT_TIMEOUT = 120
-    """Agent 总超时时间（秒）"""
+    AGENT_TIMEOUT = 180
+    """Agent 总超时时间（秒）。JSON schema + 多工具调用比纯 Markdown 更耗时。"""
 
     async def run_agent(
         self,
@@ -63,6 +69,7 @@ class CIOAgentService:
         """
         from langchain.agents import create_agent
         from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+        from langgraph.errors import GraphRecursionError
 
         from app.services.langchain_client import create_chat_model
         from app.services.langchain_tools import CIO_TOOLS
@@ -81,14 +88,14 @@ class CIOAgentService:
             system_prompt=system_prompt,
         )
 
-        # recursion_limit 控制最大迭代：每轮 tool call = 2 步，+1 作兜底
+        # recursion_limit 控制最大迭代：每轮 tool call ≈ 2 节点，+3 给首尾 LLM 决策节点
         start_time = time.time()
         tool_call_records = []
 
         try:
             result = await agent.ainvoke(
                 {"messages": [HumanMessage(content=user_prompt)]},
-                config={"recursion_limit": self.MAX_ITERATIONS * 2 + 1},
+                config={"recursion_limit": self.MAX_ITERATIONS * 2 + 3},
             )
 
             generation_time = time.time() - start_time
@@ -129,6 +136,25 @@ class CIOAgentService:
                 "generation_time": round(generation_time, 2),
             }
 
+        except GraphRecursionError as e:
+            # 递归上限触发：降级为"无工具直出"模式，让 LLM 基于已有三专家 + 数据收集做 JSON 综合判断。
+            # 这是比整个失败更好的用户体验 —— followup_triggers 的事件锚点可能不够精确，但评级/价位主干仍然可用。
+            elapsed = time.time() - start_time
+            logger.warning(
+                f"[CIO Agent] {ts_code} 触发递归上限（{elapsed:.2f}s, "
+                f"已调 {len(tool_call_records)} 工具），降级为无工具直出模式"
+            )
+            return await self._fallback_direct_generate(
+                ts_code=ts_code,
+                stock_name=stock_name,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                provider=provider,
+                provider_config=provider_config,
+                tool_call_records=tool_call_records,
+                elapsed_before=elapsed,
+            )
+
         except Exception as e:
             generation_time = time.time() - start_time
             logger.error(
@@ -136,6 +162,57 @@ class CIOAgentService:
                 exc_info=True,
             )
             raise AIServiceError(f"CIO Agent 执行失败: {e}")
+
+    async def _fallback_direct_generate(
+        self,
+        ts_code: str,
+        stock_name: str,
+        system_prompt: str,
+        user_prompt: str,
+        provider: str,
+        provider_config: Dict[str, Any],
+        tool_call_records: list,
+        elapsed_before: float,
+    ) -> Dict[str, Any]:
+        """
+        递归上限降级路径：跳过 Agent 的 tool-calling 循环，直接让 LLM 基于
+        已经提供的三专家分析 + stock_data_collection 生成综合 JSON。
+        """
+        from app.services.ai_service import AIStrategyService
+
+        note = (
+            "\n\n【注意：本次已跳过工具查询，请直接基于上方三位专家分析与系统收集的数据"
+            "生成综合 JSON；followup_triggers 的 event_ref 仅从上述文本中可见的事件中引用，"
+            "宁可 time_triggers=[] 也不要虚构。】"
+        )
+        full_prompt = f"{system_prompt}\n\n{user_prompt}{note}"
+
+        fallback_start = time.time()
+        try:
+            ai_service = AIStrategyService()
+            client = ai_service.create_client(provider, provider_config)
+            content, tokens_used = await client.generate_strategy(full_prompt)
+        except Exception as e:
+            total_elapsed = elapsed_before + (time.time() - fallback_start)
+            logger.error(
+                f"[CIO Agent] {ts_code} 降级直出也失败 ({total_elapsed:.2f}s): {e}",
+                exc_info=True,
+            )
+            raise AIServiceError(f"CIO Agent 执行失败（降级亦失败）: {e}")
+
+        total_elapsed = elapsed_before + (time.time() - fallback_start)
+        logger.info(
+            f"[CIO Agent] {ts_code} 降级直出完成: {len(content)}字 / "
+            f"~{tokens_used} tokens / {total_elapsed:.2f}s（含 {len(tool_call_records)} 次递归前工具调用）"
+        )
+        return {
+            "content": content,
+            "tokens_used": tokens_used,
+            "tool_calls": tool_call_records,
+            "iterations": len(tool_call_records),
+            "generation_time": round(total_elapsed, 2),
+            "fallback": "recursion_limit_direct",
+        }
 
     @staticmethod
     def _estimate_tokens(content: str, tool_calls: list) -> int:

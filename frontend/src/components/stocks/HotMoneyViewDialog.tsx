@@ -455,6 +455,46 @@ const SECTION_CONFIGS: Record<string, SectionConfig[]> = {
       },
     },
   ],
+  // 首席投资官（CIO）综合决策 v1.2.0（JSON schema）
+  // followup_triggers 由 FollowupTriggersSection 自定义渲染，不在此列表（避免重复）
+  cio_directive: [
+    {
+      key: 'multi_dimension_scan',
+      title: '多维度快速扫描',
+      labels: {
+        short_term: '短线（1-5 日）',
+        mid_term: '中线（1-3 月）',
+        long_term: '长线（1-3 年）',
+      },
+    },
+    {
+      key: 'cross_dimension_analysis',
+      title: '跨维度共振/矛盾',
+      labels: {
+        consensus_or_conflict: '方向一致性',
+        conflict_essence: '矛盾本质',
+        cio_resolution: 'CIO 取舍',
+      },
+    },
+    {
+      key: 'core_drivers',
+      title: '核心驱动因子',
+    },
+    {
+      key: 'core_risks',
+      title: '核心风险因子',
+    },
+    {
+      key: 'rating_and_action',
+      title: '综合评级与行动指令',
+      labels: {
+        rating: '综合评级',
+        action: '行动指令',
+        price_reference: '价位区间参考',
+        rating_logic: '评级逻辑',
+      },
+    },
+  ],
   // 长线价值守望者 v2.0.0
   longterm_value_watcher: [
     {
@@ -662,6 +702,106 @@ function GenericSection({
 }
 
 /**
+ * CIO 复查触发器 section
+ * 渲染 time_triggers（事件/日期）+ price_triggers（上/下方阈值） + review_horizon_days。
+ * 不同于通用 GenericSection：价位带方向箭头 + 锚定依据 + 有效期分列展示，便于投委会扫读。
+ */
+function FollowupTriggersSection({ triggers }: { triggers: Record<string, any> }) {
+  const timeList = Array.isArray(triggers.time_triggers) ? triggers.time_triggers : []
+  const priceList = Array.isArray(triggers.price_triggers) ? triggers.price_triggers : []
+  const horizon = triggers.review_horizon_days
+  if (timeList.length === 0 && priceList.length === 0 && horizon == null) return null
+
+  const priorityBadge = (p?: string) => {
+    if (!p) return null
+    const cls = p === 'high'
+      ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+      : p === 'medium'
+      ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300'
+      : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+    return <span className={`ml-1 text-[10px] px-1.5 py-0.5 rounded ${cls}`}>{p}</span>
+  }
+
+  return (
+    <section className="border-t border-gray-100 dark:border-gray-700 pt-3">
+      <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-2">
+        复查触发器
+        {horizon != null && (
+          <span className="ml-2 text-xs font-normal text-gray-500">窗口 {horizon} 天</span>
+        )}
+      </h3>
+
+      {priceList.length > 0 && (
+        <div className="mb-2">
+          <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">价位触发</div>
+          <ul className="space-y-1 pl-1">
+            {priceList.map((pt: any, i: number) => {
+              const isUp = pt?.direction === 'break_up'
+              const arrow = isUp ? '▲' : '▼'
+              const colorCls = isUp ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
+              const priceText = pt?.price != null ? Number(pt.price).toFixed(2) : '暂无'
+              return (
+                <li key={i} className="text-xs flex gap-2 items-start">
+                  <span className={`font-bold shrink-0 ${colorCls}`}>{arrow} {priceText}</span>
+                  <div className="flex-1">
+                    {pt?.price_basis && (
+                      <div className="text-gray-600 dark:text-gray-300">
+                        {renderBold(String(pt.price_basis))}
+                      </div>
+                    )}
+                    {pt?.action_hint && (
+                      <div className="text-gray-500 dark:text-gray-400 mt-0.5">
+                        → {renderBold(String(pt.action_hint))}
+                      </div>
+                    )}
+                    {(pt?.valid_until || pt?.priority) && (
+                      <div className="text-[11px] text-gray-400 mt-0.5">
+                        {pt?.valid_until && <span>有效期 {pt.valid_until}</span>}
+                        {priorityBadge(pt?.priority)}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+
+      {timeList.length > 0 && (
+        <div>
+          <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">事件/日期触发</div>
+          <ul className="space-y-1 pl-1">
+            {timeList.map((tt: any, i: number) => (
+              <li key={i} className="text-xs flex gap-2 items-start">
+                <span className="text-blue-600 dark:text-blue-400 font-bold shrink-0">⏱</span>
+                <div className="flex-1">
+                  <div className="text-gray-700 dark:text-gray-300">
+                    {tt?.expected_date && <span className="font-semibold">{tt.expected_date}</span>}
+                    {tt?.event_ref && (
+                      <span className="ml-1 text-gray-500">· {tt.event_ref}</span>
+                    )}
+                    {tt?.days_from_today != null && (
+                      <span className="ml-1 text-gray-400">(距今 {tt.days_from_today} 天)</span>
+                    )}
+                    {priorityBadge(tt?.priority)}
+                  </div>
+                  {tt?.reason && (
+                    <div className="text-gray-500 dark:text-gray-400 mt-0.5">
+                      {renderBold(String(tt.reason))}
+                    </div>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/**
  * 通用 JSON 结构化分析渲染器。
  * 根据 analysisType 查找 SECTION_CONFIGS，按声明的 section 顺序渲染；
  * 配置外的顶层字段（如 risk_warning / final_score）由专门逻辑处理；
@@ -784,6 +924,11 @@ function StructuredAnalysisContent({ d, analysisType }: { d: Record<string, any>
           <h3 className="text-sm font-semibold text-red-600 dark:text-red-400 mb-1">风险提示</h3>
           <p className="text-sm">{renderBold(d.risk_warning)}</p>
         </section>
+      )}
+
+      {/* CIO 复查触发器：时间 + 上下方价位 */}
+      {d.followup_triggers && typeof d.followup_triggers === 'object' && (
+        <FollowupTriggersSection triggers={d.followup_triggers as Record<string, any>} />
       )}
 
       {/* 综合评分区 */}

@@ -21,6 +21,7 @@ from app.models.user import User
 from app.services.stock_ai_analysis_service import (
     StockAiAnalysisService,
     extract_json_and_score as _extract_json_and_score,
+    extract_cio_followup_triggers,
     JSON_ANALYSIS_TYPES as _JSON_ANALYSIS_TYPES,
 )
 from app.services.llm_call_logger import llm_call_logger
@@ -299,6 +300,7 @@ async def _run_cio_agent_single(body, current_user, db, ai_service) -> dict:
     _log_llm_success(db, call_id, start_time_log, ai_text, tokens_used)
 
     ai_text, extracted_score = _extract_json_and_score(ai_text)
+    followup_triggers = extract_cio_followup_triggers(ai_text)
 
     try:
         result = await StockAiAnalysisService().save_analysis(
@@ -311,6 +313,7 @@ async def _run_cio_agent_single(body, current_user, db, ai_service) -> dict:
             ai_model=prep["provider_config"].get("model_name"),
             created_by=current_user.id,
             trade_date=prep["trade_date"],
+            followup_triggers=followup_triggers,
         )
     except ValueError as e:
         return ApiResponse.bad_request(message=str(e)).to_dict()
@@ -324,6 +327,7 @@ async def _run_cio_agent_single(body, current_user, db, ai_service) -> dict:
             "generation_time": round(generation_time, 2),
             "agent_tool_calls": agent_result.get("tool_calls", []),
             "agent_iterations": agent_result.get("iterations", 0),
+            "followup_triggers": followup_triggers,
         },
         message="CIO Agent 分析生成并保存成功",
     ).to_dict()

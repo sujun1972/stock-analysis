@@ -1,5 +1,6 @@
 """股票AI分析结果 Repository"""
-from typing import Dict, List, Optional
+import json
+from typing import Any, Dict, List, Optional
 from loguru import logger
 from app.repositories.base_repository import BaseRepository
 from app.core.exceptions import QueryError
@@ -12,7 +13,8 @@ class StockAiAnalysisRepository(BaseRepository):
     _SELECT_COLS = (
         "id, ts_code, analysis_type, analysis_text, score, "
         "prompt_text, ai_provider, ai_model, version, created_by, "
-        "created_at, updated_at, trade_date, original_analysis_id"
+        "created_at, updated_at, trade_date, original_analysis_id, "
+        "followup_triggers"
     )
 
     def __init__(self, db=None):
@@ -30,28 +32,30 @@ class StockAiAnalysisRepository(BaseRepository):
         created_by: Optional[int],
         trade_date: Optional[str] = None,
         original_analysis_id: Optional[int] = None,
+        followup_triggers: Optional[Dict[str, Any]] = None,
     ) -> Dict:
         """插入一条新的分析记录，版本号自动递增（同一 ts_code + analysis_type 下 MAX(version)+1）"""
         query = """
             INSERT INTO stock_ai_analysis
                 (ts_code, analysis_type, analysis_text, score, prompt_text,
                  ai_provider, ai_model, version, created_by, trade_date,
-                 original_analysis_id)
+                 original_analysis_id, followup_triggers)
             VALUES (
                 %s, %s, %s, %s, %s, %s, %s,
                 COALESCE((
                     SELECT MAX(version) FROM stock_ai_analysis
                     WHERE ts_code = %s AND analysis_type = %s
                 ), 0) + 1,
-                %s, %s, %s
+                %s, %s, %s, %s::jsonb
             )
             RETURNING id, version, created_at, trade_date
         """
+        followup_json = json.dumps(followup_triggers, ensure_ascii=False) if followup_triggers else None
         params = (
             ts_code, analysis_type, analysis_text, score, prompt_text,
             ai_provider, ai_model,
             ts_code, analysis_type,  # for subquery
-            created_by, trade_date, original_analysis_id,
+            created_by, trade_date, original_analysis_id, followup_json,
         )
         try:
             result = self.execute_query_returning(query, params)
@@ -287,4 +291,5 @@ class StockAiAnalysisRepository(BaseRepository):
             "updated_at": row[11].isoformat() if hasattr(row[11], 'isoformat') else row[11],
             "trade_date": row[12] if len(row) > 12 else None,
             "original_analysis_id": row[13] if len(row) > 13 else None,
+            "followup_triggers": row[14] if len(row) > 14 else None,
         }

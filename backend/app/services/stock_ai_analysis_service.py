@@ -1,7 +1,7 @@
 """股票AI分析结果 Service"""
 import json
 import asyncio
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from loguru import logger
 from app.repositories.stock_ai_analysis_repository import StockAiAnalysisRepository
 from app.services.ai_output_parser import extract_json_text, parse_ai_json
@@ -36,6 +36,45 @@ _SCORE_PATHS = [
     ["comprehensive_score"],    # 中线专家 / 价值守望者 / CIO
     ["score"],                  # CIO 简单结构兜底
 ]
+
+
+def extract_cio_followup_triggers(ai_text: str) -> Optional[Dict[str, Any]]:
+    """
+    从 CIO JSON 输出中提取 followup_triggers（复查触发器），用于写入
+    stock_ai_analysis.followup_triggers（JSONB）列。
+
+    返回结构（与数据库列内容一致）：
+        {
+            "time_triggers":  [ {type, event_ref, expected_date, days_from_today, reason, priority}, ... ],
+            "price_triggers": [ {direction, price, price_basis, action_hint, valid_until, priority}, ... ],
+            "review_horizon_days": int | None,
+        }
+
+    LLM 可能返回自造字段或格式错误，此处做最小白名单过滤：
+      - 仅保留 time_triggers / price_triggers / review_horizon_days 三个顶层 key；
+      - 列表项保持透传（schema 校验交给前端，避免后端重复写 Pydantic 模型）；
+      - 两个列表同时为空时返回 None，不污染 JSONB 列。
+    """
+    json_text = extract_json_text(ai_text)
+    if not json_text:
+        return None
+    try:
+        data = json.loads(json_text)
+    except Exception:
+        return None
+    triggers = data.get("followup_triggers") if isinstance(data, dict) else None
+    if not isinstance(triggers, dict):
+        return None
+    time_triggers = triggers.get("time_triggers") if isinstance(triggers.get("time_triggers"), list) else []
+    price_triggers = triggers.get("price_triggers") if isinstance(triggers.get("price_triggers"), list) else []
+    horizon = triggers.get("review_horizon_days")
+    if not time_triggers and not price_triggers:
+        return None
+    return {
+        "time_triggers": time_triggers,
+        "price_triggers": price_triggers,
+        "review_horizon_days": horizon if isinstance(horizon, (int, float)) else None,
+    }
 
 
 def extract_json_and_score(ai_text: str) -> tuple[str, Optional[float]]:
@@ -100,6 +139,7 @@ class StockAiAnalysisService:
         created_by: Optional[int],
         trade_date: Optional[str] = None,
         original_analysis_id: Optional[int] = None,
+        followup_triggers: Optional[Dict[str, Any]] = None,
     ) -> Dict:
         """校验并保存一条新的分析记录（每次保存都是新版本）"""
         if not ts_code or not ts_code.strip():
@@ -115,7 +155,7 @@ class StockAiAnalysisService:
             self.repo.save,
             ts_code.strip(), analysis_type, analysis_text.strip(),
             score, prompt_text, ai_provider, ai_model, created_by,
-            trade_date, original_analysis_id,
+            trade_date, original_analysis_id, followup_triggers,
         )
 
     async def update_analysis(
@@ -253,12 +293,19 @@ class StockAiAnalysisService:
 
         for item in items:
             ts = item.get("ts_code")
-            for (_, field), latest_map in zip(analysis_types, maps):
+            for (atype, field), latest_map in zip(analysis_types, maps):
                 rec = latest_map.get(ts)
-                item[field] = {
+                if not rec:
+                    item[field] = None
+                    continue
+                payload: Dict[str, Any] = {
                     "id": rec["id"],
                     "score": rec["score"],
                     "version": rec["version"],
                     "created_at": rec["created_at"],
-                } if rec else None
+                }
+                # CIO 记录额外注入 followup_triggers 摘要供列表页"下次关注"列渲染
+                if atype == "cio_directive":
+                    payload["followup_triggers"] = rec.get("followup_triggers")
+                item[field] = payload
         return items

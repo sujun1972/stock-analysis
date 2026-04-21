@@ -40,6 +40,10 @@ _EXPECTED_TOP_KEYS = {
     "probability_metrics", "dimensions", "trading_strategy",
     "final_score", "comprehensive_score", "score",
     "macro_environment", "risk_factors", "investment_suggestion",
+    # CIO 综合决策（JSON schema v2）
+    "multi_dimension_scan", "cross_dimension_analysis",
+    "core_drivers", "core_risks", "rating_and_action",
+    "followup_triggers",
 }
 
 
