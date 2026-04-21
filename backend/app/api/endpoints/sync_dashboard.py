@@ -101,6 +101,7 @@ FULL_SYNC_REDIS_KEYS: Dict[str, str] = {
     "stock_anns":            "sync:stock_anns:full_history:progress",
     "news_flash":            "sync:news_flash:full_history:progress",
     "cctv_news":             "sync:cctv_news:full_history:progress",
+    "macro_indicators":      "sync:macro_indicators:full_history:progress",
 }
 
 

@@ -2061,3 +2061,43 @@ async def get_recent_announcements(ts_code: str, days: int = 30, limit: int = 20
         'earliest_date': min(dates) if dates else None,
         'data_available': True,
     }
+
+
+# ------------------------------------------------------------------
+# 宏观经济指标 — 供宏观风险专家 + CIO Agent 引用量化底座（news_anns Phase 3）
+# ------------------------------------------------------------------
+
+async def get_macro_snapshot(lookback_months: int = 0) -> Dict:
+    """宏观经济指标快照（最新值 + 可选近 N 月序列）。
+
+    数据源：`macro_indicators` 表（由 AkShare 同步，见 macro_sync_service）。
+    覆盖：CPI / PPI / PMI(制造业 + 非制造业) / M2 / 新增社融 / GDP / Shibor(O/N + 1W + 1M)
+
+    Args:
+        lookback_months: 序列回看月数。默认 0 = 只取 latest（CIO Tool 场景）；
+            API `/snapshot` 端点传 12 以同时拉最近 12 个月序列供前端画图。
+
+    输出字段：
+      - latest: { indicator_code: { value, yoy, mom, period_date, publish_date, lag_days } }
+      - series: { indicator_code: [最近 lookback_months 条，降序] }，lookback_months<=0 时为空 dict
+      - data_available: bool
+    """
+    from app.services.news_anns import MacroSyncService
+
+    svc = MacroSyncService()
+    try:
+        snapshot = await svc.get_macro_snapshot(int(lookback_months))
+    except Exception as e:
+        logger.warning(f"[collectors] get_macro_snapshot 查询失败: {e}")
+        return {'latest': {}, 'series': {}, 'data_available': False}
+
+    if not snapshot.get('latest'):
+        return {'latest': {}, 'series': {}, 'data_available': False, 'lookback_months': int(lookback_months)}
+
+    return {
+        'latest': snapshot.get('latest') or {},
+        'series': snapshot.get('series') or {},
+        'indicators': snapshot.get('indicators') or [],
+        'lookback_months': int(lookback_months),
+        'data_available': True,
+    }

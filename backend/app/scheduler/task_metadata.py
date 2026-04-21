@@ -1077,6 +1077,26 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 621,
         'points_consumption': 0,
         'default_params': {'start_date': None, 'concurrency': 1}
+    },
+
+    # Phase 3: 宏观经济指标
+    'tasks.sync_macro_indicators': {
+        'task': 'tasks.sync_macro_indicators',
+        'name': '宏观经济指标（增量）',
+        'description': '同步中国宏观经济指标（AkShare 免费，替代 Tushare eco_cal）：CPI/PPI/PMI/M2/新增社融/GDP/Shibor。接口无日期参数，每次拉完整历史并 UPSERT；总耗时 ~2-3 分钟。',
+        'category': '新闻公告',
+        'display_order': 630,
+        'points_consumption': 0,
+        'default_params': {'start_date': None, 'end_date': None}
+    },
+    'tasks.sync_macro_indicators_full_history': {
+        'task': 'tasks.sync_macro_indicators_full_history',
+        'name': '宏观经济指标（全量）',
+        'description': 'AkShare 宏观接口无历史参数，全量等价于一次增量；按钮仅为同步配置页面兼容。',
+        'category': '新闻公告',
+        'display_order': 631,
+        'points_consumption': 0,
+        'default_params': {'start_date': None, 'concurrency': 1}
     }
 }
 

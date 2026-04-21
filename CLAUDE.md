@@ -94,7 +94,7 @@ CIOAgentService                      ← backend/app/services/cio_agent_service.
     ↓
 create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（LangGraph）
     ↓
-10 个 LangChain Tool                 ← backend/app/services/langchain_tools.py
+11 个 LangChain Tool                 ← backend/app/services/langchain_tools.py
     ├── get_basic_market             基础盘面（价格/PE-PB 双窗口分位+估值通道/大盘相对强度/财务+滞后天数/行业/筹码/回购）
     ├── get_capital_flow             资金流向（主力分档：超大单/大单/中单/小单；近5/10日资金vs价格；北向滞后标注）
     ├── get_shareholder_info         股东信息（人数变化+滞后天数、减持、解禁）
@@ -104,7 +104,8 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
     ├── get_nine_turn                TD 序列（即神奇九转，第9根为变盘窗口）
     ├── get_recent_anns              近 N 天公司公告（标题/类型/日期/URL，来自 AkShare 东方财富聚合）
     ├── get_recent_news              近 N 天关联财经快讯（财新要闻 + 东财个股新闻，news_flash 表 GIN 数组反查）
-    └── get_today_cctv_news          新闻联播文字稿（指定日或最近 N 天；宏观/政策信号背景）
+    ├── get_today_cctv_news          新闻联播文字稿（指定日或最近 N 天；宏观/政策信号背景）
+    └── get_macro_snapshot           宏观经济指标快照（CPI/PPI/PMI/M2/新增社融/GDP/Shibor，带滞后天数；`macro_indicators` 表）
 
 `StockDataCollectionService.collect_and_format()` 主链路另含六个维度尚未挂为 LangChain Tool；如需 CIO Agent 主动查询可在 `langchain_tools.py` 追加对应工具（`get_recent_anns` / `get_recent_news` / `get_today_cctv_news` 已按该模式挂载）：
 - **smart_money**：融资融券明细 + 龙虎榜事件（含席位性质标记 `_SEAT_TAGS` / `_SEAT_SUBSTRING_TAGS`；无上榜时 `on_billboard_60d=False` 显式标记，避免 LLM 误判为数据缺失）
@@ -239,13 +240,16 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
 
 **sync_configs 表**（`db_init/migrations/105_create_sync_configs.sql`）是所有数据表同步配置的单一数据源，驱动同步配置页面（`/settings/sync-config`）的展示和操作。
 
-**AkShare 数据源独立同步路径**（现已覆盖公司公告 / 财经快讯 / 新闻联播）：
+**AkShare 数据源独立同步路径**（现已覆盖公司公告 / 财经快讯 / 新闻联播 / 宏观经济指标）：
 
 | 表 | 数据来源（AkShare 接口） | 增量语义 | 全量能力 |
 |----|---------------------|---------|---------|
 | `stock_anns` | `stock_notice_report` + `stock_individual_notice_report` | 逐交易日拉全市场公告 | 按交易日并发 + Redis Set 续继 |
 | `news_flash` | `stock_news_main_cx`（caixin）+ `stock_news_em`（eastmoney 个股） | 高频增量（无日期参数） | 退化为单次增量（无历史能力） |
 | `cctv_news` | `news_cctv` | 按自然日逐日回看 N 天 | 按日并发 + Redis Set 续继 |
+| `macro_indicators` | `macro_china_cpi_monthly` / `macro_china_ppi` / `macro_china_pmi` / `macro_china_m2_yearly` / `macro_china_new_financial_credit` / `macro_china_gdp_yearly` / `macro_china_shibor_all` | 单次遍历 7 个接口各拉完整历史并 UPSERT（无日期参数） | 同增量（无历史参数） |
+
+**宏观指标派生 code**：`pmi` 接口同时产出 `pmi_manu` / `pmi_nonmanu`；`shibor` 接口产出 `shibor_on` / `shibor_1w` / `shibor_1m`。Provider 层注册表 `MACRO_INDICATOR_FETCHERS` 是 7 条（fetcher 维度），落地表是 10 条 `indicator_code`（物理维度）。Service `get_macro_snapshot(lookback_months=0)` 跳过序列拉取供 CIO Tool 用，`=12` 供前端画图用。
 
 AkShare 接口签名（无 `limit/offset`，无统一 `start_date/end_date`，部分接口按自然日而非交易日）与 `TushareSyncBase.run_incremental_sync` 不兼容，需手写 Service 流程：
 

@@ -7,9 +7,10 @@
   - anns_content_fetcher         公告全文按需抓取（HTML/PDF）
   - news_flash_sync_service      财经快讯同步（Phase 2：财新要闻 + 东财个股新闻）
   - cctv_news_sync_service       新闻联播同步（Phase 2：按自然日 + 全量续继）
+  - macro_sync_service           宏观经济指标同步（Phase 3：CPI/PPI/PMI/M2/新增社融/GDP/Shibor）
   - stock_code_extractor         快讯正文个股代码抽取（正则 + stock_basic 白名单）
 
-数据源策略：AkShare 优先，轻量爬虫次选；完全避免 Tushare 付费接口（anns_d / news / cctv_news 等）。
+数据源策略：AkShare 优先，轻量爬虫次选；完全避免 Tushare 付费接口（anns_d / news / cctv_news / eco_cal 等）。
 """
 
 from app.services.news_anns.retry_decorator import (
@@ -20,6 +21,7 @@ from app.services.news_anns.retry_decorator import (
 from app.services.news_anns.stock_anns_sync_service import StockAnnsSyncService
 from app.services.news_anns.news_flash_sync_service import NewsFlashSyncService
 from app.services.news_anns.cctv_news_sync_service import CctvNewsSyncService
+from app.services.news_anns.macro_sync_service import MacroSyncService
 from app.services.news_anns.stock_code_extractor import StockCodeExtractor
 
 __all__ = [
@@ -29,5 +31,6 @@ __all__ = [
     'StockAnnsSyncService',
     'NewsFlashSyncService',
     'CctvNewsSyncService',
+    'MacroSyncService',
     'StockCodeExtractor',
 ]

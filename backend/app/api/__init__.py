@@ -61,6 +61,7 @@ from .endpoints import (
     stock_anns,  # 公司公告（AkShare Phase 1）
     news_flash,  # 财经快讯（AkShare Phase 2）
     cctv_news,  # 新闻联播（AkShare Phase 2）
+    macro_indicators,  # 宏观经济指标（AkShare Phase 3）
     cyq_perf,  # 每日筹码及胜率
     cyq_chips,  # 每日筹码分布
     ccass_hold,  # 中央结算系统持股汇总
@@ -166,6 +167,7 @@ router.include_router(report_rc.router, prefix="/report-rc", tags=["卖方盈利
 router.include_router(stock_anns.router, prefix="/stock-anns", tags=["公司公告"])  # 公司公告API（AkShare Phase 1）
 router.include_router(news_flash.router, prefix="/news-flash", tags=["财经快讯"])  # 财经快讯API（AkShare Phase 2）
 router.include_router(cctv_news.router, prefix="/cctv-news", tags=["新闻联播"])  # 新闻联播API（AkShare Phase 2）
+router.include_router(macro_indicators.router, prefix="/macro-indicators", tags=["宏观经济指标"])  # 宏观经济指标API（AkShare Phase 3）
 router.include_router(cyq_perf.router, prefix="/cyq-perf", tags=["每日筹码及胜率"])  # 每日筹码及胜率API
 router.include_router(cyq_chips.router, prefix="/cyq-chips", tags=["每日筹码分布"])  # 每日筹码分布API
 router.include_router(ccass_hold.router, prefix="/ccass-hold", tags=["中央结算系统持股汇总"])  # 中央结算系统持股汇总API

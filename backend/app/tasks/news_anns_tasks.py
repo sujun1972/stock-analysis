@@ -11,6 +11,10 @@ Phase 2（财经快讯 + 新闻联播）：
   - tasks.sync_news_flash_single        单只股票被动同步（东财个股新闻）
   - tasks.sync_cctv_news                新闻联播增量（逐日 + 回看 N 天）
   - tasks.sync_cctv_news_full_history   新闻联播全量（按日并发 + Redis Set 续继）
+
+Phase 3（宏观经济指标）：
+  - tasks.sync_macro_indicators               增量（CPI/PPI/PMI/M2/新增社融/GDP/Shibor，全历史 UPSERT）
+  - tasks.sync_macro_indicators_full_history  同 sync_macro_indicators（AkShare 接口无日期参数）
 """
 
 from __future__ import annotations
@@ -178,6 +182,40 @@ sync_cctv_news_full_history_task = make_full_history_task(
     # 按日并发 1，1500 天 × 8s ≈ 3 小时；Redis Set 续继可中断恢复
     soft_time_limit=21600,  # 6h
     time_limit=25200,       # 7h
+    default_concurrency=1,
+    accept_strategy_param=False,
+    accept_max_rpm=False,
+)
+
+
+# ==================================================================
+# Phase 3: 宏观经济指标
+# ==================================================================
+
+# AkShare 宏观接口无日期参数，每次拉完整历史序列并 UPSERT；7 个接口串行约 2-3 分钟。
+# 增量与"全量"同路径（接口能力所限），两个 task 共享同一 Service 入口。
+
+sync_macro_indicators_task = make_incremental_task(
+    name="tasks.sync_macro_indicators",
+    service_path="app.services.news_anns.macro_sync_service:MacroSyncService",
+    display_name="宏观经济指标",
+    raw_sync_method="sync_incremental",
+    raw_param_names=("start_date", "end_date"),
+    incremental_extra_kwargs=("sync_strategy", "max_requests_per_minute"),
+    # 7 个接口串行，单个 10-30s，留宽裕超时
+    soft_time_limit=900,
+    time_limit=1200,
+)
+
+
+sync_macro_indicators_full_history_task = make_full_history_task(
+    name="tasks.sync_macro_indicators_full_history",
+    service_path="app.services.news_anns.macro_sync_service:MacroSyncService",
+    table_key="macro_indicators",
+    display_name="宏观经济指标",
+    # AkShare 宏观接口无历史参数，sync_full_history 退化为单次增量
+    soft_time_limit=900,
+    time_limit=1200,
     default_concurrency=1,
     accept_strategy_param=False,
     accept_max_rpm=False,

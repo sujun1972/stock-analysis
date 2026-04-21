@@ -742,6 +742,77 @@ async def get_today_cctv_news(date: str = "", lookback_days: int = 3) -> str:
     return "\n".join(lines)
 
 
+@tool
+async def get_macro_snapshot() -> str:
+    """获取宏观经济指标快照（CPI / PPI / PMI / M2 / 新增社融 / GDP / Shibor）。
+
+    数据源：`macro_indicators` 表（AkShare 免费宏观接口同步）。
+    适用场景：宏观风险专家判断通胀/通缩、货币松紧、经济景气度；CIO 做跨股宏观
+    定位（如周期股 vs 科技股在当下货币环境的相对吸引力）。
+
+    返回 Markdown 表格：各指标最新值 + 同比 + 报告期 + 距今滞后天数。
+    滞后天数是 LLM 判断数据时效性的关键信号（CPI 月度数据通常滞后 40~60 天）。
+    """
+    from app.services.stock_data_collection_service import collectors
+
+    try:
+        data = await collectors.get_macro_snapshot()
+    except Exception as e:
+        logger.warning(f"[tool:get_macro_snapshot] 异常: {e}")
+        return f"获取宏观指标失败: {e}"
+
+    if not data.get('data_available'):
+        return "宏观指标表（macro_indicators）暂无数据（可能尚未触发同步）。"
+
+    latest = data.get('latest') or {}
+    if not latest:
+        return "宏观指标表中无有效快照。"
+
+    # 指标中文名映射（按业务含义排序，便于 LLM 消费）
+    display = [
+        ('cpi_yoy',          'CPI 同比',          '%'),
+        ('ppi_yoy',          'PPI 同比',          '%'),
+        ('pmi_manu',         '制造业 PMI',        '指数（荣枯线 50）'),
+        ('pmi_nonmanu',      '非制造业 PMI',      '指数（荣枯线 50）'),
+        ('m2_yoy',           'M2 同比',           '%'),
+        ('new_credit_month', '新增社融当月',       '亿元'),
+        ('gdp_yoy',          'GDP 季度同比',      '%'),
+        ('shibor_on',        'Shibor 隔夜',        '%'),
+        ('shibor_1w',        'Shibor 1 周',        '%'),
+        ('shibor_1m',        'Shibor 1 月',        '%'),
+    ]
+
+    lines = [
+        "**中国宏观经济指标（最新快照）**",
+        "",
+        "| 指标 | 最新值 | 单位 | 报告期 | 发布日 | 距今 | 同比(%) |",
+        "|------|--------|------|--------|--------|------|---------|",
+    ]
+    any_row = False
+    for code, name, unit in display:
+        snap = latest.get(code)
+        if not snap:
+            continue
+        any_row = True
+        value = snap.get('value')
+        yoy = snap.get('yoy')
+        period = snap.get('period_date') or '—'
+        publish = snap.get('publish_date') or '—'
+        lag = snap.get('lag_days')
+        lag_str = f"{lag} 天" if isinstance(lag, int) else '—'
+        value_str = _safe_fmt(value, 2) if value is not None else '—'
+        # yoy 与 value 相同字段时，重复显示没意义，留空
+        if yoy is not None and value is not None and abs(float(yoy) - float(value)) < 1e-9:
+            yoy_str = '—'
+        else:
+            yoy_str = _safe_fmt(yoy, 2) if yoy is not None else '—'
+        lines.append(f"| {name} | {value_str} | {unit} | {period} | {publish} | {lag_str} | {yoy_str} |")
+
+    if not any_row:
+        return "宏观指标快照为空（所有指标均未入库）。"
+    return "\n".join(lines)
+
+
 CIO_TOOLS = [
     get_basic_market,
     get_capital_flow,
@@ -753,5 +824,6 @@ CIO_TOOLS = [
     get_recent_anns,
     get_recent_news,        # news_anns Phase 2
     get_today_cctv_news,    # news_anns Phase 2
+    get_macro_snapshot,     # news_anns Phase 3
 ]
-"""CIO Agent 可用的数据查询工具（含公告、快讯、联播 = news_anns Phase 1 + 2）"""
+"""CIO Agent 可用的数据查询工具（含公告、快讯、联播、宏观指标 = news_anns Phase 1/2/3）"""
