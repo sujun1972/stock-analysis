@@ -24,6 +24,7 @@ class CyqChipsService(TushareSyncBase):
     TABLE_KEY = 'cyq_chips'
     FULL_HISTORY_START_DATE = '20180101'
     FULL_HISTORY_PROGRESS_KEY = 'sync:cyq_chips:full_history:progress'
+    INCREMENTAL_PROGRESS_KEY = 'sync:cyq_chips:incremental:progress'
 
     def __init__(self):
         super().__init__()
@@ -42,18 +43,123 @@ class CyqChipsService(TushareSyncBase):
         sync_strategy: Optional[str] = None,
         max_requests_per_minute: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """标准增量同步入口（无参数时自动从 sync_configs 读取配置）"""
+        """标准增量同步入口（无参数时自动从 sync_configs 读取配置）。
+
+        by_ts_code 策略走流式路径（见 _sync_incremental_by_ts_code），其他策略走
+        sync_cyq_chips（单次请求数据量小，无需流式）。
+        """
         cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
         if sync_strategy is None:
             sync_strategy = (cfg.get('incremental_sync_strategy') or 'by_ts_code') if cfg else 'by_ts_code'
         if start_date is None:
             start_date = await self.get_suggested_start_date()
+
+        if sync_strategy == 'by_ts_code':
+            return await self._sync_incremental_by_ts_code(
+                start_date=start_date,
+                end_date=end_date,
+                max_requests_per_minute=max_requests_per_minute,
+            )
+
         return await self.sync_cyq_chips(
             start_date=start_date,
             end_date=end_date,
             sync_strategy=sync_strategy,
             max_requests_per_minute=max_requests_per_minute,
         )
+
+    async def _sync_incremental_by_ts_code(
+        self,
+        start_date: str,
+        end_date: Optional[str] = None,
+        max_requests_per_minute: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """by_ts_code 增量：流式处理（逐只 fetch → clean → upsert → 释放）。
+
+        run_incremental_sync 会把所有 ts_code 的 DataFrame 聚合到内存再一次性 upsert。
+        cyq_chips 每只股票每交易日 ~100 行价位数据，5000+ 只股票 × 回看窗口会吃几 GB
+        内存被 OOM Killer SIGKILL。此方法复用 _full_sync_by_ts_code（每只独立 upsert
+        后释放），内存常驻量从 O(全市场) 降到 O(单只)。
+
+        幂等：进入时清空 Set，全程 sadd 已完成的 ts_code，同一次任务内重试可续继；
+        跨次调度每次都从零覆盖近 N 天窗口。
+        """
+        from app.core.redis_lock import redis_client
+
+        if redis_client is None:
+            # 降级到 run_incremental_sync 就是原 OOM 路径，拒绝执行比埋雷更安全
+            raise RuntimeError(
+                f"[{self.TABLE_KEY}] 增量 by_ts_code 依赖 Redis 做幂等，Redis 不可用"
+            )
+
+        cfg = await asyncio.to_thread(SyncConfigRepository().get_by_table_key, self.TABLE_KEY)
+        api_limit = (cfg.get('api_limit') or 2000) if cfg else 2000
+        concurrency = (cfg.get('full_sync_concurrency') or 5) if cfg else 5
+        provider = self._get_provider(max_requests_per_minute)
+
+        await asyncio.to_thread(redis_client.delete, self.INCREMENTAL_PROGRESS_KEY)
+
+        history_id = await asyncio.to_thread(
+            self.sync_history_repo.create,
+            self.TABLE_KEY, 'incremental', 'by_ts_code', start_date,
+        )
+
+        # 流式路径每只独立 upsert，拿不到整体 max(trade_date)，用 end_date 作为近似；
+        # records=0 时返回 None，与 run_incremental_sync 对齐
+        effective_end = end_date or datetime.now().strftime('%Y%m%d')
+
+        try:
+            logger.info(
+                f"[{self.TABLE_KEY}] 增量 by_ts_code（流式）: "
+                f"start={start_date} end={effective_end} api_limit={api_limit} concurrency={concurrency}"
+            )
+
+            result = await self._full_sync_by_ts_code(
+                redis_client=redis_client,
+                fetch_fn=provider.get_cyq_chips,
+                upsert_fn=self.cyq_chips_repo.bulk_upsert,
+                clean_fn=self._validate_and_clean_data,
+                progress_key=self.INCREMENTAL_PROGRESS_KEY,
+                start_date=start_date,
+                full_history_start=start_date,
+                concurrency=concurrency,
+                api_limit=api_limit,
+                max_requests_per_minute=max_requests_per_minute or 0,
+                update_state_fn=None,
+                fetch_kwargs={},
+                table_key=self.TABLE_KEY,
+            )
+
+            records = result.get('records', 0)
+            status = result.get('status', 'success')
+            actual_end_date = effective_end if records > 0 else None
+
+            if status == 'success':
+                await asyncio.to_thread(
+                    self.sync_history_repo.complete,
+                    history_id, 'success', records, actual_end_date, None,
+                )
+                return {
+                    "status": "success",
+                    "records": records,
+                    "data_end_date": actual_end_date,
+                    "message": result.get('message', f"成功同步 {records} 条数据"),
+                }
+
+            err = result.get('message') or 'unknown'
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'failure', records, actual_end_date, err,
+            )
+            return {"status": "error", "records": records, "error": err}
+
+        except Exception as e:
+            logger.error(f"[{self.TABLE_KEY}] 增量 by_ts_code 失败: {e}")
+            await asyncio.to_thread(
+                self.sync_history_repo.complete,
+                history_id, 'failure', 0, None, str(e),
+            )
+            raise
 
     async def sync_cyq_chips(
         self,

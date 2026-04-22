@@ -720,9 +720,9 @@ function StocksPageContent() {
                     <Select value={pageSize.toString()} onValueChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); updateURL({ pageSize: Number(v), page: null }) }}>
                       <SelectTrigger id="page-size" className="w-[80px]"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="10">10</SelectItem>
                         <SelectItem value="20">20</SelectItem>
-                        <SelectItem value="30">30</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

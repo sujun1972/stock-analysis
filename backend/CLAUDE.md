@@ -438,6 +438,18 @@ class YourService(TushareSyncBase):
 | 仅支持 `trade_date`（如 ggt_top10） | 从 TradingCalendarRepository 获取交易日列表，逐日请求 |
 | `ts_code` 必填（如 fina_audit） | 遍历全部上市股票，逐只请求（5 并发） |
 
+**⚠️ 高数据密度 `by_ts_code` 增量的 OOM 陷阱**：`run_incremental_sync` 的 `by_ts_code` 分支会把全市场所有股票的 DataFrame 聚合到 `all_dfs` 列表，最后一次性 `pd.concat` + `upsert`。对于**每只股票每交易日记录数 ≥ 50 行**的接口（如 `cyq_chips` 100 行/天、`ccass_hold_detail` 数百行/天、tick 级别数据），5000+ 只股票 × 回看窗口会吃数 GB 内存，直接被内核 OOM Killer SIGKILL —— 日志最后只会看到 `Worker exited prematurely: signal 9`（Python 来不及抛 `MemoryError`）。
+
+**解决方案**：`sync_incremental` 里把 `by_ts_code` 分支改走 `_full_sync_by_ts_code` 的流式路径（每只独立 fetch → clean → upsert → 释放，内存 O(单只)）。参考 `cyq_chips_service._sync_incremental_by_ts_code`：
+
+1. 类常量增加 `INCREMENTAL_PROGRESS_KEY`（独立于 `FULL_HISTORY_PROGRESS_KEY`，语义不同）
+2. 入口清空 Set（跨次调度不续继），内部通过 Set sadd 保证同任务重试幂等
+3. 手写 `sync_history.create` + `complete`（`_full_sync_by_ts_code` 不自带 sync_history）
+4. Redis 不可用时 **fail-fast**（禁止降级到 `run_incremental_sync`，会重现 OOM）
+5. `data_end_date` 用 `end_date` 近似（流式路径拿不到整体 `max(trade_date)`）
+
+评估标准：新接入 `by_ts_code` 增量接口前，先算"单股票单日行数 × 5000 只 × 回看天数 × sizeof(row)"，预估峰值内存 > 1 GB 就必须走流式。
+
 **`FULL_HISTORY_LOCK_KEY`**：各 Service 的类常量，全量同步任务通过 `redis_lock.acquire(YourService.FULL_HISTORY_LOCK_KEY, ...)` 引用，避免在任务文件中重复定义。
 
 ### 全量同步并发数
