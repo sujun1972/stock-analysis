@@ -18,6 +18,7 @@ export interface AIProvider {
   is_default: boolean
   priority: number
   rate_limit: number
+  max_concurrent: number | null
   timeout: number
   description: string
   created_at: string

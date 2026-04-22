@@ -211,13 +211,13 @@ def generate_signals(self, prices: pd.DataFrame, features: Optional[pd.DataFrame
             cur = conn.cursor()
             if provider:
                 cur.execute(
-                    "SELECT provider, api_key, api_base_url, model_name, max_tokens, temperature, timeout "
+                    "SELECT provider, api_key, api_base_url, model_name, max_tokens, temperature, timeout, max_concurrent "
                     "FROM ai_provider_configs WHERE provider = %s AND is_active = true LIMIT 1",
                     (provider,),
                 )
             else:
                 cur.execute(
-                    "SELECT provider, api_key, api_base_url, model_name, max_tokens, temperature, timeout "
+                    "SELECT provider, api_key, api_base_url, model_name, max_tokens, temperature, timeout, max_concurrent "
                     "FROM ai_provider_configs WHERE is_active = true AND is_default = true LIMIT 1"
                 )
             row = cur.fetchone()
@@ -234,6 +234,7 @@ def generate_signals(self, prices: pd.DataFrame, features: Optional[pd.DataFrame
                 "max_tokens": row[4],
                 "temperature": float(row[5]),
                 "timeout": row[6],
+                "max_concurrent": row[7],  # None 时 create_chat_model 按 provider 默认
             }
         except Exception as e:
             logger.error(f"获取 AI 提供商配置失败: {e}")

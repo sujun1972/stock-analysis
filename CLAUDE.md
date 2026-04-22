@@ -80,9 +80,10 @@ LangChainClient                 ← backend/app/services/langchain_client.py
 ChatOpenAI (deepseek/openai)    或  ChatGoogleGenerativeAI (gemini)
 ```
 
-- **新增 Provider**：在 `langchain_client.py` 的 `_MODEL_FACTORIES` 注册工厂函数，数据库 `ai_provider_configs` 添加配置行
+- **新增 Provider**：在 `langchain_client.py` 的 `_MODEL_FACTORIES` 注册工厂函数，数据库 `ai_provider_configs` 添加配置行（含 `max_concurrent`），并在 `_PROVIDER_DEFAULT_CONCURRENCY` 登记默认并发（未登记时落到 `_FALLBACK_CONCURRENCY=8`）
 - **Prompt 模板**：数据库驱动（`llm_prompt_template` 表），通过 `PromptTemplateService` 管理
 - **调用日志**：`llm_call_logs` 表 + `LLMCallLogger` 单例，手动 `create_log_entry` / `update_log_success`
+- **并发闸门**：`_wrap_with_semaphore` 按 provider 名全局共享 `asyncio.Semaphore`，包在 `BaseChatModel._agenerate` 上——`LangChainClient.generate_strategy` 和 LangGraph Agent 内部的 LLM 节点自动穿过闸门。上层批量任务/并行专家**不要再套一层 LLM 请求级 Semaphore**，否则与 provider 闸门叠加死锁风险；股票层并发控制仍归上层业务（如 `batch_ai_analysis_tasks.DEFAULT_STOCK_CONCURRENCY`）。上限从 `ai_provider_configs.max_concurrent` 读取（NULL→内置默认 deepseek=32 / openai=16 / gemini=8），**进程启动时懒加载，改 DB 后需重启 backend 与 celery_worker**
 - **依赖包**：`langchain`、`langchain-core`、`langchain-openai`、`langchain-google-genai`
 
 ### CIO Agent 架构（Phase 3）

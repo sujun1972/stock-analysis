@@ -159,6 +159,23 @@ export function ProviderFormDialog({
           </div>
 
           <div className="grid gap-2">
+            <Label htmlFor="max_concurrent">并发上限（进程级 Semaphore）</Label>
+            <Input
+              id="max_concurrent"
+              type="number"
+              min={1}
+              max={256}
+              placeholder="留空按默认：deepseek=32 / openai=16 / gemini=8"
+              value={formData.max_concurrent ?? ''}
+              onChange={(e) => {
+                const v = e.target.value
+                setFormData({ ...formData, max_concurrent: v === '' ? null : parseInt(v) })
+              }}
+            />
+            <p className="text-xs text-gray-500">同一 provider 在进程内同时"在飞"的 LLM 请求数。改动需重启后端/Celery 生效。</p>
+          </div>
+
+          <div className="grid gap-2">
             <Label htmlFor="timeout">超时时间 (秒)</Label>
             <Input
               id="timeout"

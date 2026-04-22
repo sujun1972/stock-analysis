@@ -106,6 +106,10 @@ export function ProviderCard({ provider, onEdit, onDelete }: ProviderCardProps) 
             <p className="font-medium">{provider.rate_limit}/分钟</p>
           </div>
           <div>
+            <p className="text-gray-500 text-xs sm:text-sm">并发上限</p>
+            <p className="font-medium">{provider.max_concurrent ?? '默认'}</p>
+          </div>
+          <div>
             <p className="text-gray-500 text-xs sm:text-sm">超时</p>
             <p className="font-medium">{provider.timeout}秒</p>
           </div>

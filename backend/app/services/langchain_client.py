@@ -16,6 +16,7 @@ LangChain 统一 LLM 客户端层
 创建日期: 2026-04-15
 """
 
+import asyncio
 from typing import Dict, Any, Optional, Tuple
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -23,6 +24,44 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from loguru import logger
 
 from app.core.exceptions import AIServiceError
+
+
+# --------------------------------------------------------------------------
+# Provider 级并发限流（进程内按 provider 名共享的 Semaphore）
+# --------------------------------------------------------------------------
+# 所有 ChatModel 实例（直接 generate_strategy 或 LangGraph Agent 内部的 LLM
+# 节点）都走 _wrap_with_semaphore，把并发集中到单一闸门，避免批量分析时
+# "股票层 × 专家层 × Agent 工具轮次" 并发乘积冲爆 provider。
+#
+# 上限从 ai_provider_configs.max_concurrent 读取；NULL 时按内置默认值。
+# 懒加载 + 首次缓存后不再变更 —— 改 DB 需重启 backend / celery_worker。
+_PROVIDER_SEMAPHORES: Dict[str, asyncio.Semaphore] = {}
+
+_PROVIDER_DEFAULT_CONCURRENCY = {
+    "deepseek": 32,  # 官方 API 文档声明不限并发
+    "openai": 16,
+    "gemini": 8,     # 免费档 RPM 较低，留出余量
+}
+_FALLBACK_CONCURRENCY = 8
+
+
+def _get_provider_semaphore(provider: str, configured_limit: Optional[int]) -> asyncio.Semaphore:
+    """返回该 provider 在本进程内共享的 Semaphore。
+
+    无锁懒加载：并发首次访问时 dict.setdefault 保证最终只留一个实例。
+    首次创建后 configured_limit 的后续变更不生效（需重启进程）。
+    """
+    key = provider.lower()
+    sem = _PROVIDER_SEMAPHORES.get(key)
+    if sem is not None:
+        return sem
+    limit = configured_limit if (configured_limit and configured_limit > 0) else \
+            _PROVIDER_DEFAULT_CONCURRENCY.get(key, _FALLBACK_CONCURRENCY)
+    new_sem = asyncio.Semaphore(limit)
+    sem = _PROVIDER_SEMAPHORES.setdefault(key, new_sem)
+    if sem is new_sem:
+        logger.info(f"[LangChainClient] provider={key} 并发上限={limit}")
+    return sem
 
 
 # --------------------------------------------------------------------------
@@ -84,16 +123,37 @@ _DEFAULT_BASE_URLS = {
 }
 
 
+def _wrap_with_semaphore(model: BaseChatModel, provider: str, configured_limit: Optional[int]) -> BaseChatModel:
+    """给 ChatModel 的 `_agenerate` 套上 provider 级 Semaphore。
+
+    `_agenerate` 是 BaseChatModel 的底层异步抽象：`ainvoke` / `astream` /
+    LangGraph Agent 的 LLM 节点都会调它，所以包这一层就能覆盖所有异步调用路径。
+    同步 `_generate` 在本项目不会走到（所有调用点都是 async），不必包装。
+
+    model 是 Pydantic BaseModel，普通属性赋值会触发 frozen 校验，
+    需用 `object.__setattr__` 绕过。
+    """
+    sem = _get_provider_semaphore(provider, configured_limit)
+    orig_agenerate = model._agenerate
+
+    async def _agenerate_limited(*args, **kwargs):
+        async with sem:
+            return await orig_agenerate(*args, **kwargs)
+
+    object.__setattr__(model, "_agenerate", _agenerate_limited)
+    return model
+
+
 def create_chat_model(provider: str, config: Dict[str, Any]) -> BaseChatModel:
     """
     根据 provider 名称和配置字典创建 LangChain ChatModel。
 
     Args:
         provider: "deepseek" / "openai" / "gemini"
-        config: 包含 api_key, model_name, max_tokens, temperature, timeout 等字段
+        config: 包含 api_key, model_name, max_tokens, temperature, timeout, max_concurrent 等字段
 
     Returns:
-        LangChain BaseChatModel 实例
+        LangChain BaseChatModel 实例（已挂接 provider 级并发闸）
     """
     provider_lower = provider.lower()
     factory = _MODEL_FACTORIES.get(provider_lower)
@@ -105,10 +165,11 @@ def create_chat_model(provider: str, config: Dict[str, Any]) -> BaseChatModel:
     max_tokens = config.get("max_tokens", 4000)
     temperature = config.get("temperature", 0.7)
     timeout = config.get("timeout", 60)
+    max_concurrent = config.get("max_concurrent")  # None → 按 provider 默认
 
     if provider_lower in ("deepseek", "openai"):
         api_base_url = config.get("api_base_url") or _DEFAULT_BASE_URLS.get(provider_lower, "")
-        return factory(
+        model = factory(
             api_key=api_key,
             api_base_url=api_base_url,
             model_name=model_name,
@@ -117,13 +178,15 @@ def create_chat_model(provider: str, config: Dict[str, Any]) -> BaseChatModel:
             timeout=timeout,
         )
     else:
-        return factory(
+        model = factory(
             api_key=api_key,
             model_name=model_name,
             max_tokens=max_tokens,
             temperature=temperature,
             timeout=timeout,
         )
+
+    return _wrap_with_semaphore(model, provider_lower, max_concurrent)
 
 
 # --------------------------------------------------------------------------

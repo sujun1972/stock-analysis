@@ -20,7 +20,8 @@ class AIProviderConfigBase(BaseModel):
     is_active: bool = Field(True, description="是否启用")
     is_default: bool = Field(False, description="是否为默认提供商")
     priority: int = Field(0, description="优先级")
-    rate_limit: int = Field(10, ge=1, le=1000, description="每分钟请求限制")
+    rate_limit: int = Field(10, ge=1, le=1000, description="每分钟请求限制 (RPM)")
+    max_concurrent: Optional[int] = Field(None, ge=1, le=256, description="LLM 并发请求上限；NULL 时按 provider 默认（deepseek=32 / openai=16 / gemini=8）；改动需重启后端生效")
     timeout: int = Field(60, ge=10, le=300, description="请求超时时间(秒)")
     description: Optional[str] = Field(None, description="描述信息")
 
@@ -43,6 +44,7 @@ class AIProviderConfigUpdate(BaseModel):
     is_default: Optional[bool] = None
     priority: Optional[int] = None
     rate_limit: Optional[int] = Field(None, ge=1, le=1000)
+    max_concurrent: Optional[int] = Field(None, ge=1, le=256)
     timeout: Optional[int] = Field(None, ge=10, le=300)
     description: Optional[str] = None
 

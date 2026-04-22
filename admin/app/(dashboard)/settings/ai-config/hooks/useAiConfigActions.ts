@@ -18,6 +18,7 @@ export interface AIProviderFormData {
   is_default: boolean
   priority: number
   rate_limit: number
+  max_concurrent: number | null
   timeout: number
   description: string
 }
@@ -34,6 +35,7 @@ const DEFAULT_FORM_DATA: AIProviderFormData = {
   is_default: false,
   priority: 50,
   rate_limit: 10,
+  max_concurrent: null,
   timeout: 60,
   description: ''
 }
@@ -89,6 +91,7 @@ export function useAiConfigActions({ fetchProviders }: UseAiConfigActionsOptions
       is_default: provider.is_default,
       priority: provider.priority,
       rate_limit: provider.rate_limit,
+      max_concurrent: provider.max_concurrent ?? null,
       timeout: provider.timeout,
       description: provider.description
     })
@@ -109,6 +112,7 @@ export function useAiConfigActions({ fetchProviders }: UseAiConfigActionsOptions
         updateData.is_default = formData.is_default
         updateData.priority = formData.priority
         updateData.rate_limit = formData.rate_limit
+        updateData.max_concurrent = formData.max_concurrent
         updateData.timeout = formData.timeout
         if (formData.description) updateData.description = formData.description
 
