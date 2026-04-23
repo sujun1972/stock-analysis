@@ -55,7 +55,7 @@ function toTsCode(code: string): string {
   return `${code}.SZ`
 }
 
-// 表头排序方向三角指示器（activeKey === sortBy 时才渲染，由调用方判断）
+// 表头排序方向三角指示器
 function SortArrow({ order }: { order: string }) {
   return (
     <svg className="w-3 h-3 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
@@ -63,6 +63,87 @@ function SortArrow({ order }: { order: string }) {
         ? <path fillRule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 13.586l3.293-3.293a1 1 0 011.414 0z" clipRule="evenodd" />
         : <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />}
     </svg>
+  )
+}
+
+// 多列排序：URL 序列化协议 'key:order,key:order,...'
+type SortKey = { key: string; order: 'asc' | 'desc' }
+
+const DEFAULT_SORT: SortKey[] = [{ key: 'pct_change', order: 'desc' }]
+
+function parseSortParam(raw: string | null): SortKey[] {
+  if (!raw) return DEFAULT_SORT
+  const parsed: SortKey[] = []
+  const seen = new Set<string>()
+  raw.split(',').forEach((chunk) => {
+    const s = chunk.trim()
+    if (!s) return
+    const [k, o] = s.includes(':') ? s.split(':') : [s, 'desc']
+    const key = k.trim()
+    if (!key || seen.has(key)) return
+    parsed.push({ key, order: o?.trim().toLowerCase() === 'asc' ? 'asc' : 'desc' })
+    seen.add(key)
+  })
+  return parsed.length ? parsed : DEFAULT_SORT
+}
+
+function serializeSort(keys: SortKey[]): string {
+  return keys.map((k) => `${k.key}:${k.order}`).join(',')
+}
+
+function isDefaultSort(keys: SortKey[]): boolean {
+  return keys.length === 1 && keys[0].key === DEFAULT_SORT[0].key && keys[0].order === DEFAULT_SORT[0].order
+}
+
+// 计算下一轮排序状态（纯函数，便于推理 / 测试）
+// - 普通点击：单列循环 desc → asc → 默认排序
+// - Shift+点击：在现有列表中追加；已存在则该列方向循环 desc → asc → 移除
+function computeNextSort(prev: SortKey[], key: string, shift: boolean): SortKey[] {
+  const idx = prev.findIndex((s) => s.key === key)
+  if (shift) {
+    if (idx < 0) return [...prev, { key, order: 'desc' }]
+    if (prev[idx].order === 'desc') {
+      return prev.map((s, i) => (i === idx ? { ...s, order: 'asc' as const } : s))
+    }
+    const removed = prev.filter((_, i) => i !== idx)
+    return removed.length ? removed : DEFAULT_SORT
+  }
+  if (prev.length === 1 && prev[0].key === key) {
+    return prev[0].order === 'desc' ? [{ key, order: 'asc' }] : DEFAULT_SORT
+  }
+  return [{ key, order: 'desc' }]
+}
+
+// 表头排序按钮：显示标签 + 方向箭头；多列排序时附带优先级数字角标
+function SortHeaderButton({
+  sortKey,
+  label,
+  sortKeys,
+  onClick,
+}: {
+  sortKey: string
+  label: string
+  sortKeys: SortKey[]
+  onClick: (key: string, event?: React.MouseEvent) => void
+}) {
+  const idx = sortKeys.findIndex((s) => s.key === sortKey)
+  const active = idx >= 0
+  const order = active ? sortKeys[idx].order : 'desc'
+  const showPriority = active && sortKeys.length > 1
+  return (
+    <button
+      onClick={(e) => onClick(sortKey, e)}
+      className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200"
+      title="点击单列排序；Shift+点击 追加为次级排序键"
+    >
+      {label}
+      {active && <SortArrow order={order} />}
+      {showPriority && (
+        <span className="ml-0.5 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+          {idx + 1}
+        </span>
+      )}
+    </button>
   )
 }
 
@@ -89,14 +170,26 @@ function StocksPageContent() {
   const [currentPage, setCurrentPage] = useState(() => Number(searchParams.get('page') ?? '1'))
   const [totalStocks, setTotalStocks] = useState(0)
   const [pageSize, setPageSize] = useState(() => Number(searchParams.get('pageSize') ?? '20'))
-  const [sortBy, setSortBy] = useState(() => searchParams.get('sortBy') ?? 'pct_change')
-  const [sortOrder, setSortOrder] = useState(() => searchParams.get('sortOrder') ?? 'desc')
+  // 多列排序：URL 优先读 'sort'；缺省时回退兼容旧 'sortBy'/'sortOrder'；都没有则用默认
+  const [sortKeys, setSortKeys] = useState<SortKey[]>(() => {
+    const raw = searchParams.get('sort')
+    if (raw !== null) return parseSortParam(raw)
+    const legacyBy = searchParams.get('sortBy')
+    if (legacyBy) {
+      const legacyOrder = (searchParams.get('sortOrder') === 'asc') ? 'asc' : 'desc'
+      return [{ key: legacyBy, order: legacyOrder }]
+    }
+    return DEFAULT_SORT
+  })
   const [industries, setIndustries] = useState<{ value: string; label: string; count: number }[]>([])
 
   // ── URL 同步 ──
   const updateURL = useCallback((patch: Record<string, string | number | null>) => {
     const params = new URLSearchParams(searchParams.toString())
-    const defaults: Record<string, string | number> = { sortBy: 'pct_change', sortOrder: 'desc', pageSize: 20, page: 1 }
+    // 旧 sortBy/sortOrder 已废弃；首次更新 URL 时顺手清掉，避免遗留
+    params.delete('sortBy')
+    params.delete('sortOrder')
+    const defaults: Record<string, string | number> = { pageSize: 20, page: 1 }
     for (const [key, value] of Object.entries(patch)) {
       if (value === null || value === '' || value === 'all' || value === defaults[key]) {
         params.delete(key)
@@ -208,8 +301,7 @@ function StocksPageContent() {
       const params: Record<string, string | number | boolean> = {
         skip: (currentPage - 1) * pageSize,
         limit: pageSize,
-        sort_by: sortBy,
-        sort_order: sortOrder,
+        sort: serializeSort(sortKeys),
         list_status: 'L',
         include_analysis: true,
       }
@@ -232,7 +324,7 @@ function StocksPageContent() {
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [currentPage, marketFilter, industryFilter, conceptFilter, pageSize, sortBy, sortOrder, stockSelectionStrategyId, activeListId, setStocks, setLoading, setError])
+  }, [currentPage, marketFilter, industryFilter, conceptFilter, pageSize, sortKeys, stockSelectionStrategyId, activeListId, setStocks, setLoading, setError])
 
   const loadStocks = useCallback(() => fetchStocks(false), [fetchStocks])
 
@@ -430,18 +522,15 @@ function StocksPageContent() {
     })
   }, [])
 
-  // ── 排序点击 ──
-  const handleSortClick = useCallback((key: string) => {
-    if (sortBy === key) {
-      const next = sortOrder === 'desc' ? 'asc' : 'desc'
-      setSortOrder(next)
-      updateURL({ sortBy: key === 'pct_change' ? null : key, sortOrder: key === 'pct_change' ? next : next })
-    } else {
-      setSortBy(key)
-      setSortOrder('desc')
-      updateURL({ sortBy: key === 'pct_change' ? null : key, sortOrder: key === 'pct_change' ? null : 'desc' })
-    }
-  }, [sortBy, sortOrder, updateURL])
+  // 排序点击（多列）：普通=切单列，Shift=追加/循环；同步到 URL
+  const handleSortClick = useCallback((key: string, event?: React.MouseEvent) => {
+    const shift = !!event?.shiftKey
+    setSortKeys((prev) => {
+      const next = computeNextSort(prev, key, shift)
+      updateURL({ sort: isDefaultSort(next) ? null : serializeSort(next) })
+      return next
+    })
+  }, [updateURL])
 
   return (
     <div className="space-y-6">
@@ -687,17 +776,11 @@ function StocksPageContent() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">股票</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">最新价</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      <button onClick={() => handleSortClick('pct_change')} className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200">
-                        涨跌幅
-                        {sortBy === 'pct_change' && <SortArrow order={sortOrder} />}
-                      </button>
+                      <SortHeaderButton sortKey="pct_change" label="涨跌幅" sortKeys={sortKeys} onClick={handleSortClick} />
                     </th>
                     {([['score_hot_money', '游资'], ['score_midline', '中线'], ['score_longterm', '价值'], ['cio_score', 'CIO评分'], ['cio_last_date', 'CIO日期']] as const).map(([key, label]) => (
                       <th key={key} className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        <button onClick={() => handleSortClick(key)} className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200">
-                          {label}
-                          {sortBy === key && <SortArrow order={sortOrder} />}
-                        </button>
+                        <SortHeaderButton sortKey={key} label={label} sortKeys={sortKeys} onClick={handleSortClick} />
                       </th>
                     ))}
                     <th
@@ -710,10 +793,7 @@ function StocksPageContent() {
                       className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
                       title="CIO 复查触发器：最近一个时间事件"
                     >
-                      <button onClick={() => handleSortClick('cio_followup_time')} className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200">
-                        下次关注时间
-                        {sortBy === 'cio_followup_time' && <SortArrow order={sortOrder} />}
-                      </button>
+                      <SortHeaderButton sortKey="cio_followup_time" label="下次关注时间" sortKeys={sortKeys} onClick={handleSortClick} />
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
                   </tr>

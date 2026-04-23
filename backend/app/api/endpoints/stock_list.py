@@ -107,12 +107,121 @@ async def get_concepts(
     return ApiResponse.success(data={'items': items, 'total': total}).to_dict()
 
 
-# sort_by 参数值 → stock_ai_analysis.analysis_type 映射（按 score 排序）
-ANALYSIS_SORT_MAP = {
-    "score_hot_money": "hot_money_view",
-    "score_midline": "midline_industry_expert",
-    "score_longterm": "longterm_value_watcher",
+# 多列排序配置：每个 sort key → JOIN 片段 + 排序表达式
+#
+# 设计要点：
+# - join_group：同一子查询被多个 key 引用时只 JOIN 一次（如 cio_* 三个 key 都来自 cio_directive 最新一条）
+# - join_group=None 表示无需额外 JOIN（用 sb.* 自带列）
+# - JOIN 片段中的 %s 参数按 SORT_SPECS 出现顺序拼到 sort_join_params 里
+#
+# 新增可排序列：在此追加一项即可，order_clause 构造无需改动
+def _ai_score_join(alias: str, analysis_type: str) -> str:
+    return f"""LEFT JOIN (
+            SELECT DISTINCT ON (ts_code) ts_code, score
+            FROM stock_ai_analysis
+            WHERE analysis_type = %s
+            ORDER BY ts_code, created_at DESC
+        ) {alias} ON {alias}.ts_code = sb.ts_code"""
+
+
+# CIO 三个 key 共享的子查询：一次取出 score / created_at / followup_triggers
+_CIO_JOIN = """LEFT JOIN (
+            SELECT DISTINCT ON (ts_code) ts_code, score, created_at, followup_triggers
+            FROM stock_ai_analysis
+            WHERE analysis_type = 'cio_directive'
+            ORDER BY ts_code, created_at DESC
+        ) sort_cio ON sort_cio.ts_code = sb.ts_code"""
+
+
+SORT_SPECS: dict = {
+    "pct_change": {
+        "join_group": "realtime",
+        "join": "LEFT JOIN stock_realtime sr ON sr.code = sb.code",
+        "params": [],
+        "expr": "sr.pct_change",
+    },
+    "score_hot_money": {
+        "join_group": "ai_hot_money",
+        "join": _ai_score_join("sort_hm", "hot_money_view"),
+        "params": ["hot_money_view"],
+        "expr": "sort_hm.score",
+    },
+    "score_midline": {
+        "join_group": "ai_midline",
+        "join": _ai_score_join("sort_ml", "midline_industry_expert"),
+        "params": ["midline_industry_expert"],
+        "expr": "sort_ml.score",
+    },
+    "score_longterm": {
+        "join_group": "ai_longterm",
+        "join": _ai_score_join("sort_lt", "longterm_value_watcher"),
+        "params": ["longterm_value_watcher"],
+        "expr": "sort_lt.score",
+    },
+    "cio_score": {
+        "join_group": "ai_cio",
+        "join": _CIO_JOIN,
+        "params": [],
+        "expr": "sort_cio.score",
+    },
+    "cio_last_date": {
+        "join_group": "ai_cio",
+        "join": _CIO_JOIN,
+        "params": [],
+        "expr": "sort_cio.created_at",
+    },
+    "cio_followup_time": {
+        "join_group": "ai_cio",
+        "join": _CIO_JOIN,
+        "params": [],
+        # 从 followup_triggers.time_triggers JSONB 数组里提取最小 expected_date；非 YYYY-MM-DD 字符串过滤
+        "expr": r"""(
+            SELECT MIN((elem->>'expected_date')::date)
+            FROM jsonb_array_elements(COALESCE(sort_cio.followup_triggers->'time_triggers', '[]'::jsonb)) AS elem
+            WHERE elem->>'expected_date' IS NOT NULL
+              AND elem->>'expected_date' ~ '^\d{4}-\d{2}-\d{2}$'
+        )""",
+    },
+    "code": {
+        "join_group": None,
+        "join": "",
+        "params": [],
+        "expr": "sb.code",
+    },
 }
+
+
+def _parse_sort_param(
+    sort: Optional[str],
+    legacy_sort_by: Optional[str],
+    legacy_sort_order: Optional[str],
+) -> list:
+    """
+    解析排序参数为 [(key, 'ASC'|'DESC'), ...]
+
+    - 新参数 `sort` 优先；缺省时回退旧 `sort_by`/`sort_order`（仅兼容已发出的 URL）
+    - 格式：'key:order,key:order,...'；order 缺省 desc，asc 大小写不敏感
+    - 非法 key 跳过（白名单 = SORT_SPECS 的 keys）；重复 key 仅保留首次出现
+    """
+    raw_pairs: list = []
+    if sort:
+        for chunk in sort.split(','):
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            key, _, order = chunk.partition(':')
+            raw_pairs.append((key.strip(), order.strip().lower()))
+    elif legacy_sort_by:
+        raw_pairs.append((legacy_sort_by.strip(), (legacy_sort_order or 'desc').strip().lower()))
+
+    parsed: list = []
+    seen: set = set()
+    for key, order in raw_pairs:
+        if key not in SORT_SPECS or key in seen:
+            continue
+        parsed.append((key, 'ASC' if order == 'asc' else 'DESC'))
+        seen.add(key)
+    return parsed
 
 
 @router.get("")
@@ -129,8 +238,9 @@ async def get_stock_list(
     user_stock_list_id: Optional[int] = Query(None, description="自选列表ID，仅返回该列表中的股票"),
     ts_codes: Optional[str] = Query(None, description="ts_code 列表，逗号分隔；传入后仅返回这些股票（用于静默刷新场景，不改变前端显示的行集合）"),
     include_analysis: bool = Query(False, description="是否附带每只股票的最新AI分析摘要（游资观点评分等）"),
-    sort_by: Optional[str] = Query(None, description="排序字段: code, pct_change, score_hot_money, score_midline, score_longterm, cio_last_date, cio_score, cio_followup_time"),
-    sort_order: Optional[str] = Query(None, description="排序方向: asc, desc"),
+    sort: Optional[str] = Query(None, description="多列排序，格式 'key:order,key:order,...'。key 白名单见 SORT_SPECS；order 为 asc/desc，缺省 desc。优先级从前到后递减。"),
+    sort_by: Optional[str] = Query(None, description="[已废弃] 单列排序字段，与 sort_order 配对。新代码请用 sort"),
+    sort_order: Optional[str] = Query(None, description="[已废弃] 单列排序方向：asc/desc"),
     limit: int = Query(30, ge=1, le=100, description="每页记录数"),
     offset: int = Query(0, ge=0, description="偏移量"),
     skip: int = Query(0, ge=0, description="偏移量（offset别名，兼容前端）"),
@@ -256,67 +366,25 @@ async def get_stock_list(
     )
     total = count_result[0][0] if count_result else 0
 
-    # 排序逻辑
-    order_dir = "ASC" if sort_order == "asc" else "DESC"
-    analysis_type_for_sort = ANALYSIS_SORT_MAP.get(sort_by) if sort_by else None
-    sort_join = ""
+    # 排序逻辑（多列）：按用户指定优先级拼 ORDER BY，相同 join_group 只 JOIN 一次；
+    # 始终追加 sb.code 兜底（避免相同排序值时分页跳行）
+    parsed_sort = _parse_sort_param(sort, sort_by, sort_order)
+    sort_join_parts: list = []
     sort_join_params: list = []
-    if analysis_type_for_sort:
-        # LEFT JOIN 最新评分子查询用于排序
-        sort_join = """
-            LEFT JOIN (
-                SELECT DISTINCT ON (ts_code) ts_code, score
-                FROM stock_ai_analysis
-                WHERE analysis_type = %s
-                ORDER BY ts_code, created_at DESC
-            ) sort_score ON sort_score.ts_code = sb.ts_code
-        """
-        sort_join_params.append(analysis_type_for_sort)
-        order_clause = f"ORDER BY sort_score.score {order_dir} NULLS LAST, sb.code"
-    elif sort_by == "cio_last_date":
-        # 按 CIO 最新报告的 created_at 排序（仅日期维度，不涉及 score）
-        sort_join = """
-            LEFT JOIN (
-                SELECT DISTINCT ON (ts_code) ts_code, created_at
-                FROM stock_ai_analysis
-                WHERE analysis_type = 'cio_directive'
-                ORDER BY ts_code, created_at DESC
-            ) sort_cio ON sort_cio.ts_code = sb.ts_code
-        """
-        order_clause = f"ORDER BY sort_cio.created_at {order_dir} NULLS LAST, sb.code"
-    elif sort_by == "cio_score":
-        # 按 CIO 最新报告的综合评分排序
-        sort_join = """
-            LEFT JOIN (
-                SELECT DISTINCT ON (ts_code) ts_code, score
-                FROM stock_ai_analysis
-                WHERE analysis_type = 'cio_directive'
-                ORDER BY ts_code, created_at DESC
-            ) sort_cio_score ON sort_cio_score.ts_code = sb.ts_code
-        """
-        order_clause = f"ORDER BY sort_cio_score.score {order_dir} NULLS LAST, sb.code"
-    elif sort_by == "cio_followup_time":
-        # 按 CIO 最新报告的复查时间触发器最早一个 expected_date 排序
-        # 从 followup_triggers.time_triggers 数组中提取最小 expected_date（JSONB）
-        sort_join = """
-            LEFT JOIN (
-                SELECT DISTINCT ON (ts_code) ts_code, followup_triggers
-                FROM stock_ai_analysis
-                WHERE analysis_type = 'cio_directive'
-                ORDER BY ts_code, created_at DESC
-            ) sort_cio_ft ON sort_cio_ft.ts_code = sb.ts_code
-        """
-        order_clause = f"""ORDER BY (
-            SELECT MIN((elem->>'expected_date')::date)
-            FROM jsonb_array_elements(COALESCE(sort_cio_ft.followup_triggers->'time_triggers', '[]'::jsonb)) AS elem
-            WHERE elem->>'expected_date' IS NOT NULL
-              AND elem->>'expected_date' ~ '^\\d{{4}}-\\d{{2}}-\\d{{2}}$'
-        ) {order_dir} NULLS LAST, sb.code"""
-    elif sort_by == "pct_change":
-        sort_join = "LEFT JOIN stock_realtime sr ON sr.code = sb.code"
-        order_clause = f"ORDER BY sr.pct_change {order_dir} NULLS LAST, sb.code"
-    else:
-        order_clause = "ORDER BY sb.code"
+    order_parts: list = []
+    used_groups: set = set()
+    for key, direction in parsed_sort:
+        spec = SORT_SPECS[key]
+        group = spec["join_group"]
+        if group and group not in used_groups:
+            sort_join_parts.append(spec["join"])
+            sort_join_params.extend(spec["params"])
+            used_groups.add(group)
+        order_parts.append(f"{spec['expr']} {direction} NULLS LAST")
+    if not any(k == "code" for k, _ in parsed_sort):
+        order_parts.append("sb.code")
+    sort_join = "\n".join(sort_join_parts)
+    order_clause = "ORDER BY " + ", ".join(order_parts)
 
     # 组装查询参数：SQL 结构为 FROM(+sort_join) WHERE LIMIT，需按出现顺序排列
     if concept_code:

@@ -165,7 +165,7 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 | `stock_selection_strategy_id` | 选股策略 ID | 后端执行策略后 WHERE IN 过滤 |
 | `list` | 自选列表 ID | 后端 WHERE IN 子查询过滤，与其他条件可叠加 |
 | `page` / `pageSize` | 分页 | 默认 page=1, pageSize=20 |
-| `sortBy` / `sortOrder` | 排序 | 默认 pct_change desc；支持 `pct_change`/`score_hot_money`/`score_midline`/`score_longterm`/`cio_score`/`cio_last_date`/`cio_followup_time`，后端 LEFT JOIN 排序。`cio_last_date` 按 `stock_ai_analysis.created_at` 排（日期维度），`cio_score` 按最新 CIO 报告 `score`（评分维度），`cio_followup_time` 从 `followup_triggers.time_triggers` JSONB 数组里用 `jsonb_array_elements` 提取最小 `expected_date::date` 排 |
+| `sort` | 多列排序 | 格式 `key:order,key:order,...`，优先级从前到后递减；缺省时退化为默认 `pct_change:desc`。支持的 key：`pct_change` / `score_hot_money` / `score_midline` / `score_longterm` / `cio_score` / `cio_last_date` / `cio_followup_time` / `code`。后端按白名单（`SORT_SPECS`，见 [stock_list.py](../backend/app/api/endpoints/stock_list.py)）拼 LEFT JOIN + ORDER BY，相同子查询（如 cio_* 三列）共享 `join_group` 只 JOIN 一次；`sb.code` 自动追加为兜底排序保分页稳定。`cio_last_date` 按 `stock_ai_analysis.created_at` 排（日期维度），`cio_score` 按最新 CIO 报告 `score`，`cio_followup_time` 从 `followup_triggers.time_triggers` JSONB 数组里用 `jsonb_array_elements` 提取最小 `expected_date::date` 排。**交互**：表头普通点击=该列单列切换（desc → asc → 默认）；**Shift+点击**=追加为次级排序键，已存在则循环 desc → asc → 移除；多列时表头标签右侧显示优先级数字角标。**兼容**：旧 `sortBy` / `sortOrder` 单列参数仍接受（`/stocks` 页面初始化时自动转换为 `sort`，旧书签不丢失），新代码请只用 `sort` |
 
 **关键约束**：
 - 市场筛选中，上海主板/深圳主板在 DB 中均存为 `market='主板'`，通过 `exchange` 字段区分（`SSE`/`SZSE`）
