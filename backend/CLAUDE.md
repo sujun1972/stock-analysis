@@ -309,6 +309,7 @@ def sync_your_full_history_task(self, start_date=None, concurrency=5):
 | 任务状态卡在 `pending` | 信号处理器使用了 `DatabaseManager` 单例（fork 后连接池损坏） | `celery_signals.py` 中信号处理器用 `_get_direct_conn()` 独立 psycopg2 直连 |
 | `connection pool is closed` | 顶层 Service 实例化，fork 后继承损坏的连接池 | 将 Service 实例化移入任务函数体（延迟导入） |
 | `attached to a different loop` | 复用了绑定到父进程的事件循环 | 使用 `run_async_in_celery` 辅助函数 |
+| `<Lock/Semaphore> is bound to a different event loop` | 模块级 `asyncio.Lock` / `asyncio.Semaphore` 首次 `await` 时绑死到创建它的 loop；`run_async_in_celery` 每次运行新建 loop，跨运行复用必报错 | 按 `(key, id(asyncio.get_running_loop()))` 隔离缓存，首次访问新 loop 时清理旧条目。现例：`langchain_client._PROVIDER_SEMAPHORES`、`prompt_templates._data_collection_locks` |
 | 活动任务在面板消失但 worker 仍运行 | 未配置 `task_track_started=True` | 在 `celery_app.conf.update()` 中添加此配置 |
 | `celery_beat` 报 "Tushare Token 未配置" | `docker-compose.yml` celery_beat 服务缺少 `TUSHARE_TOKEN` | 在 environment 中添加 `TUSHARE_TOKEN=${TUSHARE_TOKEN:-}` |
 | 全量同步提交报"已有任务在进行" | Redis lock key 残留（任务被 revoke 或 worker 崩溃） | 端点提交前调用 `release_stale_lock(table_key)` |

@@ -519,7 +519,30 @@ async def _get_existing_stock_data_collection(
 
 
 # 防止并发请求对同一只股票重复生成 stock_data_collection 记录
-_data_collection_locks: dict[str, asyncio.Lock] = {}
+# key: (ts_code, id(loop))；Celery run_async_in_celery 每次运行都会新建事件循环，
+# 模块级 Lock 跨运行复用会报 "bound to a different event loop"，必须按当前运行的
+# 事件循环隔离存储。
+_data_collection_locks: dict[tuple[str, int], asyncio.Lock] = {}
+
+
+def _get_data_collection_lock(ts_code: str) -> asyncio.Lock:
+    """返回绑定到当前运行事件循环的 lock；不同事件循环各自持有独立 lock。
+
+    Celery worker 每次任务会 close 旧 loop 并新建 loop，此时旧 loop 的 id 不再被
+    任何调用方使用，相关锁条目是死内存；首次访问当前 loop 时顺便清理。
+    """
+    loop = asyncio.get_running_loop()
+    loop_id = id(loop)
+    key = (ts_code, loop_id)
+    lock = _data_collection_locks.get(key)
+    if lock is None:
+        # 首次访问本 loop：清理所有 loop_id 不等于当前 loop 的陈旧条目
+        stale = [k for k in _data_collection_locks if k[1] != loop_id]
+        for k in stale:
+            _data_collection_locks.pop(k, None)
+        lock = asyncio.Lock()
+        _data_collection_locks[key] = lock
+    return lock
 
 
 async def _get_or_generate_stock_data_collection(
@@ -542,10 +565,7 @@ async def _get_or_generate_stock_data_collection(
     from app.services.stock_data_collection_service import StockDataCollectionService
     from app.services.stock_ai_analysis_service import StockAiAnalysisService
 
-    # 获取或创建该股票的锁
-    if ts_code not in _data_collection_locks:
-        _data_collection_locks[ts_code] = asyncio.Lock()
-    lock = _data_collection_locks[ts_code]
+    lock = _get_data_collection_lock(ts_code)
 
     async with lock:
         repo = StockAiAnalysisRepository()

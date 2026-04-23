@@ -28,6 +28,7 @@ export async function getStockList(params?: {
   sort_order?: string
   stock_selection_strategy_id?: number
   user_stock_list_id?: number
+  ts_codes?: string
   include_analysis?: boolean
 }): Promise<PaginatedResponse<StockInfo> & { strategy_name?: string }> {
   const response = await axiosInstance.get('/api/stocks/list', { params })

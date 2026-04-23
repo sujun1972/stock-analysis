@@ -35,7 +35,11 @@ from app.core.exceptions import AIServiceError
 #
 # 上限从 ai_provider_configs.max_concurrent 读取；NULL 时按内置默认值。
 # 懒加载 + 首次缓存后不再变更 —— 改 DB 需重启 backend / celery_worker。
-_PROVIDER_SEMAPHORES: Dict[str, asyncio.Semaphore] = {}
+#
+# key 是 (provider, loop_id)：Celery run_async_in_celery 每次运行会关闭旧
+# event loop 并新建 loop，asyncio.Semaphore 绑定到创建它的 loop，跨 loop 复用
+# 会报 "bound to a different event loop"。按当前运行的 event loop 隔离存储。
+_PROVIDER_SEMAPHORES: Dict[tuple[str, int], asyncio.Semaphore] = {}
 
 _PROVIDER_DEFAULT_CONCURRENCY = {
     "deepseek": 32,  # 官方 API 文档声明不限并发
@@ -46,21 +50,28 @@ _FALLBACK_CONCURRENCY = 8
 
 
 def _get_provider_semaphore(provider: str, configured_limit: Optional[int]) -> asyncio.Semaphore:
-    """返回该 provider 在本进程内共享的 Semaphore。
+    """返回该 provider 在当前事件循环内共享的 Semaphore。
 
-    无锁懒加载：并发首次访问时 dict.setdefault 保证最终只留一个实例。
+    懒加载：同一 loop 内并发首次访问时 dict.setdefault 保证只留一个实例；
+    不同 loop 各自持有独立 Semaphore，避免 Celery 重建 loop 后跨 loop 复用。
     首次创建后 configured_limit 的后续变更不生效（需重启进程）。
     """
-    key = provider.lower()
+    loop = asyncio.get_running_loop()
+    loop_id = id(loop)
+    key = (provider.lower(), loop_id)
     sem = _PROVIDER_SEMAPHORES.get(key)
     if sem is not None:
         return sem
+    # 首次访问本 loop：顺手清理所有 loop_id 不等于当前 loop 的陈旧条目
+    stale = [k for k in _PROVIDER_SEMAPHORES if k[1] != loop_id]
+    for k in stale:
+        _PROVIDER_SEMAPHORES.pop(k, None)
     limit = configured_limit if (configured_limit and configured_limit > 0) else \
-            _PROVIDER_DEFAULT_CONCURRENCY.get(key, _FALLBACK_CONCURRENCY)
+            _PROVIDER_DEFAULT_CONCURRENCY.get(key[0], _FALLBACK_CONCURRENCY)
     new_sem = asyncio.Semaphore(limit)
     sem = _PROVIDER_SEMAPHORES.setdefault(key, new_sem)
     if sem is new_sem:
-        logger.info(f"[LangChainClient] provider={key} 并发上限={limit}")
+        logger.info(f"[LangChainClient] provider={key[0]} loop_id={loop_id} 并发上限={limit}")
     return sem
 
 

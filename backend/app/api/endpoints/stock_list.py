@@ -127,8 +127,9 @@ async def get_stock_list(
     search: Optional[str] = Query(None, description="搜索关键词，支持股票代码或名称的模糊匹配"),
     stock_selection_strategy_id: Optional[int] = Query(None, description="选股策略ID，执行策略后仅返回选中的股票"),
     user_stock_list_id: Optional[int] = Query(None, description="自选列表ID，仅返回该列表中的股票"),
+    ts_codes: Optional[str] = Query(None, description="ts_code 列表，逗号分隔；传入后仅返回这些股票（用于静默刷新场景，不改变前端显示的行集合）"),
     include_analysis: bool = Query(False, description="是否附带每只股票的最新AI分析摘要（游资观点评分等）"),
-    sort_by: Optional[str] = Query(None, description="排序字段: code, pct_change, score_hot_money, score_midline, score_longterm, cio_last_date"),
+    sort_by: Optional[str] = Query(None, description="排序字段: code, pct_change, score_hot_money, score_midline, score_longterm, cio_last_date, cio_score, cio_followup_time"),
     sort_order: Optional[str] = Query(None, description="排序方向: asc, desc"),
     limit: int = Query(30, ge=1, le=100, description="每页记录数"),
     offset: int = Query(0, ge=0, description="偏移量"),
@@ -227,6 +228,16 @@ async def get_stock_list(
                 'strategy_name': selection_strategy_name,
             }).to_dict()
 
+    # ts_codes 显式过滤（静默刷新场景：仅更新前端已显示的行）
+    if ts_codes:
+        ts_code_list = [c.strip().upper() for c in ts_codes.split(',') if c.strip()]
+        if ts_code_list:
+            placeholders = ",".join(["%s"] * len(ts_code_list))
+            conditions.append(f"{col('ts_code')} IN ({placeholders})")
+            params.extend(ts_code_list)
+        else:
+            return ApiResponse.success(data={'items': [], 'total': 0}).to_dict()
+
     # 自选列表过滤：JOIN user_stock_list_items
     if user_stock_list_id is not None:
         conditions.append(f"""
@@ -273,6 +284,34 @@ async def get_stock_list(
             ) sort_cio ON sort_cio.ts_code = sb.ts_code
         """
         order_clause = f"ORDER BY sort_cio.created_at {order_dir} NULLS LAST, sb.code"
+    elif sort_by == "cio_score":
+        # 按 CIO 最新报告的综合评分排序
+        sort_join = """
+            LEFT JOIN (
+                SELECT DISTINCT ON (ts_code) ts_code, score
+                FROM stock_ai_analysis
+                WHERE analysis_type = 'cio_directive'
+                ORDER BY ts_code, created_at DESC
+            ) sort_cio_score ON sort_cio_score.ts_code = sb.ts_code
+        """
+        order_clause = f"ORDER BY sort_cio_score.score {order_dir} NULLS LAST, sb.code"
+    elif sort_by == "cio_followup_time":
+        # 按 CIO 最新报告的复查时间触发器最早一个 expected_date 排序
+        # 从 followup_triggers.time_triggers 数组中提取最小 expected_date（JSONB）
+        sort_join = """
+            LEFT JOIN (
+                SELECT DISTINCT ON (ts_code) ts_code, followup_triggers
+                FROM stock_ai_analysis
+                WHERE analysis_type = 'cio_directive'
+                ORDER BY ts_code, created_at DESC
+            ) sort_cio_ft ON sort_cio_ft.ts_code = sb.ts_code
+        """
+        order_clause = f"""ORDER BY (
+            SELECT MIN((elem->>'expected_date')::date)
+            FROM jsonb_array_elements(COALESCE(sort_cio_ft.followup_triggers->'time_triggers', '[]'::jsonb)) AS elem
+            WHERE elem->>'expected_date' IS NOT NULL
+              AND elem->>'expected_date' ~ '^\\d{{4}}-\\d{{2}}-\\d{{2}}$'
+        ) {order_dir} NULLS LAST, sb.code"""
     elif sort_by == "pct_change":
         sort_join = "LEFT JOIN stock_realtime sr ON sr.code = sb.code"
         order_clause = f"ORDER BY sr.pct_change {order_dir} NULLS LAST, sb.code"

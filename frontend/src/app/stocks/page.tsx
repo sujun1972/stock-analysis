@@ -55,6 +55,17 @@ function toTsCode(code: string): string {
   return `${code}.SZ`
 }
 
+// 表头排序方向三角指示器（activeKey === sortBy 时才渲染，由调用方判断）
+function SortArrow({ order }: { order: string }) {
+  return (
+    <svg className="w-3 h-3 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+      {order === 'desc'
+        ? <path fillRule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 13.586l3.293-3.293a1 1 0 011.414 0z" clipRule="evenodd" />
+        : <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />}
+    </svg>
+  )
+}
+
 // ── 主页面 ────────────────────────────────────────────────────
 function StocksPageContent() {
   const searchParams = useSearchParams()
@@ -165,10 +176,34 @@ function StocksPageContent() {
   }, [toast])
 
   // ── 股票列表加载 ──
+  // silent=true 的静默刷新只更新当前已显示行的数据（按 ts_code 定向拉取 + 原位合并），
+  // 不改变行的集合和顺序，也不改变 totalStocks，避免翻页/排序状态被异步刷新打乱
   const fetchStocks = useCallback(async (silent: boolean = false) => {
     try {
       if (!silent) setLoading(true)
       setError(null)
+
+      if (silent) {
+        const existing = useStockStore.getState().stocks
+        const displayedTsCodes = Array.isArray(existing)
+          ? existing.map((s) => s.ts_code || toTsCode(s.code)).filter(Boolean)
+          : []
+        if (displayedTsCodes.length === 0) return
+        const response = await apiClient.getStockList({
+          ts_codes: displayedTsCodes.join(','),
+          limit: displayedTsCodes.length,
+          list_status: 'L',
+          include_analysis: true,
+        })
+        const fetched = response.items || []
+        const byCode = new Map(fetched.map((s: StockInfo) => [s.code, s]))
+        const merged = existing.map((prev) => {
+          const next = byCode.get(prev.code)
+          return next ? { ...prev, ...next } : prev
+        })
+        setStocks(merged)
+        return
+      }
 
       const params: Record<string, string | number | boolean> = {
         skip: (currentPage - 1) * pageSize,
@@ -654,34 +689,31 @@ function StocksPageContent() {
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       <button onClick={() => handleSortClick('pct_change')} className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200">
                         涨跌幅
-                        {sortBy === 'pct_change' && (
-                          <svg className="w-3 h-3 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                            {sortOrder === 'desc'
-                              ? <path fillRule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 13.586l3.293-3.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                              : <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />}
-                          </svg>
-                        )}
+                        {sortBy === 'pct_change' && <SortArrow order={sortOrder} />}
                       </button>
                     </th>
-                    {([['score_hot_money', '游资'], ['score_midline', '中线'], ['score_longterm', '价值'], ['cio_last_date', 'CIO日期']] as const).map(([key, label]) => (
+                    {([['score_hot_money', '游资'], ['score_midline', '中线'], ['score_longterm', '价值'], ['cio_score', 'CIO评分'], ['cio_last_date', 'CIO日期']] as const).map(([key, label]) => (
                       <th key={key} className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         <button onClick={() => handleSortClick(key)} className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200">
                           {label}
-                          {sortBy === key && (
-                            <svg className="w-3 h-3 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                              {sortOrder === 'desc'
-                                ? <path fillRule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 13.586l3.293-3.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                : <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />}
-                            </svg>
-                          )}
+                          {sortBy === key && <SortArrow order={sortOrder} />}
                         </button>
                       </th>
                     ))}
                     <th
                       className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
-                      title="CIO 复查触发器：上/下方触发价 + 近期关注事件"
+                      title="CIO 复查触发器：上/下方触发价"
                     >
-                      下次关注
+                      下次关注价格
+                    </th>
+                    <th
+                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
+                      title="CIO 复查触发器：最近一个时间事件"
+                    >
+                      <button onClick={() => handleSortClick('cio_followup_time')} className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200">
+                        下次关注时间
+                        {sortBy === 'cio_followup_time' && <SortArrow order={sortOrder} />}
+                      </button>
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
                   </tr>

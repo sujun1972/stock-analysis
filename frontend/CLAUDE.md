@@ -165,7 +165,7 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 | `stock_selection_strategy_id` | 选股策略 ID | 后端执行策略后 WHERE IN 过滤 |
 | `list` | 自选列表 ID | 后端 WHERE IN 子查询过滤，与其他条件可叠加 |
 | `page` / `pageSize` | 分页 | 默认 page=1, pageSize=20 |
-| `sortBy` / `sortOrder` | 排序 | 默认 pct_change desc；支持 `pct_change`/`score_hot_money`/`score_midline`/`score_longterm`/`cio_last_date`，后端 LEFT JOIN 排序。`cio_last_date` 按 `stock_ai_analysis.created_at`（CIO 最新报告日期）排序而非 score |
+| `sortBy` / `sortOrder` | 排序 | 默认 pct_change desc；支持 `pct_change`/`score_hot_money`/`score_midline`/`score_longterm`/`cio_score`/`cio_last_date`/`cio_followup_time`，后端 LEFT JOIN 排序。`cio_last_date` 按 `stock_ai_analysis.created_at` 排（日期维度），`cio_score` 按最新 CIO 报告 `score`（评分维度），`cio_followup_time` 从 `followup_triggers.time_triggers` JSONB 数组里用 `jsonb_array_elements` 提取最小 `expected_date::date` 排 |
 
 **关键约束**：
 - 市场筛选中，上海主板/深圳主板在 DB 中均存为 `market='主板'`，通过 `exchange` 字段区分（`SSE`/`SZSE`）
@@ -227,7 +227,15 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 **Markdown 渲染**：`HotMoneyViewDialog.tsx` 使用 `react-markdown` + `remark-gfm` 渲染非 JSON 分析文本（如数据收集结果），支持 GFM 表格、标题、列表、代码块等完整 Markdown 语法。`markdownComponents` 常量定义自定义样式，`p` 和 `li` 中额外处理【标签】高亮。
 
-**股票列表评分列 + CIO 日期列**：`/stocks` 页面表格显示三列 AI 评分 + CIO 最新报告日期列：游资（`latest_analysis_hot_money.score`）、中线（`latest_analysis_midline.score`）、价值（`latest_analysis_longterm.score`）、CIO日期（`latest_analysis_cio.created_at`，仅日期，不显示 score）。后端 `enrich_stock_list_multi()` 通过 `asyncio.gather` 并发批量查询四种类型，一次注入到 `StockInfo` 对象。CIO 日期列支持服务端排序（sort_by=`cio_last_date`，按 `created_at` DESC/ASC，NULL 置末）。
+**股票列表评分列 + CIO 列**：`/stocks` 页面表格按顺序显示 4 列 AI 评分 + CIO 报告日期 + CIO 复查触发器（价格 / 时间两列分开）：
+- 评分列：游资（`latest_analysis_hot_money.score`）、中线（`latest_analysis_midline.score`）、价值（`latest_analysis_longterm.score`）、**CIO评分**（`latest_analysis_cio.score`）
+- **CIO日期**：`latest_analysis_cio.created_at` 截取前 10 位
+- **下次关注价格**：`followup_triggers.price_triggers` 中 `break_up` / `break_down` 的 `price`，▲/▼ 标识方向（不可排序）
+- **下次关注时间**：`followup_triggers.time_triggers` 中 `expected_date` 最早的一条
+
+后端 `enrich_stock_list_multi()` 通过 `asyncio.gather` 并发批量查询四种 analysis_type，一次注入到 `StockInfo`；CIO 记录额外注入 `followup_triggers`。`ScoreCell` 组件统一渲染评分色阶（≥8 红/≥6 黄/其余灰），4 列评分共享同一个组件，新增专家类型只需追加 `latest_analysis_xxx` 字段 + 在 `StockTableRow` 的 map 数组里加一项。
+
+**股票列表静默刷新（`fetchStocks(silent=true)`）**：自动刷新（交易时段每 3s、分析中标志移除后）只更新当前已显示行，不改变行集合/顺序/`totalStocks`。实现：从 `useStockStore.getState().stocks` 取当前显示的 `ts_code`s，调 `GET /api/stocks/list?ts_codes=...,...&include_analysis=true`（新增的 `ts_codes` IN 过滤跳过分页/排序/筛选），按 `code` Map 原位合并回存量数组。避免用户翻到第 N 页或改变排序后被异步刷新重置到默认视图。
 
 `stock_ai_analysis` 表通过 `analysis_type` 字段区分类型，后端 `ALLOWED_ANALYSIS_TYPES` 枚举控制允许写入的类型——**新增分析类型时必须同时更新后端 Service 中的 `ALLOWED_ANALYSIS_TYPES`**，以及 `_JSON_ANALYSIS_TYPES`（`stock_ai_analysis.py`）、`admin/types/prompt-template.ts` 中的 `BUSINESS_TYPES` 和 `BUSINESS_TYPE_LABELS`。
 

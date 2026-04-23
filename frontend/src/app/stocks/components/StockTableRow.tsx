@@ -12,30 +12,29 @@ function toTsCode(code: string): string {
   return `${code}.SZ`
 }
 
-/**
- * 股票列表"下次关注"列：紧凑展示 CIO 复查触发器摘要
- *   - 上方触发价（break_up）与下方触发价（break_down），带箭头
- *   - 最近一个时间触发器（事件+日期）
- * 完整明细在 CIO Tab 弹窗展示，这里只给决策一瞥。
- */
-function FollowupTriggersCell({ triggers }: { triggers: CioFollowupTriggers | null }) {
+// AI 评分色阶：≥8 红（强）、≥6 黄（中）、其余灰
+function ScoreCell({ score }: { score?: number | null }) {
+  if (score == null) {
+    return <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
+  }
+  const tone =
+    score >= 8 ? 'text-red-600 dark:text-red-400'
+    : score >= 6 ? 'text-yellow-600 dark:text-yellow-400'
+    : 'text-gray-500 dark:text-gray-400'
+  return <span className={`text-sm font-semibold ${tone}`}>{score}</span>
+}
+
+function FollowupPriceCell({ triggers }: { triggers: CioFollowupTriggers | null }) {
   if (!triggers) {
     return <span className="text-gray-300 dark:text-gray-600">—</span>
   }
-
   const breakUp = triggers.price_triggers?.find(t => t.direction === 'break_up' && t.price != null)
   const breakDown = triggers.price_triggers?.find(t => t.direction === 'break_down' && t.price != null)
-  const nearestTime = (triggers.time_triggers ?? [])
-    .filter(t => !!t.expected_date)
-    .sort((a, b) => String(a.expected_date).localeCompare(String(b.expected_date)))[0]
-
-  const hasAny = breakUp || breakDown || nearestTime
-  if (!hasAny) {
+  if (!breakUp && !breakDown) {
     return <span className="text-gray-300 dark:text-gray-600">—</span>
   }
-
   return (
-    <div className="flex flex-col gap-0.5 min-w-[110px]">
+    <div className="flex flex-col gap-0.5 min-w-[80px]">
       {breakUp && (
         <span className="text-red-600 dark:text-red-400 whitespace-nowrap" title={breakUp.price_basis ?? ''}>
           ▲ {breakUp.price?.toFixed(2)}
@@ -46,12 +45,24 @@ function FollowupTriggersCell({ triggers }: { triggers: CioFollowupTriggers | nu
           ▼ {breakDown.price?.toFixed(2)}
         </span>
       )}
-      {nearestTime && (
-        <span className="text-gray-500 dark:text-gray-400 whitespace-nowrap" title={nearestTime.reason ?? ''}>
-          ⏱ {String(nearestTime.expected_date).slice(5)}
-        </span>
-      )}
     </div>
+  )
+}
+
+function FollowupTimeCell({ triggers }: { triggers: CioFollowupTriggers | null }) {
+  if (!triggers) {
+    return <span className="text-gray-300 dark:text-gray-600">—</span>
+  }
+  const nearestTime = (triggers.time_triggers ?? [])
+    .filter(t => !!t.expected_date)
+    .sort((a, b) => String(a.expected_date).localeCompare(String(b.expected_date)))[0]
+  if (!nearestTime) {
+    return <span className="text-gray-300 dark:text-gray-600">—</span>
+  }
+  return (
+    <span className="text-gray-600 dark:text-gray-400 whitespace-nowrap" title={nearestTime.reason ?? ''}>
+      ⏱ {String(nearestTime.expected_date)}
+    </span>
   )
 }
 
@@ -121,19 +132,10 @@ export const StockTableRow = React.memo(function StockTableRow({
         stock.latest_analysis_hot_money,
         stock.latest_analysis_midline,
         stock.latest_analysis_longterm,
+        stock.latest_analysis_cio,
       ].map((analysis, idx) => (
         <td key={idx} className="px-4 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
-          {analysis?.score != null ? (
-            <span className={`text-sm font-semibold ${
-              analysis.score >= 8 ? 'text-red-600 dark:text-red-400'
-              : analysis.score >= 6 ? 'text-yellow-600 dark:text-yellow-400'
-              : 'text-gray-500 dark:text-gray-400'
-            }`}>
-              {analysis.score}
-            </span>
-          ) : (
-            <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
-          )}
+          <ScoreCell score={analysis?.score} />
         </td>
       ))}
       <td className="px-4 py-4 whitespace-nowrap text-right text-xs text-gray-600 dark:text-gray-400" onClick={(e) => e.stopPropagation()}>
@@ -144,7 +146,10 @@ export const StockTableRow = React.memo(function StockTableRow({
         )}
       </td>
       <td className="px-4 py-4 text-xs" onClick={(e) => e.stopPropagation()}>
-        <FollowupTriggersCell triggers={stock.latest_analysis_cio?.followup_triggers ?? null} />
+        <FollowupPriceCell triggers={stock.latest_analysis_cio?.followup_triggers ?? null} />
+      </td>
+      <td className="px-4 py-4 text-xs" onClick={(e) => e.stopPropagation()}>
+        <FollowupTimeCell triggers={stock.latest_analysis_cio?.followup_triggers ?? null} />
       </td>
       <td className="px-4 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
         {isAnalyzing ? (
