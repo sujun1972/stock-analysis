@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ScoreBadge } from '@/components/shared'
 import type { StockInfo, CioFollowupTriggers } from '@/types'
+import type { StockColumnId } from '../hooks/useStockTableColumns'
 
 function toTsCode(code: string): string {
   if (code.includes('.')) return code.toUpperCase()
@@ -13,8 +14,18 @@ function toTsCode(code: string): string {
   return `${code}.SZ`
 }
 
-// AI 评分单元格：委托共享 ScoreBadge，色阶 + 数值 + tooltip 分档说明（色盲辅助）
-const SCORE_ARIA_LABELS = ['游资评分', '中线评分', '价值评分', 'CIO 评分'] as const
+// 4 个 AI 评分列的显示参数：列 id（控制可见性） + 读取 StockInfo 的哪个 analysis 字段 + ARIA 标签
+// 放在模块级避免每次渲染重建数组
+const SCORE_COLUMNS: ReadonlyArray<{
+  id: StockColumnId
+  field: 'latest_analysis_hot_money' | 'latest_analysis_midline' | 'latest_analysis_longterm' | 'latest_analysis_cio'
+  aria: string
+}> = [
+  { id: 'score_hot_money', field: 'latest_analysis_hot_money', aria: '游资评分' },
+  { id: 'score_midline',   field: 'latest_analysis_midline',   aria: '中线评分' },
+  { id: 'score_longterm',  field: 'latest_analysis_longterm',  aria: '价值评分' },
+  { id: 'score_cio',       field: 'latest_analysis_cio',       aria: 'CIO 评分' },
+]
 
 function FollowupPriceCell({ triggers }: { triggers: CioFollowupTriggers | null }) {
   if (!triggers) {
@@ -100,6 +111,7 @@ interface StockTableRowProps {
   isAuthenticated: boolean
   isSelected: boolean
   isAnalyzing?: boolean
+  isVisible: (id: StockColumnId) => boolean
   onToggleSelect: (tsCode: string) => void
   onOpenAnalysis: (stock: StockInfo) => void
 }
@@ -109,6 +121,7 @@ export const StockTableRow = React.memo(function StockTableRow({
   isAuthenticated,
   isSelected,
   isAnalyzing = false,
+  isVisible,
   onToggleSelect,
   onOpenAnalysis,
 }: StockTableRowProps) {
@@ -143,64 +156,75 @@ export const StockTableRow = React.memo(function StockTableRow({
           {stock.name}({stock.code})
         </a>
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium tabular-nums">
-        {stock.latest_price ? (
-          <span className={
-            stock.pct_change != null
-              ? stock.pct_change > 0 ? 'text-positive'
-              : stock.pct_change < 0 ? 'text-negative'
-              : 'text-gray-900 dark:text-white'
-              : 'text-gray-900 dark:text-white'
-          }>
-            {stock.latest_price.toFixed(2)}
-          </span>
-        ) : '-'}
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium tabular-nums">
-        {stock.pct_change != null ? (
-          <span className={stock.pct_change > 0 ? 'text-positive' : stock.pct_change < 0 ? 'text-negative' : 'text-gray-900 dark:text-white'}>
-            {stock.pct_change > 0 ? '+' : ''}{stock.pct_change.toFixed(2)}%
-          </span>
-        ) : '-'}
-      </td>
-      {[
-        stock.latest_analysis_hot_money,
-        stock.latest_analysis_midline,
-        stock.latest_analysis_longterm,
-        stock.latest_analysis_cio,
-      ].map((analysis, idx) => (
-        <td key={idx} className="px-4 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
-          <ScoreBadge score={analysis?.score} ariaPrefix={SCORE_ARIA_LABELS[idx]} />
+      {isVisible('latest_price') && (
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium tabular-nums">
+          {stock.latest_price ? (
+            <span className={
+              stock.pct_change != null
+                ? stock.pct_change > 0 ? 'text-positive'
+                : stock.pct_change < 0 ? 'text-negative'
+                : 'text-gray-900 dark:text-white'
+                : 'text-gray-900 dark:text-white'
+            }>
+              {stock.latest_price.toFixed(2)}
+            </span>
+          ) : '-'}
+        </td>
+      )}
+      {isVisible('pct_change') && (
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium tabular-nums">
+          {stock.pct_change != null ? (
+            <span className={stock.pct_change > 0 ? 'text-positive' : stock.pct_change < 0 ? 'text-negative' : 'text-gray-900 dark:text-white'}>
+              {stock.pct_change > 0 ? '+' : ''}{stock.pct_change.toFixed(2)}%
+            </span>
+          ) : '-'}
+        </td>
+      )}
+      {SCORE_COLUMNS.map(({ id, field, aria }) => isVisible(id) && (
+        <td key={id} className="px-4 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+          <ScoreBadge score={stock[field]?.score} ariaPrefix={aria} />
         </td>
       ))}
-      <td className="px-4 py-4 whitespace-nowrap text-right text-xs text-gray-600 dark:text-gray-400 tabular-nums" onClick={(e) => e.stopPropagation()}>
-        {stock.latest_analysis_cio?.created_at ? (
-          stock.latest_analysis_cio.created_at.slice(0, 10)
-        ) : (
-          <span className="text-gray-300 dark:text-gray-600">—</span>
-        )}
-      </td>
+      {isVisible('cio_last_date') && (
+        <td className="px-4 py-4 whitespace-nowrap text-right text-xs text-gray-600 dark:text-gray-400 tabular-nums" onClick={(e) => e.stopPropagation()}>
+          {stock.latest_analysis_cio?.created_at ? (
+            stock.latest_analysis_cio.created_at.slice(0, 10)
+          ) : (
+            <span className="text-gray-300 dark:text-gray-600">—</span>
+          )}
+        </td>
+      )}
       {/* 价值度量三列：ROC / EY / 内在价值安全边际（《股市稳赚》+《聪明的投资者》）*/}
-      <td className="px-4 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
-        <PercentCell value={stock.value_metrics?.roc} />
-      </td>
-      <td className="px-4 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
-        <PercentCell value={stock.value_metrics?.earnings_yield} />
-      </td>
-      <td className="px-4 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
-        <IntrinsicCell
-          iv={stock.value_metrics?.intrinsic_value}
-          margin={stock.value_metrics?.intrinsic_margin}
-          gRate={stock.value_metrics?.g_rate}
-          gSource={stock.value_metrics?.g_source}
-        />
-      </td>
-      <td className="px-4 py-4 text-xs" onClick={(e) => e.stopPropagation()}>
-        <FollowupPriceCell triggers={stock.latest_analysis_cio?.followup_triggers ?? null} />
-      </td>
-      <td className="px-4 py-4 text-xs" onClick={(e) => e.stopPropagation()}>
-        <FollowupTimeCell triggers={stock.latest_analysis_cio?.followup_triggers ?? null} />
-      </td>
+      {isVisible('roc') && (
+        <td className="px-4 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+          <PercentCell value={stock.value_metrics?.roc} />
+        </td>
+      )}
+      {isVisible('earnings_yield') && (
+        <td className="px-4 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+          <PercentCell value={stock.value_metrics?.earnings_yield} />
+        </td>
+      )}
+      {isVisible('intrinsic_margin') && (
+        <td className="px-4 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+          <IntrinsicCell
+            iv={stock.value_metrics?.intrinsic_value}
+            margin={stock.value_metrics?.intrinsic_margin}
+            gRate={stock.value_metrics?.g_rate}
+            gSource={stock.value_metrics?.g_source}
+          />
+        </td>
+      )}
+      {isVisible('followup_price') && (
+        <td className="px-4 py-4 text-xs" onClick={(e) => e.stopPropagation()}>
+          <FollowupPriceCell triggers={stock.latest_analysis_cio?.followup_triggers ?? null} />
+        </td>
+      )}
+      {isVisible('followup_time') && (
+        <td className="px-4 py-4 text-xs" onClick={(e) => e.stopPropagation()}>
+          <FollowupTimeCell triggers={stock.latest_analysis_cio?.followup_triggers ?? null} />
+        </td>
+      )}
       <td className="px-4 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
         {isAnalyzing ? (
           <span

@@ -46,8 +46,12 @@ export function StockSearch({
   maxResults = 5,
   className
 }: StockSearchProps = {}) {
-  // macOS 用户看到 ⌘K，其他平台看到 Ctrl+K。navigator.platform 已 deprecated 但仍是最可靠的跨浏览器探测手段
-  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+  // macOS 用户看到 ⌘K，其他平台看到 Ctrl+K。navigator.platform 已 deprecated 但仍是最可靠的跨浏览器探测手段。
+  // SSR 阶段 navigator 不可用，先以 Ctrl+K 渲染保持服务端/客户端首帧一致，hydration 完成后再按平台切到 ⌘K，避免 hydration mismatch
+  const [isMac, setIsMac] = useState(false)
+  useEffect(() => {
+    setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform))
+  }, [])
   const shortcutHint = isMac ? '⌘K' : 'Ctrl+K'
   const effectivePlaceholder = placeholder ?? `搜索股票（${shortcutHint}）`
   const [searchQuery, setSearchQuery] = useState('')

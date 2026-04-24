@@ -42,6 +42,8 @@ import { RenameListDialog } from './components/RenameListDialog'
 import { StockTableRow } from './components/StockTableRow'
 import { StockCard } from './components/StockCard'
 import { BatchAnalysisDialog } from './components/BatchAnalysisDialog'
+import { ColumnVisibilityMenu } from './components/ColumnVisibilityMenu'
+import { useStockTableColumns } from './hooks/useStockTableColumns'
 import { StockTableSkeleton, StockCardSkeleton } from '@/components/shared/Skeleton'
 import { SortIndicator } from '@/components/shared'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -208,6 +210,9 @@ function StocksPageContent() {
 
   // ── 选股状态 ──
   const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set())
+
+  // ── 表格显示列偏好（localStorage 持久化） ──
+  const { visible: visibleColumns, isVisible, toggle: toggleColumn, resetToDefault: resetColumns } = useStockTableColumns()
 
   // ── Dialog 状态 ──
   const [addDialogOpen, setAddDialogOpen] = useState(false)
@@ -871,36 +876,44 @@ function StocksPageContent() {
             updateURL({ filters: nextCollapsed ? 'collapsed' : null })
           }}
         >
-          <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200 dark:border-gray-800">
+          <div className="flex items-center justify-between gap-3 px-6 py-3 border-b border-gray-200 dark:border-gray-800">
             <CollapsibleTrigger asChild>
               <button
-                className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900 rounded-sm"
+                className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900 rounded-sm min-w-0"
                 aria-label={filtersCollapsed ? '展开筛选器' : '折叠筛选器'}
               >
-                <Filter className="h-4 w-4" />
+                <Filter className="h-4 w-4 shrink-0" />
                 <span>筛选器</span>
                 {activeFilterCount > 0 && (
-                  <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-semibold bg-blue-600 text-white">
+                  <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-semibold bg-blue-600 text-white shrink-0">
                     {activeFilterCount}
                   </span>
                 )}
                 {filtersCollapsed ? (
-                  <ChevronDown className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                  <ChevronDown className="h-4 w-4 text-gray-500 dark:text-gray-400 shrink-0" />
                 ) : (
-                  <ChevronUp className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                  <ChevronUp className="h-4 w-4 text-gray-500 dark:text-gray-400 shrink-0" />
                 )}
               </button>
             </CollapsibleTrigger>
-            {activeFilterCount > 0 && (
-              <button
-                type="button"
-                onClick={handleClearAllFilters}
-                className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900 rounded-sm"
-              >
-                <X className="h-3.5 w-3.5" />
-                清除全部
-              </button>
-            )}
+            <div className="flex items-center gap-2 shrink-0">
+              {activeFilterCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearAllFilters}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900 rounded-sm"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  清除全部
+                </button>
+              )}
+              <ColumnVisibilityMenu
+                isVisible={isVisible}
+                onToggle={toggleColumn}
+                onReset={resetColumns}
+                visibleCount={visibleColumns.size}
+              />
+            </div>
           </div>
 
           {filtersCollapsed && activeFilterChips.length > 0 && (
@@ -1022,46 +1035,66 @@ function StocksPageContent() {
                       </th>
                     )}
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">股票</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">最新价</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      <span className="inline-flex items-center gap-1">
-                        <SortHeaderButton sortKey="pct_change" label="涨跌幅" sortKeys={sortKeys} onClick={handleSortClick} />
-                        <span
-                          className="inline-flex text-gray-400 dark:text-gray-500 cursor-help"
-                          title="Shift+点击列头可追加次级排序"
-                          aria-hidden="true"
-                        >
-                          <ArrowUpDown className="h-3 w-3" />
+                    {isVisible('latest_price') && (
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">最新价</th>
+                    )}
+                    {isVisible('pct_change') && (
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        <span className="inline-flex items-center gap-1">
+                          <SortHeaderButton sortKey="pct_change" label="涨跌幅" sortKeys={sortKeys} onClick={handleSortClick} />
+                          <span
+                            className="inline-flex text-gray-400 dark:text-gray-500 cursor-help"
+                            title="Shift+点击列头可追加次级排序"
+                            aria-hidden="true"
+                          >
+                            <ArrowUpDown className="h-3 w-3" />
+                          </span>
                         </span>
-                      </span>
-                    </th>
-                    {([['score_hot_money', '游资'], ['score_midline', '中线'], ['score_longterm', '价值'], ['cio_score', 'CIO评分'], ['cio_last_date', 'CIO日期']] as const).map(([key, label]) => (
-                      <th key={key} className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        <SortHeaderButton sortKey={key} label={label} sortKeys={sortKeys} onClick={handleSortClick} />
+                      </th>
+                    )}
+                    {([
+                      ['score_hot_money', '游资', 'score_hot_money'],
+                      ['score_midline', '中线', 'score_midline'],
+                      ['score_longterm', '价值', 'score_longterm'],
+                      ['cio_score', 'CIO评分', 'score_cio'],
+                      ['cio_last_date', 'CIO日期', 'cio_last_date'],
+                    ] as const).map(([sortKey, label, colId]) => isVisible(colId) && (
+                      <th key={sortKey} className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        <SortHeaderButton sortKey={sortKey} label={label} sortKeys={sortKeys} onClick={handleSortClick} />
                       </th>
                     ))}
                     {/* 价值度量三列：ROC / EY（《股市稳赚》）+ 内在价值安全边际（《聪明的投资者》）*/}
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap" title="资本收益率 ROC = EBIT / (净营运资本 + 净固定资产)。衡量公司赚钱能力。">
-                      <SortHeaderButton sortKey="roc" label="ROC" sortKeys={sortKeys} onClick={handleSortClick} />
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap" title="收益率 EY = EBIT / EV。衡量股票相对便宜程度。">
-                      <SortHeaderButton sortKey="earnings_yield" label="收益率" sortKeys={sortKeys} onClick={handleSortClick} />
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap" title="格雷厄姆内在价值 = EPS × (8.5 + 2g)，g 封顶 15%。数值为相对当前价的安全边际（负值表示高估）。悬停看具体价和增长率来源。">
-                      <SortHeaderButton sortKey="intrinsic_margin" label="安全边际" sortKeys={sortKeys} onClick={handleSortClick} />
-                    </th>
-                    <th
-                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
-                      title="CIO 复查触发器：上/下方触发价"
-                    >
-                      关注价格
-                    </th>
-                    <th
-                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
-                      title="CIO 复查触发器：最近一个时间事件"
-                    >
-                      <SortHeaderButton sortKey="cio_followup_time" label="关注时间" sortKeys={sortKeys} onClick={handleSortClick} />
-                    </th>
+                    {isVisible('roc') && (
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap" title="资本收益率 ROC = EBIT / (净营运资本 + 净固定资产)。衡量公司赚钱能力。">
+                        <SortHeaderButton sortKey="roc" label="ROC" sortKeys={sortKeys} onClick={handleSortClick} />
+                      </th>
+                    )}
+                    {isVisible('earnings_yield') && (
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap" title="收益率 EY = EBIT / EV。衡量股票相对便宜程度。">
+                        <SortHeaderButton sortKey="earnings_yield" label="收益率" sortKeys={sortKeys} onClick={handleSortClick} />
+                      </th>
+                    )}
+                    {isVisible('intrinsic_margin') && (
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap" title="格雷厄姆内在价值 = EPS × (8.5 + 2g)，g 封顶 15%。数值为相对当前价的安全边际（负值表示高估）。悬停看具体价和增长率来源。">
+                        <SortHeaderButton sortKey="intrinsic_margin" label="安全边际" sortKeys={sortKeys} onClick={handleSortClick} />
+                      </th>
+                    )}
+                    {isVisible('followup_price') && (
+                      <th
+                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
+                        title="CIO 复查触发器：上/下方触发价"
+                      >
+                        关注价格
+                      </th>
+                    )}
+                    {isVisible('followup_time') && (
+                      <th
+                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
+                        title="CIO 复查触发器：最近一个时间事件"
+                      >
+                        <SortHeaderButton sortKey="cio_followup_time" label="关注时间" sortKeys={sortKeys} onClick={handleSortClick} />
+                      </th>
+                    )}
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
                   </tr>
                 </thead>
@@ -1073,6 +1106,7 @@ function StocksPageContent() {
                       isAuthenticated={isAuthenticated}
                       isSelected={selectedCodes.has(toTsCode(stock.code))}
                       isAnalyzing={analyzingTsCodes.has(toTsCode(stock.code))}
+                      isVisible={isVisible}
                       onToggleSelect={toggleStock}
                       onOpenAnalysis={handleOpenAnalysis}
                     />

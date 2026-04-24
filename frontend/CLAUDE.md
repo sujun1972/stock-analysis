@@ -321,6 +321,36 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 新增骨架屏时放在 [Skeleton.tsx](src/components/shared/Skeleton.tsx) 并按 `hidden md:block` / `md:hidden` 自带响应式（和 `/stocks` 桌面表格/移动卡片双视图一致），调用方无需再包断点判断。基础 `Skeleton` 原子组件是 `animate-pulse + bg-gray-200 dark:bg-gray-800 + rounded-md`，自带深色模式。静默刷新（`fetchStocks(silent=true)`）不触发任何 loading UI——保持当前行集合不抖动是该路径的核心约束。
 
+### SSR 安全：客户端独占值的渲染约定
+
+SSR 阶段 `window` / `navigator` / `localStorage` 都不可用。若组件在首次渲染时读取这些值，服务端和客户端首帧会输出不一致的 HTML，React 抛 **hydration mismatch** 警告（可能伴随样式抖动）。
+
+**反例**：`const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)` — 服务端 `isMac=false`，客户端 `isMac=true`，两边 placeholder 文案不同即爆。`localStorage.getItem(...)` 同理。
+
+**正确模式**：首帧用与服务端一致的"安全默认值" + `useEffect` 里 mount 后再读取客户端值并 `setState`：
+
+```tsx
+const [isMac, setIsMac] = useState(false)  // SSR 安全默认
+useEffect(() => {
+  setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform))
+}, [])
+```
+
+适用场景：平台探测（`navigator.platform`）、用户偏好（`localStorage`）、屏幕尺寸（`window.innerWidth`）、当前主题主动查询（优先用 `next-themes` 的 `useTheme` hook 而非 `document.documentElement.classList`）。
+
+**`localStorage` 持久化 hook 模板**（参考 [useStockTableColumns.ts](src/app/stocks/hooks/useStockTableColumns.ts)）：初始 state 用工厂函数 `useState(getDefaults)` 给 SSR 默认值；`useEffect` 里读 localStorage，存在且解析合法则覆盖；`try/catch` 包裹 `localStorage` 读写（隐私模式/配额爆时静默降级）；存储 key 带版本号 `feature:name:v1`，schema 破坏性变更时 bump 即可丢弃旧数据；读取时用 `KNOWN_IDS` 白名单过滤已废弃 id，保证向前兼容。
+
+### 表格列可见性（`/stocks` 表）
+
+`/stocks` 桌面表格列多（15 列）且密，用户可自定义显示哪些列。实现集中在：
+
+- [useStockTableColumns.ts](src/app/stocks/hooks/useStockTableColumns.ts) — `COLUMN_CONFIGS` 列定义单一数据源（id / label / default / group） + localStorage 持久化 hook（`stocks:visible-columns:v1`）。新增列在此追加一行即可；股票名/操作列为结构性必要，不在此声明，由 page.tsx 直接硬渲染
+- [ColumnVisibilityMenu.tsx](src/app/stocks/components/ColumnVisibilityMenu.tsx) — 下拉菜单组件，嵌在筛选器卡片 Header 右侧（与"清除全部"同列），`<lg` 只显图标避免窄屏挤压；`onSelect={(e) => e.preventDefault()}` 让 CheckboxItem 切换后不关闭菜单，支持连续切换多列
+- `page.tsx` `<thead>` 和 [StockTableRow.tsx](src/app/stocks/components/StockTableRow.tsx) `<tbody>` 按 `isVisible(id)` 条件渲染 `<th>` / `<td>`，两处列顺序必须保持一致（错位会导致数据对不齐）
+- 移动端 `StockCard` 卡片视图不受影响，列选择不适用
+
+默认隐藏：关注价格 / 关注时间（CIO 复查触发器，使用频率低）。默认可见其余 10 列。新增列时默认可见性以"日常常用"为准。
+
 ### 筛选器与 URL 状态
 
 所有筛选条件、分页、排序均同步到 URL（`router.replace` + `{ scroll: false }`），刷新页面状态保留。
