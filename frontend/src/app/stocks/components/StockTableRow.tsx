@@ -3,6 +3,7 @@
 import React from 'react'
 import { Loader2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
+import { ScoreBadge } from '@/components/shared'
 import type { StockInfo, CioFollowupTriggers } from '@/types'
 
 function toTsCode(code: string): string {
@@ -12,17 +13,8 @@ function toTsCode(code: string): string {
   return `${code}.SZ`
 }
 
-// AI 评分色阶：≥8 红（强）、≥6 黄（中）、其余灰
-function ScoreCell({ score }: { score?: number | null }) {
-  if (score == null) {
-    return <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
-  }
-  const tone =
-    score >= 8 ? 'text-red-600 dark:text-red-400'
-    : score >= 6 ? 'text-yellow-600 dark:text-yellow-400'
-    : 'text-gray-500 dark:text-gray-400'
-  return <span className={`text-sm font-semibold tabular-nums ${tone}`}>{score}</span>
-}
+// AI 评分单元格：委托共享 ScoreBadge，色阶 + 数值 + tooltip 分档说明（色盲辅助）
+const SCORE_ARIA_LABELS = ['游资评分', '中线评分', '价值评分', 'CIO 评分'] as const
 
 function FollowupPriceCell({ triggers }: { triggers: CioFollowupTriggers | null }) {
   if (!triggers) {
@@ -175,7 +167,7 @@ export const StockTableRow = React.memo(function StockTableRow({
         stock.latest_analysis_cio,
       ].map((analysis, idx) => (
         <td key={idx} className="px-4 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
-          <ScoreCell score={analysis?.score} />
+          <ScoreBadge score={analysis?.score} ariaPrefix={SCORE_ARIA_LABELS[idx]} />
         </td>
       ))}
       <td className="px-4 py-4 whitespace-nowrap text-right text-xs text-gray-600 dark:text-gray-400 tabular-nums" onClick={(e) => e.stopPropagation()}>

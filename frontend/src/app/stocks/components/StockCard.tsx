@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { ScoreBadge } from '@/components/shared'
 import type { StockInfo, CioFollowupTriggers } from '@/types'
 
 // 与 StockTableRow / page.tsx 保持同一套代码→ts_code 规则（见 frontend/CLAUDE.md 股票代码规范）
@@ -17,23 +18,6 @@ function toTsCode(code: string): string {
   if (code.startsWith('6')) return `${code}.SH`
   if (code.startsWith('4') || code.startsWith('8')) return `${code}.BJ`
   return `${code}.SZ`
-}
-
-// 卡片评分 Badge：带标签的矩形色块（移动端），与桌面端 ScoreCell 的纯色数字风格分离
-function ScoreBadge({ label, score }: { label: string; score?: number | null }) {
-  const tone =
-    score == null ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600'
-    : score >= 8 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-    : score >= 6 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-    : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
-  return (
-    <div className={`flex flex-col items-center justify-center px-2 py-1 rounded ${tone} min-w-[44px]`}>
-      <span className="text-[10px] leading-none opacity-80">{label}</span>
-      <span className="text-sm font-semibold leading-tight mt-0.5">
-        {score == null ? '—' : score}
-      </span>
-    </div>
-  )
 }
 
 function cioFollowupSummary(triggers: CioFollowupTriggers | null): string | null {
@@ -145,10 +129,10 @@ export const StockCard = React.memo(function StockCard({
       </div>
 
       <div className="mt-3 grid grid-cols-4 gap-1.5" onClick={(e) => e.stopPropagation()}>
-        <ScoreBadge label="游资" score={stock.latest_analysis_hot_money?.score} />
-        <ScoreBadge label="中线" score={stock.latest_analysis_midline?.score} />
-        <ScoreBadge label="价值" score={stock.latest_analysis_longterm?.score} />
-        <ScoreBadge label="CIO" score={stock.latest_analysis_cio?.score} />
+        <ScoreBadge variant="card" label="游资" score={stock.latest_analysis_hot_money?.score} />
+        <ScoreBadge variant="card" label="中线" score={stock.latest_analysis_midline?.score} />
+        <ScoreBadge variant="card" label="价值" score={stock.latest_analysis_longterm?.score} />
+        <ScoreBadge variant="card" label="CIO" score={stock.latest_analysis_cio?.score} />
       </div>
 
       {(cioDate || followup) && (

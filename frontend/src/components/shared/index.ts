@@ -14,3 +14,6 @@ export type { MetricCardVariant, MetricCardSize } from './MetricCard';
 
 export { default as SortableTableHead } from './SortableTableHead';
 export type { SortOrder } from './SortableTableHead';
+
+export { ScoreBadge } from './ScoreBadge';
+export type { ScoreBadgeVariant } from './ScoreBadge';
