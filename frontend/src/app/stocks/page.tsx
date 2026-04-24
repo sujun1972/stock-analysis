@@ -332,8 +332,12 @@ function StocksPageContent() {
 
   useEffect(() => {
     loadStocks()
-    setSelectedCodes(new Set())
   }, [loadStocks])
+
+  // 筛选条件变化时清空已选（结果集变了，旧选择可能不再属于当前集合）；翻页 / 排序不清空，支持跨页累积选择
+  useEffect(() => {
+    setSelectedCodes(new Set())
+  }, [marketFilter, industryFilter, conceptFilter, pageSize, stockSelectionStrategyId, activeListId])
 
   // ── 智能刷新 ──
   const currentPageCodes = useMemo(() => {
