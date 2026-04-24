@@ -18,6 +18,11 @@ export type { SortOrder } from './SortableTableHead';
 export { ScoreBadge } from './ScoreBadge';
 export type { ScoreBadgeVariant } from './ScoreBadge';
 
+export { SortIndicator } from './SortIndicator';
+export type { SortIndicatorOrder } from './SortIndicator';
+
+export { ErrorDetailCollapsible } from './ErrorDetailCollapsible';
+
 export {
   Skeleton,
   StockTableSkeleton,

@@ -446,7 +446,7 @@ export default function BacktestKLineChart({
   }, [])
 
   return (
-    <div className="w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4">
+    <div className="w-full min-w-0 max-w-full overflow-hidden bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4">
       {/* 权益曲线提示 */}
       {hasEquityData && (
         <div className="mb-2 px-3 py-2 bg-pink-50 dark:bg-pink-900/20 rounded-md border border-pink-200 dark:border-pink-800">
@@ -456,7 +456,7 @@ export default function BacktestKLineChart({
         </div>
       )}
 
-      <div ref={chartRef} style={{ width: '100%', height: '600px' }} />
+      <div ref={chartRef} className="min-w-0 max-w-full" style={{ width: '100%', height: '600px' }} />
 
       {/* 信号统计 */}
       <div className="mt-4 grid grid-cols-2 gap-4">

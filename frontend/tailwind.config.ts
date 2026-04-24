@@ -74,6 +74,27 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // 语义色：A 股涨跌 / 关注 / 提示。用 text-positive / bg-positive-soft 等，勿再写 text-red-xxx 表达"涨"
+        positive: {
+          DEFAULT: "hsl(var(--positive))",
+          soft: "hsl(var(--positive-soft))",
+        },
+        negative: {
+          DEFAULT: "hsl(var(--negative))",
+          soft: "hsl(var(--negative-soft))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          soft: "hsl(var(--warning-soft))",
+        },
+        info: {
+          DEFAULT: "hsl(var(--info))",
+        },
+      },
+      transitionDuration: {
+        fast: "var(--duration-fast)",
+        normal: "var(--duration-normal)",
+        slow: "var(--duration-slow)",
       },
       borderRadius: {
         lg: "var(--radius)",

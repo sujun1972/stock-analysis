@@ -106,8 +106,8 @@ export default function FeatureImportance() {
   if (!currentTask?.feature_importance) return null;
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-      <div ref={chartRef} style={{ width: '100%', height: '500px' }} />
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 min-w-0 max-w-full overflow-hidden">
+      <div ref={chartRef} className="min-w-0 max-w-full" style={{ width: '100%', height: '500px' }} />
     </div>
   );
 }

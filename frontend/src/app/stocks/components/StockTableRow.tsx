@@ -28,12 +28,12 @@ function FollowupPriceCell({ triggers }: { triggers: CioFollowupTriggers | null 
   return (
     <div className="flex flex-col gap-0.5 min-w-[80px]">
       {breakUp && (
-        <span className="text-red-600 dark:text-red-400 whitespace-nowrap tabular-nums" title={breakUp.price_basis ?? ''}>
+        <span className="text-positive whitespace-nowrap tabular-nums" title={breakUp.price_basis ?? ''}>
           ▲ {breakUp.price?.toFixed(2)}
         </span>
       )}
       {breakDown && (
-        <span className="text-green-600 dark:text-green-400 whitespace-nowrap tabular-nums" title={breakDown.price_basis ?? ''}>
+        <span className="text-negative whitespace-nowrap tabular-nums" title={breakDown.price_basis ?? ''}>
           ▼ {breakDown.price?.toFixed(2)}
         </span>
       )}
@@ -47,11 +47,11 @@ function PercentCell({ value, decimals = 1 }: { value?: number | null; decimals?
     return <span className="text-gray-300 dark:text-gray-600">—</span>
   }
   const pct = value * 100
-  // ROC / EY 数值越大越好，按分档上色：≥30% 红、≥15% 黄、< 0 绿（亏损/为负）
+  // ROC / EY 数值越大越好，按分档上色：≥30% 红（积极）、≥15% 黄（关注）、<0 绿（负面）
   const tone =
-    pct >= 30 ? 'text-red-600 dark:text-red-400'
-    : pct >= 15 ? 'text-yellow-600 dark:text-yellow-400'
-    : pct < 0 ? 'text-green-600 dark:text-green-400'
+    pct >= 30 ? 'text-positive'
+    : pct >= 15 ? 'text-warning'
+    : pct < 0 ? 'text-negative'
     : 'text-gray-700 dark:text-gray-300'
   return <span className={`text-sm font-medium tabular-nums ${tone}`}>{pct.toFixed(decimals)}%</span>
 }
@@ -68,9 +68,9 @@ function IntrinsicCell({ iv, margin, gRate, gSource }: {
   // 安全边际越高越低估：≥100% 红色（严重低估）、≥30% 黄、负值（高估）绿
   const marginPct = margin * 100
   const tone =
-    marginPct >= 100 ? 'text-red-600 dark:text-red-400'
-    : marginPct >= 30 ? 'text-yellow-600 dark:text-yellow-400'
-    : marginPct < 0 ? 'text-green-600 dark:text-green-400'
+    marginPct >= 100 ? 'text-positive'
+    : marginPct >= 30 ? 'text-warning'
+    : marginPct < 0 ? 'text-negative'
     : 'text-gray-700 dark:text-gray-300'
   const gLabel = gSource === 'analyst' ? '研报' : gSource === 'history' ? '历史' : ''
   const tip = `内在价值 ${iv.toFixed(2)} 元（g=${((gRate ?? 0) * 100).toFixed(1)}% · ${gLabel}）`
@@ -144,8 +144,8 @@ export const StockTableRow = React.memo(function StockTableRow({
         {stock.latest_price ? (
           <span className={
             stock.pct_change != null
-              ? stock.pct_change > 0 ? 'text-red-600 dark:text-red-400'
-              : stock.pct_change < 0 ? 'text-green-600 dark:text-green-400'
+              ? stock.pct_change > 0 ? 'text-positive'
+              : stock.pct_change < 0 ? 'text-negative'
               : 'text-gray-900 dark:text-white'
               : 'text-gray-900 dark:text-white'
           }>
@@ -155,7 +155,7 @@ export const StockTableRow = React.memo(function StockTableRow({
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium tabular-nums">
         {stock.pct_change != null ? (
-          <span className={stock.pct_change > 0 ? 'text-red-600 dark:text-red-400' : stock.pct_change < 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}>
+          <span className={stock.pct_change > 0 ? 'text-positive' : stock.pct_change < 0 ? 'text-negative' : 'text-gray-600 dark:text-gray-400'}>
             {stock.pct_change > 0 ? '+' : ''}{stock.pct_change.toFixed(2)}%
           </span>
         ) : '-'}

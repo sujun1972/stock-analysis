@@ -50,6 +50,7 @@ import { StockTableRow } from './components/StockTableRow'
 import { StockCard } from './components/StockCard'
 import { BatchAnalysisDialog } from './components/BatchAnalysisDialog'
 import { StockTableSkeleton, StockCardSkeleton } from '@/components/shared/Skeleton'
+import { SortIndicator } from '@/components/shared'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import type { StockList, StockInfo } from '@/types'
 import type { Strategy } from '@/types/strategy'
@@ -61,17 +62,6 @@ function toTsCode(code: string): string {
   if (code.startsWith('6')) return `${code}.SH`
   if (code.startsWith('4') || code.startsWith('8')) return `${code}.BJ`
   return `${code}.SZ`
-}
-
-// 表头排序方向三角指示器
-function SortArrow({ order }: { order: string }) {
-  return (
-    <svg className="w-3 h-3 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-      {order === 'desc'
-        ? <path fillRule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 13.586l3.293-3.293a1 1 0 011.414 0z" clipRule="evenodd" />
-        : <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />}
-    </svg>
-  )
 }
 
 // 多列排序：URL 序列化协议 'key:order,key:order,...'
@@ -159,7 +149,7 @@ function SortHeaderButton({
       title="点击单列排序；Shift+点击 追加为次级排序键"
     >
       {label}
-      {active && <SortArrow order={order} />}
+      {active && <SortIndicator order={order} className="h-3 w-3 text-info" />}
       {showPriority && (
         <span className="ml-0.5 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
           {idx + 1}

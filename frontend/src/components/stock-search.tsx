@@ -42,10 +42,14 @@ interface StockSearchProps {
 
 export function StockSearch({
   onSelect,
-  placeholder = '搜索股票...',
+  placeholder,
   maxResults = 5,
   className
 }: StockSearchProps = {}) {
+  // macOS 用户看到 ⌘K，其他平台看到 Ctrl+K。navigator.platform 已 deprecated 但仍是最可靠的跨浏览器探测手段
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+  const shortcutHint = isMac ? '⌘K' : 'Ctrl+K'
+  const effectivePlaceholder = placeholder ?? `搜索股票（${shortcutHint}）`
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Stock[]>([])
   const [isSearching, setIsSearching] = useState(false)
@@ -65,10 +69,10 @@ export function StockSearch({
       return 'text-gray-600 dark:text-gray-400'
     }
     if (pctChange > 0) {
-      return 'text-red-600 dark:text-red-400'
+      return 'text-positive'
     }
     if (pctChange < 0) {
-      return 'text-green-600 dark:text-green-400'
+      return 'text-negative'
     }
     return 'text-gray-600 dark:text-gray-400'
   }, [])
@@ -112,6 +116,24 @@ export function StockSearch({
       triggerSearch(searchQuery)
     }
   }, [searchQuery, triggerSearch])
+
+  /**
+   * 全局快捷键：⌘K / Ctrl+K 聚焦搜索框（Linear / Notion / GitHub 惯例）。
+   * 挂到 document 而非 input，这样任意页面都能触发。
+   * 焦点已在搜索框本身时不重复处理，避免打断用户正在输入。
+   */
+  useEffect(() => {
+    const handleShortcut = (e: KeyboardEvent) => {
+      if (!((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) return
+      if (!inputRef.current) return
+      if (document.activeElement === inputRef.current) return
+      e.preventDefault()
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+    document.addEventListener('keydown', handleShortcut)
+    return () => document.removeEventListener('keydown', handleShortcut)
+  }, [])
 
   /**
    * 点击外部区域时关闭下拉框
@@ -188,7 +210,8 @@ export function StockSearch({
         <Input
           ref={inputRef}
           type="text"
-          placeholder={placeholder}
+          placeholder={effectivePlaceholder}
+          aria-keyshortcuts={shortcutHint}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           // IME 合成期间标记状态，避免每个拼音字母触发搜索请求

@@ -24,6 +24,20 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
+
+    /* 语义色 token（A 股红涨绿跌 + 中性/提示）—— 在"情感色"上唯一来源，禁止再手写 text-red-600 表达"上涨"之意 */
+    --positive: 0 84% 47%;        /* 上涨红（WCAG on white ≥4.5:1） */
+    --positive-soft: 0 84% 96%;
+    --negative: 142 71% 35%;      /* 下跌绿 */
+    --negative-soft: 142 71% 95%;
+    --warning: 38 92% 45%;        /* 关注黄 */
+    --warning-soft: 48 96% 92%;
+    --info: 221 83% 53%;          /* 信息蓝（= primary 近似值） */
+
+    /* 过渡时长分档 —— 用 var(--duration-fast) 等，避免随手写 0.2s */
+    --duration-fast: 120ms;
+    --duration-normal: 200ms;
+    --duration-slow: 320ms;
   }
 
   .dark {
@@ -46,6 +60,15 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 48%;
+
+    /* 深色模式下所有"情感色"一次性升阶：on gray-900 背景需要更亮才达 WCAG AA 4.5:1 */
+    --positive: 0 91% 71%;        /* red-300 级别，on #111 ≈ 6.1:1 */
+    --positive-soft: 0 63% 18%;
+    --negative: 142 71% 58%;      /* green-400 级别，on #111 ≈ 5.6:1 */
+    --negative-soft: 142 71% 15%;
+    --warning: 48 96% 70%;        /* yellow-300 on dark 更明显 */
+    --warning-soft: 43 74% 17%;
+    --info: 217 91% 70%;
   }
 }
 
@@ -118,6 +141,31 @@
 }
 .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background-color: rgb(75 85 99);
+}
+
+/* 横向滚动容器两侧的渐变遮罩 —— 提示用户"还有内容可滑动"。
+   用法：外层 `<div class="scroll-shadow-x">` 包住一个 `overflow-x-auto` 子元素。
+   父容器底色非 `--background` 时（如 dialog 内 Tab 条），用 inline `style={{ '--scroll-shadow-bg': 'hsl(var(--card))' }}` 覆盖。 */
+.scroll-shadow-x {
+  position: relative;
+}
+.scroll-shadow-x::before,
+.scroll-shadow-x::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1.5rem;
+  pointer-events: none;
+  z-index: 1;
+}
+.scroll-shadow-x::before {
+  left: 0;
+  background: linear-gradient(to right, var(--scroll-shadow-bg, hsl(var(--background))), transparent);
+}
+.scroll-shadow-x::after {
+  right: 0;
+  background: linear-gradient(to left, var(--scroll-shadow-bg, hsl(var(--background))), transparent);
 }
 
 /* 统一键盘焦点环：手写 button/a 用 `focus-ring`（蓝）或 `focus-ring-red`（删除类操作）

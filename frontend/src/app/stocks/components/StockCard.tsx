@@ -55,8 +55,8 @@ export const StockCard = React.memo(function StockCard({
   const pct = stock.pct_change
   const pctTone =
     pct == null ? 'text-gray-500 dark:text-gray-400'
-    : pct > 0 ? 'text-red-600 dark:text-red-400'
-    : pct < 0 ? 'text-green-600 dark:text-green-400'
+    : pct > 0 ? 'text-positive'
+    : pct < 0 ? 'text-negative'
     : 'text-gray-500 dark:text-gray-400'
   const cioDate = stock.latest_analysis_cio?.created_at?.slice(0, 10)
   const followup = cioFollowupSummary(stock.latest_analysis_cio?.followup_triggers ?? null)

@@ -1121,7 +1121,7 @@ export default function EChartsStockChart({
   }, [])
 
   return (
-    <div className="w-full">
+    <div className="w-full min-w-0 max-w-full overflow-hidden">
       {/* 设置按钮（仅在未隐藏且非外部控制时显示） */}
       {!hideSettingsButton && !externalVisibleIndicators && (
         <div className="mb-4 flex justify-end">
@@ -1258,8 +1258,8 @@ export default function EChartsStockChart({
         </div>
       )}
 
-      {/* 图表 */}
-      <div ref={chartRef} style={{ width: '100%', height: `${chartHeight}px` }} />
+      {/* 图表（min-w-0 防止 flex 父级被图表内部宽度撑开） */}
+      <div ref={chartRef} className="min-w-0 max-w-full" style={{ width: '100%', height: `${chartHeight}px` }} />
 
       {/* 回测信号统计 */}
       {backtestMode && signalPoints && (signalPoints.buy.length > 0 || signalPoints.sell.length > 0) && (

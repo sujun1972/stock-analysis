@@ -24,6 +24,7 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import type { Strategy } from '@/types/strategy'
+import { ErrorDetailCollapsible } from '@/components/shared'
 
 interface StrategyCardProps {
   strategy: Strategy
@@ -185,14 +186,9 @@ const StrategyCard = memo(function StrategyCard({
           </div>
         )}
 
-        {/* 验证错误提示 */}
+        {/* 验证错误提示（可展开结构化详情 + 复制） */}
         {strategy.validation_status === 'failed' && strategy.validation_errors && (
-          <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
-            <p className="text-xs font-medium text-destructive mb-1">验证错误</p>
-            <p className="text-xs text-destructive/80 line-clamp-2">
-              {JSON.stringify(strategy.validation_errors)}
-            </p>
-          </div>
+          <ErrorDetailCollapsible title="验证错误" errors={strategy.validation_errors} />
         )}
 
         {/* 版本信息 */}

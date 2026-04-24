@@ -252,7 +252,7 @@ export default function MinuteChart({ data, period, stockCode, stockName }: Minu
   return (
     <div
       ref={chartRef}
-      className="w-full"
+      className="w-full min-w-0 max-w-full"
       style={{ minHeight: '600px' }}
     />
   )

@@ -235,8 +235,8 @@ export default function PredictionChart() {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-      <div ref={chartRef} style={{ width: '100%', height: '450px' }} />
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 min-w-0 max-w-full overflow-hidden">
+      <div ref={chartRef} className="min-w-0 max-w-full" style={{ width: '100%', height: '450px' }} />
 
       {/* 图表说明 */}
       <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">

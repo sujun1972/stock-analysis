@@ -36,6 +36,45 @@ import { apiClient } from '@/lib/api-client'
 
 ---
 
+## 语义色与过渡时长 token
+
+所有"情感色"（涨红、跌绿、关注黄、信息蓝）走 CSS 变量 + Tailwind utility，禁止在业务文件手写 `text-red-600 dark:text-red-400` 表达涨跌——后者在深色模式对比度不足 WCAG AA（4.5:1）。
+
+| Utility | 含义 | 用途示例 |
+|---------|------|----------|
+| `text-positive` / `bg-positive-soft` | A 股涨红 | `pct_change > 0`、`break_up` 触发价、ROC ≥30% |
+| `text-negative` / `bg-negative-soft` | A 股跌绿 | `pct_change < 0`、`break_down` 触发价、亏损 |
+| `text-warning` / `bg-warning-soft` | 关注黄 | ROC 15~30%、安全边际 30~100%、评分 6-8 |
+| `text-info` | 信息蓝 | 排序激活、次要提示；业务 primary 仍用 `text-primary` |
+| `duration-fast` (120ms) / `duration-normal` (200ms) / `duration-slow` (320ms) | 过渡时长分档 | `transition-colors duration-fast` 等 |
+
+token 定义在 [globals.css](src/app/globals.css) 的 `:root` / `.dark` 里，深色模式已单独升阶至 red-300 / green-400 / yellow-300 级亮度以保证对比度。K 线红涨绿跌的 `#ef4444` / `#22c55e` 是 ECharts 专用常量不走此体系（见 useEChartsTheme）。
+
+**迁移规则**：新加的涨跌/状态色一律用语义 token；改到老文件时顺手替换（低风险、一致）。非情感语境的装饰色（如 Tab badge 的蓝色徽章）保留原 Tailwind 色阶即可。
+
+---
+
+## 共享 UI 工具（shared/）
+
+[src/components/shared/](src/components/shared/) 集中放跨页面复用的轻量组件。新增前先看有没有能复用的；需要再扩展时加到 [index.ts](src/components/shared/index.ts) 统一导出。
+
+| 组件 | 用途 |
+|------|------|
+| `ScoreBadge` | AI 评分徽章（`table` / `card` variant + tooltip 色盲辅助） |
+| `SortIndicator` | 表头排序方向箭头（lucide ChevronUp/Down 封装；禁止再手写内联 SVG） |
+| `ErrorDetailCollapsible` | 可折叠结构化错误卡片 + 一键复制（取代 `JSON.stringify(errors)` 原样展示） |
+| `Skeleton` + `StockTableSkeleton` / `StockCardSkeleton` / `AnalysisHistorySkeleton` | 首次加载骨架屏预设 |
+| `MetricCard` / `LoadingSpinner` / `ConfirmDialog` / `SortableTableHead` | 其他通用原子 |
+
+**CSS 工具类**（[globals.css](src/app/globals.css)）：
+- `.scrollbar-thin` — 6px 细滚动条，窄屏 Tab / 长列表必用
+- `.scroll-shadow-x` — 横向滚动容器两侧渐变遮罩，提示"可左右滑动"。用法：外层包 `<div class="scroll-shadow-x">`，内层 `<div class="overflow-x-auto">`；父容器底色非 `--background` 时用 inline `style={{ '--scroll-shadow-bg': 'hsl(var(--card))' }}` 覆盖
+- `.focus-ring` / `.focus-ring-red` — 键盘焦点环（见 a11y 章节）
+
+**图表容器宽度约束**：所有 ECharts 包装器外层必须 `min-w-0 max-w-full overflow-hidden`，图表 `<div ref={chartRef}>` 本身加 `min-w-0 max-w-full`——防止 flex 布局下 ECharts 自测宽度把父容器撑溢出屏幕（移动端常见）。
+
+---
+
 ## Toast 通知约定
 
 全项目统一使用 **sonner** 呈现 toast；`<Toaster position="top-right" richColors closeButton theme="system" />` 挂在 [layout.tsx](src/app/layout.tsx) 的 `ThemeProvider` 内，自动跟随深浅主题。
@@ -69,7 +108,9 @@ toast({ title: '失败', description: err.message, variant: 'destructive' })
 - **`aria-label` 动态化**：列表中重复按钮（排序、复选框、操作菜单）必须带上"本条记录的标识"让屏幕阅读器能区分，如 `选中 ${stock.name}（${stock.code}）`、`${stock.name} 操作菜单`。排序按钮按当前状态动态生成，如 `按涨跌幅排序，当前降序，优先级第 1`。
 - **`prefers-reduced-motion`**：[globals.css](src/app/globals.css) 全局把 `animation-duration` / `transition-duration` 降到 `0.01ms !important`——**不是 0**，因为 Radix 等库依赖 `animationend` / `transitionend` 事件驱动 `data-state=open/closed` 切换。写新动画时直接用 `animate-*` / `transition-*` 即可，无需自行判断系统偏好。
 - **手写 `<button>` 都要写 `type="button"`**：避免在 `<form>` 里意外触发 submit。
+- **嵌套 interactive 元素是 a11y 反模式**：不要在 `<button>` 里再放 `<button>` 或 `role="button"` 的 `<span>`（ErrorDetailCollapsible 早期踩过坑——Tab 键两次触发、屏幕阅读器重复朗读）。需要同层两个交互时用平级 `<div class="flex">` + 两个 `<button>`。
 - **sonner Toaster 默认已挂 `aria-live="polite"`**，无需额外配置；但 toast 文案应是完整句子而非碎片（便于屏幕阅读器朗读）。
+- **全局快捷键 ⌘K / Ctrl+K** 由 [stock-search.tsx](src/components/stock-search.tsx) 监听 `document.keydown` 聚焦搜索框（Linear/Notion/GitHub 惯例）；placeholder 根据 `navigator.platform` 自动显示对应按键提示。新增全局快捷键时遵循同一模式：挂 `document` 而非特定 input，检测 `document.activeElement === targetEl` 避免自打断。
 
 ---
 

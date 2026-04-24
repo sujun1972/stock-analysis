@@ -1607,15 +1607,22 @@ export function HotMoneyViewDialog({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-          {/* 窄屏横向滚动 + 图标提示；≥sm 恢复 8 列均分网格 */}
-          <TabsList className="shrink-0 mx-4 sm:mx-0 flex w-auto sm:w-full sm:grid sm:grid-cols-8 justify-start overflow-x-auto scrollbar-thin gap-0.5 sm:gap-0 text-xs">
-            {DIALOG_TABS.map(({ value, label, icon: Icon }) => (
-              <TabsTrigger key={value} value={value} className="text-xs px-2 sm:px-1 shrink-0 gap-1">
-                <Icon className="h-3.5 w-3.5 sm:hidden" aria-hidden />
-                <span>{label}</span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          {/* 窄屏横向滚动 + 图标提示；≥sm 恢复 8 列均分网格。
+              `scroll-shadow-x` 在 <sm 的两端渲染渐变遮罩，告诉用户"可左右滑动" */}
+          <div className="shrink-0 mx-4 sm:mx-0 sm:contents scroll-shadow-x">
+            <TabsList
+              className="flex w-auto sm:w-full sm:grid sm:grid-cols-8 justify-start overflow-x-auto scrollbar-thin gap-0.5 sm:gap-0 text-xs"
+              role="tablist"
+              aria-label="AI 分析子页签，可横向滑动"
+            >
+              {DIALOG_TABS.map(({ value, label, icon: Icon }) => (
+                <TabsTrigger key={value} value={value} className="text-xs px-2 sm:px-1 shrink-0 gap-1">
+                  <Icon className="h-3.5 w-3.5 sm:hidden" aria-hidden />
+                  <span>{label}</span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
 
           {/* 内容滚动区：移动端 pb-24 为吸底 Footer 预留空间，避免内容被遮挡 */}
           <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0 mt-4 px-4 sm:px-0 pr-1 pb-24 sm:pb-1 sm:max-h-[calc(90vh-200px)]">
