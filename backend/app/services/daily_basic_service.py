@@ -64,7 +64,7 @@ class DailyBasicService(TushareSyncBase):
 
         provider = self._get_provider(max_requests_per_minute)
 
-        return await self.run_incremental_sync(
+        result = await self.run_incremental_sync(
             fetch_fn=provider.get_daily_basic,
             upsert_fn=self.daily_basic_repo.bulk_upsert,
             clean_fn=self._validate_and_clean_data,
@@ -76,6 +76,18 @@ class DailyBasicService(TushareSyncBase):
             max_requests_per_minute=max_requests_per_minute,
             api_limit=api_limit,
         )
+
+        # 触发全市场 value_metrics 重算：daily_basic 影响所有股票的市值，进而影响 EV/EY；
+        # 有 10 分钟冷却锁，daily_basic 一天多次触发会被合并为一次。
+        try:
+            from app.services.value_metrics import ValueMetricsTrigger
+            total_records = (result or {}).get('total_records') or (result or {}).get('records') or 0
+            if total_records > 0:
+                ValueMetricsTrigger.trigger_full(source='daily_basic')
+        except Exception as e:
+            logger.debug(f"[daily_basic] 触发 value_metrics 全量重算失败（不影响主流程）: {e}")
+
+        return result
 
     # ------------------------------------------------------------------
     # 全量同步

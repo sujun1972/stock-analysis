@@ -49,6 +49,46 @@ function FollowupPriceCell({ triggers }: { triggers: CioFollowupTriggers | null 
   )
 }
 
+// 价值度量单元格：百分比 / 数值渲染，数据不足显示 —
+function PercentCell({ value, decimals = 1 }: { value?: number | null; decimals?: number }) {
+  if (value == null || !isFinite(value)) {
+    return <span className="text-gray-300 dark:text-gray-600">—</span>
+  }
+  const pct = value * 100
+  // ROC / EY 数值越大越好，按分档上色：≥30% 红、≥15% 黄、< 0 绿（亏损/为负）
+  const tone =
+    pct >= 30 ? 'text-red-600 dark:text-red-400'
+    : pct >= 15 ? 'text-yellow-600 dark:text-yellow-400'
+    : pct < 0 ? 'text-green-600 dark:text-green-400'
+    : 'text-gray-700 dark:text-gray-300'
+  return <span className={`text-sm font-medium ${tone}`}>{pct.toFixed(decimals)}%</span>
+}
+
+function IntrinsicCell({ iv, margin, gRate, gSource }: {
+  iv?: number | null
+  margin?: number | null
+  gRate?: number | null
+  gSource?: 'analyst' | 'history' | 'na' | null
+}) {
+  if (iv == null || margin == null) {
+    return <span className="text-gray-300 dark:text-gray-600">—</span>
+  }
+  // 安全边际越高越低估：≥100% 红色（严重低估）、≥30% 黄、负值（高估）绿
+  const marginPct = margin * 100
+  const tone =
+    marginPct >= 100 ? 'text-red-600 dark:text-red-400'
+    : marginPct >= 30 ? 'text-yellow-600 dark:text-yellow-400'
+    : marginPct < 0 ? 'text-green-600 dark:text-green-400'
+    : 'text-gray-700 dark:text-gray-300'
+  const gLabel = gSource === 'analyst' ? '研报' : gSource === 'history' ? '历史' : ''
+  const tip = `内在价值 ${iv.toFixed(2)} 元（g=${((gRate ?? 0) * 100).toFixed(1)}% · ${gLabel}）`
+  return (
+    <span className={`text-sm font-medium ${tone}`} title={tip}>
+      {marginPct >= 0 ? '+' : ''}{marginPct.toFixed(0)}%
+    </span>
+  )
+}
+
 function FollowupTimeCell({ triggers }: { triggers: CioFollowupTriggers | null }) {
   if (!triggers) {
     return <span className="text-gray-300 dark:text-gray-600">—</span>
@@ -144,6 +184,21 @@ export const StockTableRow = React.memo(function StockTableRow({
         ) : (
           <span className="text-gray-300 dark:text-gray-600">—</span>
         )}
+      </td>
+      {/* 价值度量三列：ROC / EY / 内在价值安全边际（《股市稳赚》+《聪明的投资者》）*/}
+      <td className="px-4 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+        <PercentCell value={stock.value_metrics?.roc} />
+      </td>
+      <td className="px-4 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+        <PercentCell value={stock.value_metrics?.earnings_yield} />
+      </td>
+      <td className="px-4 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+        <IntrinsicCell
+          iv={stock.value_metrics?.intrinsic_value}
+          margin={stock.value_metrics?.intrinsic_margin}
+          gRate={stock.value_metrics?.g_rate}
+          gSource={stock.value_metrics?.g_source}
+        />
       </td>
       <td className="px-4 py-4 text-xs" onClick={(e) => e.stopPropagation()}>
         <FollowupPriceCell triggers={stock.latest_analysis_cio?.followup_triggers ?? null} />

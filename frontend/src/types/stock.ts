@@ -74,6 +74,15 @@ export interface StockInfo {
     created_at: string
     followup_triggers?: CioFollowupTriggers | null
   } | null
+  // 价值度量（魔法公式 ROC/EY + 格雷厄姆内在价值）；数据不足时字段为 null
+  value_metrics?: {
+    roc?: number | null                 // 资本收益率（小数，0.25 = 25%）
+    earnings_yield?: number | null      // 收益率（小数）
+    intrinsic_value?: number | null     // 格雷厄姆内在价值（元/股）
+    intrinsic_margin?: number | null    // 安全边际 = 内在价值/当前价 - 1
+    g_rate?: number | null              // 用于 IV 的年化增长率（封顶 15%）
+    g_source?: 'analyst' | 'history' | 'na' | null
+  } | null
 }
 
 // CIO 复查触发器：由 CIO 综合分析输出，驱动事件/价位触发下一轮复查

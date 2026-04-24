@@ -1117,6 +1117,26 @@ TASK_MAPPING: Dict[str, Dict[str, Any]] = {
         'display_order': 641,
         'points_consumption': 0,
         'default_params': {'limit': 30, 'provider': None}
+    },
+
+    # 价值度量：魔法公式 ROC/EY + 格雷厄姆内在价值
+    'tasks.recompute_value_metrics_flush': {
+        'task': 'tasks.recompute_value_metrics_flush',
+        'name': '价值度量（脏队列 flush）',
+        'description': '从 Redis value_metrics:dirty 集合捞出脏股票批量重算 ROC / EY / 内在价值。5 个同步源完成后塞脏队列，本任务每 5 分钟合批处理。',
+        'category': '财务数据',
+        'display_order': 1010,
+        'points_consumption': 0,
+        'default_params': {}
+    },
+    'tasks.recompute_value_metrics_all': {
+        'task': 'tasks.recompute_value_metrics_all',
+        'name': '价值度量（全市场重算）',
+        'description': '重算全市场 ROC / EY / 内在价值。日终 16:30 兜底；daily_basic / report_rc 同步完成时自动触发（10 分钟冷却合并）。',
+        'category': '财务数据',
+        'display_order': 1011,
+        'points_consumption': 0,
+        'default_params': {'source': 'beat'}
     }
 }
 

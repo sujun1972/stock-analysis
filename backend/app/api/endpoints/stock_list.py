@@ -9,6 +9,7 @@
 - 异步同步股票列表数据
 """
 
+import asyncio
 from fastapi import APIRouter, Query, Depends
 from typing import Optional
 from loguru import logger
@@ -187,6 +188,25 @@ SORT_SPECS: dict = {
         "join": "",
         "params": [],
         "expr": "sb.code",
+    },
+    # 价值度量三列共享同一张 stock_value_metrics 子表
+    "roc": {
+        "join_group": "value_metrics",
+        "join": "LEFT JOIN stock_value_metrics svm ON svm.ts_code = sb.ts_code",
+        "params": [],
+        "expr": "svm.roc",
+    },
+    "earnings_yield": {
+        "join_group": "value_metrics",
+        "join": "LEFT JOIN stock_value_metrics svm ON svm.ts_code = sb.ts_code",
+        "params": [],
+        "expr": "svm.earnings_yield",
+    },
+    "intrinsic_margin": {
+        "join_group": "value_metrics",
+        "join": "LEFT JOIN stock_value_metrics svm ON svm.ts_code = sb.ts_code",
+        "params": [],
+        "expr": "svm.intrinsic_margin",
     },
 }
 
@@ -441,6 +461,25 @@ async def get_stock_list(
             quote = quotes.get(item['ts_code'], {})
             item['latest_price'] = quote.get('latest_price')
             item['pct_change'] = quote.get('pct_change')
+
+        # 注入价值度量（ROC / EY / 内在价值）
+        try:
+            from app.repositories.value_metrics_repository import ValueMetricsRepository
+            vm_map = await asyncio.to_thread(
+                ValueMetricsRepository().get_by_ts_codes, ts_codes
+            )
+            for item in items:
+                vm = vm_map.get(item['ts_code']) or {}
+                item['value_metrics'] = {
+                    'roc': float(vm['roc']) if vm.get('roc') is not None else None,
+                    'earnings_yield': float(vm['earnings_yield']) if vm.get('earnings_yield') is not None else None,
+                    'intrinsic_value': float(vm['intrinsic_value']) if vm.get('intrinsic_value') is not None else None,
+                    'intrinsic_margin': float(vm['intrinsic_margin']) if vm.get('intrinsic_margin') is not None else None,
+                    'g_rate': float(vm['g_rate']) if vm.get('g_rate') is not None else None,
+                    'g_source': vm.get('g_source'),
+                }
+        except Exception as e:
+            logger.warning(f"注入 value_metrics 失败: {e}")
 
     if include_analysis:
         items = await StockAiAnalysisService().enrich_stock_list_multi(items)

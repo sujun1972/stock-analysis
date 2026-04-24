@@ -313,6 +313,15 @@ class BalancesheetService:
                 df
             )
 
+            # 5. 触发 value_metrics 增量重算（脏数据合批，由 Celery Beat 每 5 分钟 flush）
+            try:
+                from app.services.value_metrics import ValueMetricsTrigger
+                if 'ts_code' in df.columns and records > 0:
+                    dirty_codes = df['ts_code'].dropna().astype(str).unique().tolist()
+                    ValueMetricsTrigger.mark_dirty(dirty_codes, source='balancesheet')
+            except Exception as e:
+                logger.debug(f"[balancesheet] 触发 value_metrics 重算失败（不影响主流程）: {e}")
+
             logger.info(f"成功同步 {records} 条资产负债表数据")
 
             return {

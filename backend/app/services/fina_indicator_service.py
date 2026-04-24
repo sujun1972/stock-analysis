@@ -146,6 +146,15 @@ class FinaIndicatorService:
                 df
             )
 
+            # 触发 value_metrics 增量重算（IV 的历史 CAGR 路径依赖 fina_indicator / income 历史 EPS）
+            try:
+                from app.services.value_metrics import ValueMetricsTrigger
+                if 'ts_code' in df.columns and records > 0:
+                    dirty_codes = df['ts_code'].dropna().astype(str).unique().tolist()
+                    ValueMetricsTrigger.mark_dirty(dirty_codes, source='fina_indicator')
+            except Exception as e:
+                logger.debug(f"[fina_indicator] 触发 value_metrics 重算失败（不影响主流程）: {e}")
+
             logger.info(f"成功同步 {records} 条财务指标数据")
 
             return {

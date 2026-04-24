@@ -80,7 +80,7 @@ class ReportRcService(TushareSyncBase):
         api_limit = (cfg.get('api_limit') or 2000) if cfg else 2000
         provider = self._get_provider(max_requests_per_minute)
 
-        return await self.run_incremental_sync(
+        result = await self.run_incremental_sync(
             fetch_fn=provider.get_report_rc,
             upsert_fn=self.report_rc_repo.bulk_upsert,
             clean_fn=self._validate_and_clean_data,
@@ -96,6 +96,18 @@ class ReportRcService(TushareSyncBase):
                 'report_date': report_date,
             },
         )
+
+        # 触发全市场 value_metrics 重算：券商一致预期变化影响 IV 的 g_rate（研报路径）。
+        # 新研报分布广泛，单只 mark_dirty 意义不大，直接触发全量 + 10 分钟冷却合并。
+        try:
+            from app.services.value_metrics import ValueMetricsTrigger
+            total_records = (result or {}).get('total_records') or (result or {}).get('records') or 0
+            if total_records > 0:
+                ValueMetricsTrigger.trigger_full(source='report_rc')
+        except Exception as e:
+            logger.debug(f"[report_rc] 触发 value_metrics 全量重算失败（不影响主流程）: {e}")
+
+        return result
 
     # ------------------------------------------------------------------
     # 查询

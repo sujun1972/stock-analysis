@@ -783,6 +783,16 @@ function StocksPageContent() {
                         <SortHeaderButton sortKey={key} label={label} sortKeys={sortKeys} onClick={handleSortClick} />
                       </th>
                     ))}
+                    {/* 价值度量三列：ROC / EY（《股市稳赚》）+ 内在价值安全边际（《聪明的投资者》）*/}
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap" title="资本收益率 ROC = EBIT / (净营运资本 + 净固定资产)。衡量公司赚钱能力。">
+                      <SortHeaderButton sortKey="roc" label="ROC" sortKeys={sortKeys} onClick={handleSortClick} />
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap" title="收益率 EY = EBIT / EV。衡量股票相对便宜程度。">
+                      <SortHeaderButton sortKey="earnings_yield" label="收益率" sortKeys={sortKeys} onClick={handleSortClick} />
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap" title="格雷厄姆内在价值 = EPS × (8.5 + 2g)，g 封顶 15%。数值为相对当前价的安全边际（负值表示高估）。悬停看具体价和增长率来源。">
+                      <SortHeaderButton sortKey="intrinsic_margin" label="安全边际" sortKeys={sortKeys} onClick={handleSortClick} />
+                    </th>
                     <th
                       className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
                       title="CIO 复查触发器：上/下方触发价"
