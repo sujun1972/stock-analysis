@@ -48,6 +48,7 @@ import { BatchAnalysisDialog } from './components/BatchAnalysisDialog'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import type { StockList, StockInfo } from '@/types'
 import type { Strategy } from '@/types/strategy'
+import { toast } from 'sonner'
 
 // ── 辅助函数 ──────────────────────────────────────────────────
 function toTsCode(code: string): string {
@@ -211,7 +212,6 @@ function StocksPageContent() {
   const [renameTarget, setRenameTarget] = useState<StockList | null>(null)
   const [batchAnalysisOpen, setBatchAnalysisOpen] = useState(false)
   const [analyzingTsCodes, setAnalyzingTsCodes] = useState<Set<string>>(new Set())
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
 
   // ── AI 分析弹窗状态 ──
@@ -263,13 +263,6 @@ function StocksPageContent() {
   useEffect(() => {
     if (isAuthenticated) fetchLists()
   }, [isAuthenticated, fetchLists])
-
-  // ── Toast 自动消失 ──
-  useEffect(() => {
-    if (!toast) return
-    const t = setTimeout(() => setToast(null), 3000)
-    return () => clearTimeout(t)
-  }, [toast])
 
   // ── 股票列表加载 ──
   // silent=true 的静默刷新只更新当前已显示行的数据（按 ts_code 定向拉取 + 原位合并），
@@ -441,10 +434,10 @@ function StocksPageContent() {
         result.codes.forEach((c) => next.add(c))
         return next
       })
-      setToast({ msg: `已选中全部 ${result.codes.length} 只股票`, type: 'success' })
+      toast.success(`已选中全部 ${result.codes.length} 只股票`)
     } catch (err: unknown) {
       const e = err as { message?: string }
-      setToast({ msg: e?.message || '获取全部股票失败', type: 'error' })
+      toast.error(e?.message || '获取全部股票失败')
     } finally {
       setSelectingAll(false)
     }
@@ -464,10 +457,10 @@ function StocksPageContent() {
     try {
       const result = await removeStocks(activeListId, Array.from(selectedCodes))
       setSelectedCodes(new Set())
-      setToast({ msg: `已从列表移除 ${result.removed} 只股票`, type: 'success' })
+      toast.success(`已从列表移除 ${result.removed} 只股票`)
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } } }
-      setToast({ msg: e?.response?.data?.detail || '移除失败', type: 'error' })
+      toast.error(e?.response?.data?.detail || '移除失败')
     }
   }, [activeListId, selectedCodes, removeStocks])
 
@@ -475,10 +468,10 @@ function StocksPageContent() {
     if (!confirm('确定要删除这个列表吗？列表中的股票记录也会一并删除。')) return
     try {
       await deleteList(listId)
-      setToast({ msg: '列表已删除', type: 'success' })
+      toast.success('列表已删除')
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } } }
-      setToast({ msg: e?.response?.data?.detail || '删除失败', type: 'error' })
+      toast.error(e?.response?.data?.detail || '删除失败')
     }
   }, [deleteList])
 
@@ -669,13 +662,6 @@ function StocksPageContent() {
 
   return (
     <div className="space-y-6">
-      {/* Toast */}
-      {toast && (
-        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-white text-sm transition-all ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
-          {toast.msg}
-        </div>
-      )}
-
       {/* 页面标题 */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">股票列表</h1>
@@ -973,7 +959,7 @@ function StocksPageContent() {
         onClose={() => setAddDialogOpen(false)}
         selectedCodes={Array.from(selectedCodes)}
         onSuccess={() => {
-          setToast({ msg: `已将 ${selectedCodes.size} 只股票添加到列表`, type: 'success' })
+          toast.success(`已将 ${selectedCodes.size} 只股票添加到列表`)
           setSelectedCodes(new Set())
           fetchLists()
         }}

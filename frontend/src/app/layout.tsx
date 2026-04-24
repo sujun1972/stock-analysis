@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { Toaster } from "@/components/ui/toaster";
+import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { MobileNav } from "@/components/mobile-nav";
@@ -87,7 +87,7 @@ export default function RootLayout({
             </div>
           </footer>
                 </div>
-                <Toaster />
+                <Toaster position="top-right" richColors closeButton theme="system" />
                 </ThemeProvider>
               </AIGenerationTaskProvider>
             </BacktestTaskProvider>

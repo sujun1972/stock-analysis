@@ -36,7 +36,29 @@ import { apiClient } from '@/lib/api-client'
 
 ---
 
-## 自选股功能（用户股票列表）
+## Toast 通知约定
+
+全项目统一使用 **sonner** 呈现 toast；`<Toaster position="top-right" richColors closeButton theme="system" />` 挂在 [layout.tsx](src/app/layout.tsx) 的 `ThemeProvider` 内，自动跟随深浅主题。
+
+**两种调用形态**（都落到同一个 sonner 实例，可自由混用）：
+
+```tsx
+// 新代码推荐：直接用 sonner 的语义 API
+import { toast } from 'sonner'
+toast.success('添加成功')
+toast.error('删除失败', { description: err.message })
+toast.loading('生成中...', { id: taskId })  // 再用 toast.success(..., { id: taskId }) 原位替换
+
+// 历史调用点（148+ 处）：shadcn 风格 { title, description, variant }
+import { useToast } from '@/hooks/use-toast'
+const { toast } = useToast()
+toast({ title: '已保存', description: '参数已持久化' })
+toast({ title: '失败', description: err.message, variant: 'destructive' })
+```
+
+[use-toast.ts](src/hooks/use-toast.ts) 是 **sonner 的薄包装层**（非 shadcn reducer）——`variant: "destructive"` → `sonner.error`，`variant: "success"` → `sonner.success`（后者是历史遗留值，保留兼容）；`title + description` 都有时 title 做主文本、description 做副标题。
+
+**禁止**手写 `fixed top-4 right-4 bg-green-600` / `bg-red-600` 之类硬编码 toast JSX，也不要用 `window.alert` 做成功/失败提示。破坏性操作的二次确认（删除列表等）可继续用原生 `window.confirm`。
 
 已登录用户可在 `/stocks` 页面管理自选股列表。未登录用户不可见任何列表相关 UI。
 
