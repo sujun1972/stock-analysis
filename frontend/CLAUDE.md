@@ -206,6 +206,22 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 新增响应式页面时遵循同一约定：**不引入新响应式库**，只用 Tailwind `hidden md:block` / `md:hidden`；抽屉一律使用项目已有的 shadcn `<Sheet>`（基于 Radix Dialog）；禁止为"桌面/移动"分别维护两份业务状态。
 
+### 弹窗响应式（Dialog → 移动端全屏 Sheet）
+
+`HotMoneyViewDialog` 在 <sm（手机）将 Radix `<DialogContent>` 覆盖为从底部滑入的全屏页，≥sm 保持居中弹窗。不引入新组件，全部靠 Tailwind `max-sm:` 变体叠加覆盖 `DialogContent` 基础类：
+
+- 定位：`max-sm:inset-0 max-sm:left-0 max-sm:top-0 max-sm:translate-x-0 max-sm:translate-y-0`（抵消基础类的 `left-[50%] top-[50%] translate-*-[50%]`）
+- 尺寸：`max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-screen max-sm:max-w-none`（`100dvh` 避开 iOS 地址栏动态高度）
+- 外观：`max-sm:rounded-none max-sm:border-0`
+- 动画：`max-sm:data-[state=open]:slide-in-from-bottom max-sm:data-[state=closed]:slide-out-to-bottom`（tailwindcss-animate 已提供）
+- 内边距：根 `p-0 gap-0`，Header/Footer/内容区各自控制 `px-4`，便于 Footer `max-sm:fixed bottom-0` 吸底时贴齐视口边
+
+吸底 Footer 必须带 `max-sm:pb-[calc(env(safe-area-inset-bottom)+0.75rem)]` 避开 iOS home indicator；滚动内容区给 `pb-24` 为吸底 Footer 预留空间。
+
+### 细滚动条工具类（`.scrollbar-thin`）
+
+[globals.css](src/app/globals.css) 定义的全局工具类，供窄屏横向滚动 Tab、弹窗内长列表使用。覆盖 Firefox (`scrollbar-width: thin`) + WebKit (`::-webkit-scrollbar` 6px)，自带深色模式配色。新增"内容可能溢出的容器"时直接 `className="overflow-x-auto scrollbar-thin"` 即可，不要再手写滚动条样式。
+
 ### 筛选器与 URL 状态
 
 所有筛选条件、分页、排序均同步到 URL（`router.replace` + `{ scroll: false }`），刷新页面状态保留。

@@ -30,6 +30,11 @@ import {
   Code,
   BookOpen,
   RotateCcw,
+  Flame,
+  TrendingUp,
+  Gem,
+  Brain,
+  Database,
 } from 'lucide-react'
 
 import type { StockAnalysisRecord } from '@/types'
@@ -37,6 +42,18 @@ import type { StockAnalysisRecord } from '@/types'
 // ── 类型 ──────────────────────────────────────────────────────
 
 export type AnalysisRecord = StockAnalysisRecord
+
+// Tab 元信息：图标仅在 <sm（手机）显示，用于窄屏横向滚动时提升识别度
+const DIALOG_TABS: { value: string; label: string; icon: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }> }[] = [
+  { value: 'hot_money', label: '游资', icon: Flame },
+  { value: 'hot_money_review', label: '游资复盘', icon: RotateCcw },
+  { value: 'midline', label: '中线', icon: TrendingUp },
+  { value: 'midline_review', label: '中线复盘', icon: RotateCcw },
+  { value: 'longterm', label: '价值', icon: Gem },
+  { value: 'longterm_review', label: '价值复盘', icon: RotateCcw },
+  { value: 'cio', label: 'CIO', icon: Brain },
+  { value: 'data_collection', label: '数据', icon: Database },
+]
 
 export interface HotMoneyViewDialogProps {
   open: boolean
@@ -1572,25 +1589,35 @@ export function HotMoneyViewDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-[720px] max-h-[90vh] flex flex-col">
-        <DialogHeader>
+      {/*
+        DialogContent 在 <sm（手机）切换为全屏 Sheet：
+        - inset-0 + 100dvh：占满视口；translate-*-0 取消默认居中偏移
+        - rounded-none + border-0：去掉桌面弹窗的卡片边框
+        - slide-in/out-to-bottom：从底部滑入/滑出（复用 tailwindcss-animate）
+        - p-0/gap-0：让内部区块自控 padding，便于 Footer 吸底 + Header 对齐
+        ≥sm 保持原居中弹窗样式（max-w-[720px] + p-6）。
+      */}
+      <DialogContent
+        className="flex flex-col gap-0 p-0 max-sm:inset-0 max-sm:left-0 max-sm:top-0 max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-screen max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:border-0 max-sm:data-[state=closed]:slide-out-to-bottom max-sm:data-[state=open]:slide-in-from-bottom sm:max-w-[720px] sm:max-h-[90vh] sm:p-6 sm:gap-4"
+      >
+        <DialogHeader className="shrink-0 px-4 pt-4 pb-2 sm:p-0">
           <DialogTitle>AI 分析：{stockName}（{stockCode}）</DialogTitle>
           <DialogDescription>保存并回顾每次 AI 分析结果</DialogDescription>
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-          <TabsList className="shrink-0 w-full grid grid-cols-8 text-xs">
-            <TabsTrigger value="hot_money" className="text-xs px-1">游资</TabsTrigger>
-            <TabsTrigger value="hot_money_review" className="text-xs px-1">游资复盘</TabsTrigger>
-            <TabsTrigger value="midline" className="text-xs px-1">中线</TabsTrigger>
-            <TabsTrigger value="midline_review" className="text-xs px-1">中线复盘</TabsTrigger>
-            <TabsTrigger value="longterm" className="text-xs px-1">价值</TabsTrigger>
-            <TabsTrigger value="longterm_review" className="text-xs px-1">价值复盘</TabsTrigger>
-            <TabsTrigger value="cio" className="text-xs px-1">CIO</TabsTrigger>
-            <TabsTrigger value="data_collection" className="text-xs px-1">数据</TabsTrigger>
+          {/* 窄屏横向滚动 + 图标提示；≥sm 恢复 8 列均分网格 */}
+          <TabsList className="shrink-0 mx-4 sm:mx-0 flex w-auto sm:w-full sm:grid sm:grid-cols-8 justify-start overflow-x-auto scrollbar-thin gap-0.5 sm:gap-0 text-xs">
+            {DIALOG_TABS.map(({ value, label, icon: Icon }) => (
+              <TabsTrigger key={value} value={value} className="text-xs px-2 sm:px-1 shrink-0 gap-1">
+                <Icon className="h-3.5 w-3.5 sm:hidden" aria-hidden />
+                <span>{label}</span>
+              </TabsTrigger>
+            ))}
           </TabsList>
 
-          <div className="flex-1 overflow-y-auto min-h-0 mt-4 pr-1">
+          {/* 内容滚动区：移动端 pb-24 为吸底 Footer 预留空间，避免内容被遮挡 */}
+          <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0 mt-4 px-4 sm:px-0 pr-1 pb-24 sm:pb-1 sm:max-h-[calc(90vh-200px)]">
             <TabsContent value="hot_money" className="mt-0">
               <AnalysisTab
                 tsCode={tsCode}
@@ -1718,7 +1745,10 @@ export function HotMoneyViewDialog({
           </div>
         </Tabs>
 
-        <DialogFooter className="mt-4">
+        {/* Footer：<sm 吸底（含 iOS safe-area），≥sm 跟随 Radix 默认右对齐 */}
+        <DialogFooter
+          className="shrink-0 mt-0 sm:mt-4 gap-2 max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-10 max-sm:flex-row max-sm:justify-end max-sm:items-center max-sm:border-t max-sm:border-border max-sm:bg-background/95 max-sm:backdrop-blur max-sm:px-4 max-sm:py-3 max-sm:pb-[calc(env(safe-area-inset-bottom)+0.75rem)]"
+        >
           {multiMsg && (
             <p className={`text-xs mr-auto self-center ${multiMsg.type === 'success' ? 'text-green-600' : 'text-red-500'}`}>
               {multiMsg.text}
@@ -1733,7 +1763,7 @@ export function HotMoneyViewDialog({
             <Sparkles className="h-3.5 w-3.5" />
             {multiGenerating ? '分析中...' : '一键分析'}
           </Button>
-          <Button variant="outline" onClick={onClose}>关闭</Button>
+          <Button variant="outline" size="sm" onClick={onClose}>关闭</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
