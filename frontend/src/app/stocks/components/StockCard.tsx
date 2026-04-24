@@ -53,11 +53,17 @@ export const StockCard = React.memo(function StockCard({
 }: StockCardProps) {
   const tsCode = toTsCode(stock.code)
   const pct = stock.pct_change
+  // A 股配色：涨红 / 跌绿 / 平黑；数据缺失退灰
   const pctTone =
     pct == null ? 'text-gray-500 dark:text-gray-400'
     : pct > 0 ? 'text-positive'
     : pct < 0 ? 'text-negative'
-    : 'text-gray-500 dark:text-gray-400'
+    : 'text-gray-900 dark:text-white'
+  const nameTone =
+    pct == null ? 'text-gray-900 dark:text-white'
+    : pct > 0 ? 'text-positive'
+    : pct < 0 ? 'text-negative'
+    : 'text-gray-900 dark:text-white'
   const cioDate = stock.latest_analysis_cio?.created_at?.slice(0, 10)
   const followup = cioFollowupSummary(stock.latest_analysis_cio?.followup_triggers ?? null)
 
@@ -85,16 +91,16 @@ export const StockCard = React.memo(function StockCard({
           <div className="min-w-0 flex-1" onClick={(e) => e.stopPropagation()}>
             <a
               href={`/analysis?code=${stock.code}`}
-              className="block text-sm font-semibold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 truncate"
+              className={`block text-sm font-semibold truncate hover:underline ${nameTone}`}
             >
               {stock.name}
             </a>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{stock.code}</div>
+            <div className={`text-xs mt-0.5 ${nameTone}`}>{stock.code}</div>
           </div>
         </div>
 
         <div className="flex flex-col items-end flex-shrink-0">
-          <span className="text-base font-semibold text-gray-900 dark:text-white tabular-nums">
+          <span className={`text-base font-semibold tabular-nums ${nameTone}`}>
             {stock.latest_price != null ? stock.latest_price.toFixed(2) : '-'}
           </span>
           <span className={`text-xs font-medium tabular-nums ${pctTone}`}>

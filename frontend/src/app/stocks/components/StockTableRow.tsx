@@ -42,17 +42,16 @@ function FollowupPriceCell({ triggers }: { triggers: CioFollowupTriggers | null 
 }
 
 // 价值度量单元格：百分比 / 数值渲染，数据不足显示 —
+// A 股配色：正数红、负数绿、0 黑
 function PercentCell({ value, decimals = 1 }: { value?: number | null; decimals?: number }) {
   if (value == null || !isFinite(value)) {
     return <span className="text-gray-300 dark:text-gray-600">—</span>
   }
   const pct = value * 100
-  // ROC / EY 数值越大越好，按分档上色：≥30% 红（积极）、≥15% 黄（关注）、<0 绿（负面）
   const tone =
-    pct >= 30 ? 'text-positive'
-    : pct >= 15 ? 'text-warning'
+    pct > 0 ? 'text-positive'
     : pct < 0 ? 'text-negative'
-    : 'text-gray-700 dark:text-gray-300'
+    : 'text-gray-900 dark:text-white'
   return <span className={`text-sm font-medium tabular-nums ${tone}`}>{pct.toFixed(decimals)}%</span>
 }
 
@@ -65,18 +64,16 @@ function IntrinsicCell({ iv, margin, gRate, gSource }: {
   if (iv == null || margin == null) {
     return <span className="text-gray-300 dark:text-gray-600">—</span>
   }
-  // 安全边际越高越低估：≥100% 红色（严重低估）、≥30% 黄、负值（高估）绿
   const marginPct = margin * 100
   const tone =
-    marginPct >= 100 ? 'text-positive'
-    : marginPct >= 30 ? 'text-warning'
+    marginPct > 0 ? 'text-positive'
     : marginPct < 0 ? 'text-negative'
-    : 'text-gray-700 dark:text-gray-300'
+    : 'text-gray-900 dark:text-white'
   const gLabel = gSource === 'analyst' ? '研报' : gSource === 'history' ? '历史' : ''
   const tip = `内在价值 ${iv.toFixed(2)} 元（g=${((gRate ?? 0) * 100).toFixed(1)}% · ${gLabel}）`
   return (
     <span className={`text-sm font-medium tabular-nums ${tone}`} title={tip}>
-      {marginPct >= 0 ? '+' : ''}{marginPct.toFixed(0)}%
+      {marginPct > 0 ? '+' : ''}{marginPct.toFixed(0)}%
     </span>
   )
 }
@@ -135,7 +132,13 @@ export const StockTableRow = React.memo(function StockTableRow({
       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium" onClick={(e) => e.stopPropagation()}>
         <a
           href={`/analysis?code=${stock.code}`}
-          className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
+          className={`hover:underline ${
+            stock.pct_change != null
+              ? stock.pct_change > 0 ? 'text-positive'
+              : stock.pct_change < 0 ? 'text-negative'
+              : 'text-gray-900 dark:text-white'
+              : 'text-gray-900 dark:text-white'
+          }`}
         >
           {stock.name}({stock.code})
         </a>
@@ -155,7 +158,7 @@ export const StockTableRow = React.memo(function StockTableRow({
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium tabular-nums">
         {stock.pct_change != null ? (
-          <span className={stock.pct_change > 0 ? 'text-positive' : stock.pct_change < 0 ? 'text-negative' : 'text-gray-600 dark:text-gray-400'}>
+          <span className={stock.pct_change > 0 ? 'text-positive' : stock.pct_change < 0 ? 'text-negative' : 'text-gray-900 dark:text-white'}>
             {stock.pct_change > 0 ? '+' : ''}{stock.pct_change.toFixed(2)}%
           </span>
         ) : '-'}
