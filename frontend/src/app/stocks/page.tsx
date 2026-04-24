@@ -34,9 +34,11 @@ import {
   Pencil,
   X,
   ChevronDown,
+  ChevronUp,
   Filter,
   Sparkles,
 } from 'lucide-react'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { useSmartRefresh } from '@/hooks/useMarketStatus'
 import { LazyConceptSelect } from '@/components/stocks/LazyConceptSelect'
 import { HotMoneyViewDialog } from '@/components/stocks/HotMoneyViewDialog'
@@ -96,6 +98,15 @@ function serializeSort(keys: SortKey[]): string {
 
 function isDefaultSort(keys: SortKey[]): boolean {
   return keys.length === 1 && keys[0].key === DEFAULT_SORT[0].key && keys[0].order === DEFAULT_SORT[0].order
+}
+
+// 市场筛选值 → 中文 chip 文案（与 filtersGrid 中 SelectItem 的 value/label 对齐）
+const MARKET_LABELS: Record<string, string> = {
+  SSE: '上海主板',
+  SZSE: '深圳主板',
+  创业板: '创业板',
+  科创板: '科创板',
+  北交所: '北交所',
 }
 
 // 计算下一轮排序状态（纯函数，便于推理 / 测试）
@@ -213,6 +224,7 @@ function StocksPageContent() {
   const [batchAnalysisOpen, setBatchAnalysisOpen] = useState(false)
   const [analyzingTsCodes, setAnalyzingTsCodes] = useState<Set<string>>(new Set())
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+  const [filtersCollapsed, setFiltersCollapsed] = useState<boolean>(() => searchParams.get('filters') === 'collapsed')
 
   // ── AI 分析弹窗状态 ──
   const [hotMoneyDialogOpen, setHotMoneyDialogOpen] = useState(false)
@@ -529,6 +541,64 @@ function StocksPageContent() {
     return n
   }, [marketFilter, industryFilter, conceptFilter, stockSelectionStrategyId, activeListId])
 
+  // 折叠态展示的激活筛选 chips；label 优先展示人类可读名（行业/策略/列表），
+  // 兜底回 raw value。`onClear` 只负责清掉自己这一维，避免与 handleClearAllFilters 耦合
+  const activeFilterChips = useMemo(() => {
+    const chips: { key: string; label: string; onClear: () => void }[] = []
+    if (marketFilter !== 'all') {
+      chips.push({
+        key: 'market',
+        label: `市场: ${MARKET_LABELS[marketFilter] ?? marketFilter}`,
+        onClear: () => { setMarketFilter('all'); setCurrentPage(1); updateURL({ market: null, page: null }) },
+      })
+    }
+    if (industryFilter !== 'all') {
+      const ind = industries.find((i) => i.value === industryFilter)
+      chips.push({
+        key: 'industry',
+        label: `行业: ${ind?.label ?? industryFilter}`,
+        onClear: () => { setIndustryFilter('all'); setCurrentPage(1); updateURL({ industry: null, page: null }) },
+      })
+    }
+    if (conceptFilter !== 'all') {
+      chips.push({
+        key: 'concept',
+        label: `板块: ${conceptFilter}`,
+        onClear: () => { setConceptFilter('all'); setCurrentPage(1); updateURL({ concept: null, page: null }) },
+      })
+    }
+    if (stockSelectionStrategyId) {
+      const strat = stockSelectionStrategies.find((s) => String(s.id) === stockSelectionStrategyId)
+      chips.push({
+        key: 'strategy',
+        label: `策略: ${strat?.display_name ?? stockSelectionStrategyId}`,
+        onClear: () => { setCurrentPage(1); updateURL({ stock_selection_strategy_id: null, page: null }) },
+      })
+    }
+    if (activeListId !== null) {
+      const list = lists.find((l) => l.id === activeListId)
+      chips.push({
+        key: 'list',
+        label: `列表: ${list?.name ?? activeListId}`,
+        onClear: () => { setCurrentPage(1); setSelectedCodes(new Set()); updateURL({ list: null, page: null }) },
+      })
+    }
+    return chips
+  }, [marketFilter, industryFilter, conceptFilter, stockSelectionStrategyId, activeListId, industries, stockSelectionStrategies, lists, updateURL])
+
+  // 清除全部筛选：合并 5 个维度的 URL patch 为一次 router.replace，避免多次跳转
+  const handleClearAllFilters = useCallback(() => {
+    setMarketFilter('all')
+    setIndustryFilter('all')
+    setConceptFilter('all')
+    setCurrentPage(1)
+    setSelectedCodes(new Set())
+    updateURL({
+      market: null, industry: null, concept: null,
+      stock_selection_strategy_id: null, list: null, page: null,
+    })
+  }, [updateURL])
+
   // 排序点击（多列）：普通=切单列，Shift=追加/循环；同步到 URL
   const handleSortClick = useCallback((key: string, event?: React.MouseEvent) => {
     const shift = !!event?.shiftKey
@@ -541,7 +611,7 @@ function StocksPageContent() {
 
   // 筛选器 JSX：桌面端内联在 Card 中，移动端由 Sheet 渲染复用
   const filtersGrid = (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
       <div className="space-y-2">
         <Label htmlFor="market-filter">市场筛选</Label>
         <Select value={marketFilter} onValueChange={(v) => { setMarketFilter(v); setCurrentPage(1); updateURL({ market: v, page: null }) }}>
@@ -729,11 +799,75 @@ function StocksPageContent() {
         </div>
       )}
 
-      {/* 桌面端筛选器 */}
+      {/* 桌面端筛选器（折叠态写 URL ?filters=collapsed，刷新保留） */}
       <Card className="hidden md:block">
-        <CardContent className="pt-6">
-          {filtersGrid}
-        </CardContent>
+        <Collapsible
+          open={!filtersCollapsed}
+          onOpenChange={(open) => {
+            const nextCollapsed = !open
+            setFiltersCollapsed(nextCollapsed)
+            updateURL({ filters: nextCollapsed ? 'collapsed' : null })
+          }}
+        >
+          <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200 dark:border-gray-800">
+            <CollapsibleTrigger asChild>
+              <button
+                className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900 rounded-sm"
+                aria-label={filtersCollapsed ? '展开筛选器' : '折叠筛选器'}
+              >
+                <Filter className="h-4 w-4" />
+                <span>筛选器</span>
+                {activeFilterCount > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-semibold bg-blue-600 text-white">
+                    {activeFilterCount}
+                  </span>
+                )}
+                {filtersCollapsed ? (
+                  <ChevronDown className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                ) : (
+                  <ChevronUp className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                )}
+              </button>
+            </CollapsibleTrigger>
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                onClick={handleClearAllFilters}
+                className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900 rounded-sm"
+              >
+                <X className="h-3.5 w-3.5" />
+                清除全部
+              </button>
+            )}
+          </div>
+
+          {filtersCollapsed && activeFilterChips.length > 0 && (
+            <div className="flex flex-wrap gap-2 px-6 py-3">
+              {activeFilterChips.map((chip) => (
+                <span
+                  key={chip.key}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                >
+                  {chip.label}
+                  <button
+                    type="button"
+                    onClick={chip.onClear}
+                    className="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-200 dark:hover:bg-blue-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    aria-label={`清除 ${chip.label}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          <CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
+            <CardContent className="pt-6">
+              {filtersGrid}
+            </CardContent>
+          </CollapsibleContent>
+        </Collapsible>
       </Card>
 
       {/* 移动端筛选入口按钮 */}
