@@ -222,6 +222,16 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 [globals.css](src/app/globals.css) 定义的全局工具类，供窄屏横向滚动 Tab、弹窗内长列表使用。覆盖 Firefox (`scrollbar-width: thin`) + WebKit (`::-webkit-scrollbar` 6px)，自带深色模式配色。新增"内容可能溢出的容器"时直接 `className="overflow-x-auto scrollbar-thin"` 即可，不要再手写滚动条样式。
 
+### 加载状态三档约定（骨架屏 / 区域 spinner / 按钮 spinner）
+
+大列表类页面的 loading 按"首次 vs 二次"分档，其他场景按尺寸分档，避免首屏空白闪烁和排序翻页时的 CLS：
+
+1. **大列表首次加载**：用 [Skeleton.tsx](src/components/shared/Skeleton.tsx) 的预设骨架屏（`StockTableSkeleton` / `StockCardSkeleton` / `AnalysisHistorySkeleton`），结构与真实行/卡片的列宽对齐。页面维护 `isFirstLoad` state，在 `finally` 里 `setIsFirstLoad(false)`（幂等、React 自动 bail-out，不需再套 ref 去重）。
+2. **大列表二次 loading**（排序 / 翻页 / 筛选变动）：退化为 `<Loader2 className="h-4 w-4 animate-spin" />` 小图标 + "加载中..." 文字，不再铺骨架屏，避免把现有数据整屏替换。
+3. **按钮内 loading**：始终用 `<Loader2 className="h-3/3.5 w-3/3.5 animate-spin" />`（按钮字号决定尺寸）。禁止在按钮里嵌 `<LoadingSpinner />`，那是区域级组件。
+
+新增骨架屏时放在 [Skeleton.tsx](src/components/shared/Skeleton.tsx) 并按 `hidden md:block` / `md:hidden` 自带响应式（和 `/stocks` 桌面表格/移动卡片双视图一致），调用方无需再包断点判断。基础 `Skeleton` 原子组件是 `animate-pulse + bg-gray-200 dark:bg-gray-800 + rounded-md`，自带深色模式。静默刷新（`fetchStocks(silent=true)`）不触发任何 loading UI——保持当前行集合不抖动是该路径的核心约束。
+
 ### 筛选器与 URL 状态
 
 所有筛选条件、分页、排序均同步到 URL（`router.replace` + `{ scroll: false }`），刷新页面状态保留。

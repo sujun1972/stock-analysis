@@ -37,6 +37,7 @@ import {
   ChevronUp,
   Filter,
   Sparkles,
+  Loader2,
 } from 'lucide-react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { useSmartRefresh } from '@/hooks/useMarketStatus'
@@ -47,6 +48,7 @@ import { RenameListDialog } from './components/RenameListDialog'
 import { StockTableRow } from './components/StockTableRow'
 import { StockCard } from './components/StockCard'
 import { BatchAnalysisDialog } from './components/BatchAnalysisDialog'
+import { StockTableSkeleton, StockCardSkeleton } from '@/components/shared/Skeleton'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import type { StockList, StockInfo } from '@/types'
 import type { Strategy } from '@/types/strategy'
@@ -173,6 +175,8 @@ function StocksPageContent() {
   const { stocks, setStocks, setLoading, isLoading, error, setError } = useStockStore()
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const { lists, fetchLists, deleteList, removeStocks } = useStockListStore()
+  // 首次加载用骨架屏，后续 loading（排序/翻页/筛选）退化为轻量 spinner 避免 CLS
+  const [isFirstLoad, setIsFirstLoad] = useState(true)
 
   const activeListId = searchParams.get('list') ? Number(searchParams.get('list')) : null
 
@@ -330,7 +334,10 @@ function StocksPageContent() {
       setError(e.message || '加载股票列表失败')
       if (!silent) { setStocks([]); setTotalStocks(0) }
     } finally {
-      if (!silent) setLoading(false)
+      if (!silent) {
+        setLoading(false)
+        setIsFirstLoad(false)
+      }
     }
   }, [currentPage, marketFilter, industryFilter, conceptFilter, pageSize, sortKeys, stockSelectionStrategyId, activeListId, setStocks, setLoading, setError])
 
@@ -909,10 +916,15 @@ function StocksPageContent() {
       {/* 股票表格 */}
       <Card>
         <CardContent className="p-0">
-          {isLoading ? (
-            <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-300 dark:border-gray-700 border-t-blue-600 dark:border-t-blue-500"></div>
-              <p className="mt-4 text-gray-600 dark:text-gray-400">加载中...</p>
+          {isLoading && isFirstLoad ? (
+            <>
+              <StockCardSkeleton count={5} />
+              <StockTableSkeleton rows={Math.min(pageSize, 10)} showCheckbox={isAuthenticated} />
+            </>
+          ) : isLoading ? (
+            <div className="flex items-center justify-center py-6 text-sm text-gray-500 dark:text-gray-400 gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              <span>加载中...</span>
             </div>
           ) : displayedStocks.length === 0 ? (
             <div className="text-center py-12">

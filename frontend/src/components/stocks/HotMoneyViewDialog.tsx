@@ -37,6 +37,7 @@ import {
   Database,
 } from 'lucide-react'
 
+import { AnalysisHistorySkeleton } from '@/components/shared/Skeleton'
 import type { StockAnalysisRecord } from '@/types'
 
 // ── 类型 ──────────────────────────────────────────────────────
@@ -1343,7 +1344,7 @@ function AnalysisTab({
         )}
 
         {historyLoading ? (
-          <div className="text-center py-6 text-gray-500 dark:text-gray-400 text-sm">加载中...</div>
+          <AnalysisHistorySkeleton />
         ) : currentRecord ? (
           <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-2">
             {/* 记录头部：版本信息 + 操作按钮 */}
