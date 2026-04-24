@@ -13,13 +13,6 @@ import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
   Pagination,
   PaginationContent,
   PaginationEllipsis,
@@ -166,7 +159,6 @@ function StocksPageContent() {
 
   // ── 从 URL 初始化所有筛选 / 分页状态 ──
   const stockSelectionStrategyId = searchParams.get('stock_selection_strategy_id')
-  const [selectionStrategyName, setSelectionStrategyName] = useState<string | null>(null)
 
   const { stocks, setStocks, setLoading, isLoading, error, setError } = useStockStore()
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -324,7 +316,6 @@ function StocksPageContent() {
       const response = await apiClient.getStockList(params)
       setStocks(response.items || [])
       setTotalStocks(response.total ?? 0)
-      if (response.strategy_name) setSelectionStrategyName(response.strategy_name)
     } catch (err: unknown) {
       const e = err as { message?: string }
       setError(e.message || '加载股票列表失败')
@@ -759,60 +750,105 @@ function StocksPageContent() {
         </Alert>
       )}
 
-      {/* 选股策略 Banner */}
-      {stockSelectionStrategyId && (
-        <div className="flex items-center gap-3 px-4 py-3 border rounded-lg bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700">
-          <Filter className="h-4 w-4 flex-shrink-0 text-blue-600 dark:text-blue-400" />
-          <div className="flex-1 min-w-0">
-            {isLoading ? (
-              <p className="text-sm text-blue-700 dark:text-blue-300">正在运行选股策略，请稍候...</p>
-            ) : (
-              <>
-                <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                  选股策略：<span className="font-semibold">{selectionStrategyName}</span>
-                  <span className="ml-2 text-blue-600 dark:text-blue-400">共 {totalStocks} 只股票</span>
-                </p>
-                <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">基于近60日价格数据运行选股策略，结果仅供参考</p>
-              </>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => { setCurrentPage(1); updateURL({ stock_selection_strategy_id: null, page: null }) }}
-            className="flex-shrink-0 text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-200 rounded focus-ring"
-            title="清除策略筛选"
-            aria-label="清除选股策略筛选"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
-      {/* 批量操作浮动栏（桌面居中、移动端吸底横向滚动） */}
+      {/* 批量操作浮动栏
+         上部「建议行」仿 Gmail / Linear：根据已选/本页/总数三者关系推荐下一步（全选筛选结果 / 全选本页 / 清除）
+         下部操作行：取消、添加到列表、批量 AI 分析等主动作 */}
       {isAuthenticated && selectedCodes.size > 0 && (
         <div
-          className="fixed z-40 flex items-center gap-2 md:gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 shadow-xl
-                     bottom-0 left-0 right-0 rounded-none px-3 py-2 overflow-x-auto
-                     md:bottom-6 md:left-1/2 md:right-auto md:-translate-x-1/2 md:rounded-xl md:px-5 md:py-3 md:overflow-visible"
+          className="fixed z-40 flex flex-col gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 shadow-xl
+                     bottom-0 left-0 right-0 rounded-none px-3 py-2
+                     md:bottom-6 md:left-1/2 md:right-auto md:-translate-x-1/2 md:rounded-xl md:px-5 md:py-3"
           style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 0.5rem)' }}
         >
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap flex-shrink-0">
-            已选 <strong>{selectedCodes.size}</strong> 只
-          </span>
-          <Button size="sm" variant="outline" onClick={() => setSelectedCodes(new Set())} className="flex-shrink-0">
-            <X className="h-4 w-4 md:mr-1" /><span className="hidden sm:inline">取消</span>
-          </Button>
-          {activeListId !== null && (
-            <Button size="sm" variant="destructive" onClick={handleRemoveFromList} className="flex-shrink-0">
-              <Trash2 className="h-4 w-4 md:mr-1" /><span className="hidden sm:inline">从列表移除</span>
+          {/* 建议行：上下文推荐，仅在存在有意义的下一步时渲染 */}
+          {(() => {
+            const pageSize = displayedTsCodes.length
+            const total = totalStocks ?? 0
+            const allFilteredSelected = total > 0 && selectedCodes.size >= total
+            const hasMoreOnOtherPages = total > pageSize
+
+            // 态 1：已跨页全选，提供清除入口
+            if (allFilteredSelected) {
+              return (
+                <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
+                  <span>已选中全部 <strong className="tabular-nums text-foreground">{total}</strong> 只筛选结果</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCodes(new Set())}
+                    className="text-primary font-medium hover:underline underline-offset-2 focus-ring rounded-sm"
+                  >
+                    清除选择
+                  </button>
+                </div>
+              )
+            }
+
+            // 态 2：本页已全选且还有其他页，提示扩大选择
+            if (allCurrentPageSelected && hasMoreOnOtherPages) {
+              return (
+                <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
+                  <span>已选中本页 <strong className="tabular-nums text-foreground">{pageSize}</strong> 只</span>
+                  <button
+                    type="button"
+                    onClick={handleSelectAllFiltered}
+                    disabled={selectingAll}
+                    className="inline-flex items-center gap-1 text-primary font-medium hover:underline underline-offset-2 disabled:opacity-60 disabled:no-underline focus-ring rounded-sm"
+                  >
+                    {selectingAll && <Loader2 className="h-3 w-3 animate-spin" />}
+                    {selectingAll ? '加载中…' : `全选筛选结果（${total} 只）`}
+                  </button>
+                </div>
+              )
+            }
+
+            // 态 3：部分选中（本页未满 / 跨页零散），提供两条捷径
+            return (
+              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground whitespace-nowrap">
+                <button
+                  type="button"
+                  onClick={toggleSelectAll}
+                  className="text-primary font-medium hover:underline underline-offset-2 focus-ring rounded-sm"
+                >
+                  全选本页（{pageSize}）
+                </button>
+                {hasMoreOnOtherPages && (
+                  <>
+                    <span className="text-muted-foreground/50">·</span>
+                    <button
+                      type="button"
+                      onClick={handleSelectAllFiltered}
+                      disabled={selectingAll}
+                      className="inline-flex items-center gap-1 text-primary font-medium hover:underline underline-offset-2 disabled:opacity-60 disabled:no-underline focus-ring rounded-sm"
+                    >
+                      {selectingAll && <Loader2 className="h-3 w-3 animate-spin" />}
+                      {selectingAll ? '加载中…' : `全选筛选结果（${total}）`}
+                    </button>
+                  </>
+                )}
+              </div>
+            )
+          })()}
+
+          {/* 操作行：已选计数 + 主动作 */}
+          <div className="flex items-center gap-2 md:gap-3 overflow-x-auto md:overflow-visible">
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap flex-shrink-0">
+              已选 <strong className="tabular-nums">{selectedCodes.size}</strong> 只
+            </span>
+            <Button size="sm" variant="outline" onClick={() => setSelectedCodes(new Set())} className="flex-shrink-0">
+              <X className="h-4 w-4 md:mr-1" /><span className="hidden sm:inline">取消</span>
             </Button>
-          )}
-          <Button size="sm" onClick={() => setAddDialogOpen(true)} className="flex-shrink-0">
-            <BookmarkPlus className="h-4 w-4 md:mr-1" /><span className="hidden sm:inline">添加到列表</span>
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => setBatchAnalysisOpen(true)} className="flex-shrink-0">
-            <Sparkles className="h-4 w-4 md:mr-1" /><span className="hidden sm:inline">批量 AI 分析</span>
-          </Button>
+            {activeListId !== null && (
+              <Button size="sm" variant="destructive" onClick={handleRemoveFromList} className="flex-shrink-0">
+                <Trash2 className="h-4 w-4 md:mr-1" /><span className="hidden sm:inline">从列表移除</span>
+              </Button>
+            )}
+            <Button size="sm" onClick={() => setAddDialogOpen(true)} className="flex-shrink-0">
+              <BookmarkPlus className="h-4 w-4 md:mr-1" /><span className="hidden sm:inline">添加到列表</span>
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setBatchAnalysisOpen(true)} className="flex-shrink-0">
+              <Sparkles className="h-4 w-4 md:mr-1" /><span className="hidden sm:inline">批量 AI 分析</span>
+            </Button>
+          </div>
         </div>
       )}
 
@@ -969,31 +1005,11 @@ function StocksPageContent() {
                   <tr>
                     {isAuthenticated && (
                       <th className="px-4 py-3 w-10">
-                        <div className="flex items-center gap-0.5">
-                          <Checkbox
-                            checked={someCurrentPageSelected ? 'indeterminate' : allCurrentPageSelected}
-                            onCheckedChange={toggleSelectAll}
-                            aria-label="全选当前页"
-                          />
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button
-                                type="button"
-                                className="h-4 w-4 flex items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus-ring"
-                                aria-label="全选选项菜单"
-                              >
-                                <ChevronDown className="h-3 w-3" />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                              <DropdownMenuItem onClick={toggleSelectAll}>全选当前页（{displayedTsCodes.length} 只）</DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={handleSelectAllFiltered} disabled={selectingAll}>
-                                {selectingAll ? '加载中...' : `全选所有筛选结果（${totalStocks} 只）`}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
+                        <Checkbox
+                          checked={someCurrentPageSelected ? 'indeterminate' : allCurrentPageSelected}
+                          onCheckedChange={toggleSelectAll}
+                          aria-label={allCurrentPageSelected ? '取消全选本页' : '全选本页'}
+                        />
                       </th>
                     )}
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">股票</th>
