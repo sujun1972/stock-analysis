@@ -153,6 +153,18 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 ## `/stocks` 页面筛选架构
 
+### 响应式视图（桌面表格 / 移动卡片）
+
+`/stocks` 同时维护两套视图，共用同一份 `displayedStocks` / `selectedCodes` / `sortKeys` / 静默刷新 / 批量分析轮询状态：
+
+- **桌面（≥md）**：`hidden md:block` 渲染 `<StockTableRow>` 表格（15+ 列）+ 顶部 Card 内联筛选器
+- **移动（<md）**：`md:hidden` 渲染 `<StockCard>` 卡片列表 + 顶部"筛选 (N)" 按钮触发 `<Sheet side="bottom">` 抽屉（Radix Dialog）
+- **浮动操作栏**：桌面居中胶囊（`md:bottom-6 md:left-1/2`）、移动全宽吸底（`bottom-0 left-0 right-0`）+ `env(safe-area-inset-bottom)` 避开 iOS home indicator；≤sm 按钮仅显示图标，≥sm 显示图标+文字
+
+**筛选器 JSX 复用**：`filtersGrid` 是组件内一个 JSX 变量，同时被桌面 `<Card>` 和移动 `<Sheet>` 引用——新增筛选字段只写一处即可两端生效。`activeFilterCount` 聚合 market / industry / concept / strategy / list 五个源，驱动移动端按钮徽章。
+
+新增响应式页面时遵循同一约定：**不引入新响应式库**，只用 Tailwind `hidden md:block` / `md:hidden`；抽屉一律使用项目已有的 shadcn `<Sheet>`（基于 Radix Dialog）；禁止为"桌面/移动"分别维护两份业务状态。
+
 ### 筛选器与 URL 状态
 
 所有筛选条件、分页、排序均同步到 URL（`router.replace` + `{ scroll: false }`），刷新页面状态保留。
