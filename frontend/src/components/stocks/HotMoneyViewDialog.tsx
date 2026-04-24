@@ -576,7 +576,7 @@ function ScoreBadge({ score, rating }: { score: number; rating?: string }) {
     ? 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400'
     : score >= 6
     ? 'bg-yellow-50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400'
-    : 'bg-gray-50 text-gray-500 dark:bg-gray-800'
+    : 'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
   return (
     <span className="flex items-center gap-2 flex-wrap">
       <span className={`font-bold px-2 py-0.5 rounded text-base ${colorCls}`}>
@@ -618,16 +618,16 @@ function DimensionSection({ title, content }: { title: string; content: string }
 
 /** 渲染单个字段的值（支持嵌套对象、数组、字符串、next_day_scenarios 特殊结构）*/
 function FieldValue({ value }: { value: any }): React.ReactElement | null {
-  if (value == null || value === '') return <span className="text-gray-400">-</span>
+  if (value == null || value === '') return <span className="text-gray-400 dark:text-gray-600">-</span>
 
   // 数组：逐条列出（catalysts/risks 等）
   if (Array.isArray(value)) {
-    if (value.length === 0) return <span className="text-gray-400">-</span>
+    if (value.length === 0) return <span className="text-gray-400 dark:text-gray-600">-</span>
     return (
       <ul className="mt-0.5 space-y-0.5">
         {value.map((item, i) => (
           <li key={i} className="flex gap-1.5">
-            <span className="text-gray-400 shrink-0">·</span>
+            <span className="text-gray-400 dark:text-gray-600 shrink-0">·</span>
             <span>{renderBold(String(item ?? '-'))}</span>
           </li>
         ))}
@@ -651,7 +651,7 @@ function FieldValue({ value }: { value: any }): React.ReactElement | null {
     }
     // 通用嵌套对象：把每个键值对作为小标签渲染（适用于 hit_rate 各维度的 predicted/actual/verdict/evidence）
     const entries = Object.entries(value).filter(([, v]) => v != null && v !== '')
-    if (entries.length === 0) return <span className="text-gray-400">-</span>
+    if (entries.length === 0) return <span className="text-gray-400 dark:text-gray-600">-</span>
     return (
       <div className="mt-0.5 space-y-0.5">
         {entries.map(([k, v]) => (
@@ -688,7 +688,7 @@ function GenericSection({
           const label = labels?.[key] ?? key.replace(/_/g, ' ')
           return (
             <li key={key} className="flex gap-1.5">
-              <span className="text-gray-400 shrink-0">·</span>
+              <span className="text-gray-400 dark:text-gray-600 shrink-0">·</span>
               <span className="flex-1">
                 <span className="text-gray-500 dark:text-gray-400">{label}：</span>
                 <FieldValue value={val} />
@@ -727,7 +727,7 @@ function FollowupTriggersSection({ triggers }: { triggers: Record<string, any> }
       <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-2">
         复查触发器
         {horizon != null && (
-          <span className="ml-2 text-xs font-normal text-gray-500">窗口 {horizon} 天</span>
+          <span className="ml-2 text-xs font-normal text-gray-600 dark:text-gray-300">窗口 {horizon} 天</span>
         )}
       </h3>
 
@@ -755,7 +755,7 @@ function FollowupTriggersSection({ triggers }: { triggers: Record<string, any> }
                       </div>
                     )}
                     {(pt?.valid_until || pt?.priority) && (
-                      <div className="text-[11px] text-gray-400 mt-0.5">
+                      <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
                         {pt?.valid_until && <span>有效期 {pt.valid_until}</span>}
                         {priorityBadge(pt?.priority)}
                       </div>
@@ -779,10 +779,10 @@ function FollowupTriggersSection({ triggers }: { triggers: Record<string, any> }
                   <div className="text-gray-700 dark:text-gray-300">
                     {tt?.expected_date && <span className="font-semibold">{tt.expected_date}</span>}
                     {tt?.event_ref && (
-                      <span className="ml-1 text-gray-500">· {tt.event_ref}</span>
+                      <span className="ml-1 text-gray-600 dark:text-gray-400">· {tt.event_ref}</span>
                     )}
                     {tt?.days_from_today != null && (
-                      <span className="ml-1 text-gray-400">(距今 {tt.days_from_today} 天)</span>
+                      <span className="ml-1 text-gray-500 dark:text-gray-400">(距今 {tt.days_from_today} 天)</span>
                     )}
                     {priorityBadge(tt?.priority)}
                   </div>
@@ -829,7 +829,7 @@ function StructuredAnalysisContent({ d, analysisType }: { d: Record<string, any>
           {d.expert_identity ?? '专家'}{d.stock_target ? ` · ${d.stock_target}` : ''}
         </p>
         {d.analysis_date && (
-          <p className="text-xs text-gray-400 mt-0.5">{d.analysis_date}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{d.analysis_date}</p>
         )}
       </div>
 
@@ -857,7 +857,7 @@ function StructuredAnalysisContent({ d, analysisType }: { d: Record<string, any>
               <ul className="space-y-1.5 pl-1">
                 {sectionData.map((item, i) => (
                   <li key={i} className="flex gap-1.5">
-                    <span className="text-gray-400 shrink-0">·</span>
+                    <span className="text-gray-400 dark:text-gray-600 shrink-0">·</span>
                     {typeof item === 'string' ? (
                       <span className="flex-1">{renderBold(item)}</span>
                     ) : item && typeof item === 'object' ? (
@@ -1256,7 +1256,7 @@ function AnalysisTab({
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
             已保存分析
             {historyTotal > 0 && (
-              <span className="ml-1.5 text-xs text-gray-400">（共 {historyTotal} 条）</span>
+              <span className="ml-1.5 text-xs text-gray-500 dark:text-gray-400">（共 {historyTotal} 条）</span>
             )}
           </span>
           <div className="flex items-center gap-2">
@@ -1294,7 +1294,7 @@ function AnalysisTab({
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <span className="text-xs text-gray-500 min-w-[60px] text-center">
+                <span className="text-xs text-gray-600 dark:text-gray-400 min-w-[60px] text-center">
                   第 {currentIndex + 1} / {history.length} 条
                 </span>
                 <button
@@ -1326,11 +1326,11 @@ function AnalysisTab({
         )}
 
         {historyLoading ? (
-          <div className="text-center py-6 text-gray-400 text-sm">加载中...</div>
+          <div className="text-center py-6 text-gray-500 dark:text-gray-400 text-sm">加载中...</div>
         ) : currentRecord ? (
           <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-2">
             {/* 记录头部：版本信息 + 操作按钮 */}
-            <div className="flex items-center justify-between text-xs text-gray-400">
+            <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
               <span>
                 版本 {currentRecord.version} · {new Date(currentRecord.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
               </span>
@@ -1339,7 +1339,7 @@ function AnalysisTab({
                   <span className={`font-semibold px-2 py-0.5 rounded text-sm ${
                     currentRecord.score >= 8 ? 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400'
                     : currentRecord.score >= 6 ? 'bg-yellow-50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400'
-                    : 'bg-gray-50 text-gray-500 dark:bg-gray-800'
+                    : 'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
                   }`}>
                     评分 {currentRecord.score}
                   </span>
@@ -1350,7 +1350,7 @@ function AnalysisTab({
                       <button
                         onClick={() => handleReview(false)}
                         disabled={reviewing}
-                        className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-orange-500 disabled:opacity-40"
+                        className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 hover:text-orange-500 dark:hover:text-orange-400 disabled:opacity-40"
                         title={`让${reviewType === 'hot_money' ? '短线' : reviewType === 'midline' ? '中线' : '长线'}专家复盘此报告`}
                       >
                         <RotateCcw className={`h-3.5 w-3.5 ${reviewing ? 'animate-spin' : ''}`} />
@@ -1358,21 +1358,21 @@ function AnalysisTab({
                     )}
                     <button
                       onClick={() => setShowRawText(!showRawText)}
-                      className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-purple-500"
+                      className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 hover:text-purple-500 dark:hover:text-purple-400"
                       title={showRawText ? '渲染视图' : '源文本'}
                     >
                       {showRawText ? <BookOpen className="h-3.5 w-3.5" /> : <Code className="h-3.5 w-3.5" />}
                     </button>
                     <button
                       onClick={handleEditStart}
-                      className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-blue-500"
+                      className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400"
                       title="编辑"
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
                     <button
                       onClick={() => setDeleteConfirm(true)}
-                      className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-red-500"
+                      className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400"
                       title="删除"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -1406,7 +1406,7 @@ function AnalysisTab({
             {editMode ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400">评分（可选）</span>
+                  <span className="text-xs text-gray-600 dark:text-gray-300">评分（可选）</span>
                   <input
                     type="number"
                     min={0}
@@ -1460,7 +1460,7 @@ function AnalysisTab({
             )}
           </div>
         ) : (
-          <div className="text-center py-6 text-gray-400 text-sm border border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
+          <div className="text-center py-6 text-gray-500 dark:text-gray-400 text-sm border border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
             暂无保存记录，点击上方按钮生成分析
           </div>
         )}
@@ -1490,7 +1490,7 @@ function AnalysisTab({
         {promptExpanded && (
           <div className="mt-2">
             {promptLoading ? (
-              <div className="text-center py-4 text-gray-400 text-sm">加载中...</div>
+              <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">加载中...</div>
             ) : (
               <pre className="whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded-lg p-3 leading-relaxed font-mono max-h-60 overflow-y-auto">
                 {promptContent}

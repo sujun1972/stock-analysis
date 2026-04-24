@@ -597,18 +597,18 @@ function StocksPageContent() {
               <>
                 {stockSelectionStrategies.filter((s) => s.user_id === user?.id).length > 0 && (
                   <>
-                    <div className="px-2 py-1 text-xs text-gray-400 font-medium">我的策略</div>
+                    <div className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 font-medium">我的策略</div>
                     {stockSelectionStrategies.filter((s) => s.user_id === user?.id).map((s) => (
                       <SelectItem key={s.id} value={String(s.id)}>
                         {s.display_name}
-                        {s.publish_status !== 'approved' && <span className="ml-1 text-xs text-gray-400">（未发布）</span>}
+                        {s.publish_status !== 'approved' && <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">（未发布）</span>}
                       </SelectItem>
                     ))}
                   </>
                 )}
                 {stockSelectionStrategies.filter((s) => s.user_id !== user?.id && s.publish_status === 'approved').length > 0 && (
                   <>
-                    <div className="px-2 py-1 text-xs text-gray-400 font-medium">已发布策略</div>
+                    <div className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 font-medium">已发布策略</div>
                     {stockSelectionStrategies.filter((s) => s.user_id !== user?.id && s.publish_status === 'approved').map((s) => (
                       <SelectItem key={s.id} value={String(s.id)}>{s.display_name}</SelectItem>
                     ))}
@@ -617,7 +617,7 @@ function StocksPageContent() {
               </>
             )}
             {stockSelectionStrategies.length === 0 && (
-              <div className="px-3 py-2 text-sm text-gray-400">暂无选股策略</div>
+              <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">暂无选股策略</div>
             )}
           </SelectContent>
         </Select>
@@ -640,7 +640,7 @@ function StocksPageContent() {
               {lists.map((list) => (
                 <div key={list.id} className="flex items-center group">
                   <SelectItem value={String(list.id)} className="flex-1">
-                    {list.name}<span className="ml-1 text-xs text-gray-400">({list.stock_count})</span>
+                    {list.name}<span className="ml-1 text-xs text-gray-500 dark:text-gray-400">({list.stock_count})</span>
                   </SelectItem>
                   <span className="flex items-center gap-1 pr-2 opacity-0 group-hover:opacity-100">
                     <button title="重命名" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setRenameTarget(list); setRenameDialogOpen(true) }} className="p-0.5 hover:text-blue-600 rounded">
@@ -652,7 +652,7 @@ function StocksPageContent() {
                   </span>
                 </div>
               ))}
-              {lists.length === 0 && <div className="px-3 py-2 text-sm text-gray-400">暂无列表</div>}
+              {lists.length === 0 && <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">暂无列表</div>}
             </SelectContent>
           </Select>
         </div>
@@ -753,7 +753,7 @@ function StocksPageContent() {
               </span>
             )}
           </span>
-          <ChevronDown className="h-4 w-4 text-gray-400" />
+          <ChevronDown className="h-4 w-4 text-gray-500 dark:text-gray-400" />
         </Button>
       </div>
 
@@ -777,12 +777,12 @@ function StocksPageContent() {
         <CardContent className="p-0">
           {isLoading ? (
             <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-blue-600"></div>
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-300 dark:border-gray-700 border-t-blue-600 dark:border-t-blue-500"></div>
               <p className="mt-4 text-gray-600 dark:text-gray-400">加载中...</p>
             </div>
           ) : displayedStocks.length === 0 ? (
             <div className="text-center py-12">
-              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
               <p className="mt-4 text-gray-600 dark:text-gray-400">

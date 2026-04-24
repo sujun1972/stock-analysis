@@ -79,7 +79,7 @@ export function AddToListDialog({ open, onClose, selectedCodes, onSuccess }: Add
                 disabled={lists.length === 0}
                 className="accent-blue-600"
               />
-              <span className={lists.length === 0 ? 'text-gray-400' : ''}>追加到已有列表</span>
+              <span className={lists.length === 0 ? 'text-gray-400 dark:text-gray-600' : ''}>追加到已有列表</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input

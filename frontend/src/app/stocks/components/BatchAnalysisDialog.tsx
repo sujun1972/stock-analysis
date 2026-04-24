@@ -158,12 +158,12 @@ export function BatchAnalysisDialog({
             </div>
           )}
           {isFinished && (
-            <div className="ml-auto text-gray-500">已完成</div>
+            <div className="ml-auto text-gray-600 dark:text-gray-300">已完成</div>
           )}
         </div>
 
         {error && (
-          <div className="text-sm text-red-600 border border-red-200 bg-red-50 rounded-md px-3 py-2">
+          <div className="text-sm text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 rounded-md px-3 py-2">
             {error}
           </div>
         )}
@@ -182,10 +182,10 @@ export function BatchAnalysisDialog({
                 <tr key={t.ts_code} className="border-t">
                   <td className="px-3 py-2">
                     <span className="font-medium">{t.stock_name || '—'}</span>
-                    <span className="text-gray-500 ml-2">{tsCodeToPlain(t.ts_code)}</span>
+                    <span className="text-gray-600 dark:text-gray-300 ml-2">{tsCodeToPlain(t.ts_code)}</span>
                   </td>
                   <td className="px-3 py-2">
-                    {t.status === 'pending' && <span className="text-gray-400">等待中</span>}
+                    {t.status === 'pending' && <span className="text-gray-500 dark:text-gray-400">等待中</span>}
                     {t.status === 'running' && (
                       <span className="text-blue-600 flex items-center gap-1">
                         <Loader2 className="h-3 w-3 animate-spin" />分析中
@@ -203,7 +203,7 @@ export function BatchAnalysisDialog({
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right text-gray-500">
+                  <td className="px-3 py-2 text-right text-gray-600 dark:text-gray-300">
                     {t.duration_sec != null ? `${t.duration_sec}s` : '—'}
                   </td>
                 </tr>
