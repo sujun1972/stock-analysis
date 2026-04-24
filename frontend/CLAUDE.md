@@ -252,8 +252,8 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 **股票列表评分列 + CIO 列**：`/stocks` 页面表格按顺序显示 4 列 AI 评分 + CIO 报告日期 + CIO 复查触发器（价格 / 时间两列分开）：
 - 评分列：游资（`latest_analysis_hot_money.score`）、中线（`latest_analysis_midline.score`）、价值（`latest_analysis_longterm.score`）、**CIO评分**（`latest_analysis_cio.score`）
 - **CIO日期**：`latest_analysis_cio.created_at` 截取前 10 位
-- **下次关注价格**：`followup_triggers.price_triggers` 中 `break_up` / `break_down` 的 `price`，▲/▼ 标识方向（不可排序）
-- **下次关注时间**：`followup_triggers.time_triggers` 中 `expected_date` 最早的一条
+- **关注价格**：`followup_triggers.price_triggers` 中 `break_up` / `break_down` 的 `price`，▲/▼ 标识方向（不可排序）
+- **关注时间**：`followup_triggers.time_triggers` 中 `expected_date` 最早的一条
 
 后端 `enrich_stock_list_multi()` 通过 `asyncio.gather` 并发批量查询四种 analysis_type，一次注入到 `StockInfo`；CIO 记录额外注入 `followup_triggers`。`ScoreCell` 组件统一渲染评分色阶（≥8 红/≥6 黄/其余灰），4 列评分共享同一个组件，新增专家类型只需追加 `latest_analysis_xxx` 字段 + 在 `StockTableRow` 的 map 数组里加一项。
 

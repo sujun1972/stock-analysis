@@ -9,7 +9,7 @@ ALTER TABLE stock_ai_analysis
 COMMENT ON COLUMN stock_ai_analysis.followup_triggers
     IS 'CIO 复查触发器（JSONB）：time_triggers[]（事件/日期驱动） + price_triggers[]（上下方价位驱动） + review_horizon_days';
 
--- 股票列表页"下次关注价位/日期"按最近一条 CIO 记录查询：
+-- 股票列表页"关注价位/日期"按最近一条 CIO 记录查询：
 --   SELECT DISTINCT ON (ts_code) ts_code, followup_triggers, created_at
 --   FROM stock_ai_analysis
 --   WHERE analysis_type = 'cio_directive'

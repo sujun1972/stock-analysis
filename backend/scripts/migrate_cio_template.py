@@ -6,7 +6,7 @@
   - 顶层结构：multi_dimension_scan / cross_dimension_analysis / core_drivers / core_risks /
     rating_and_action / followup_triggers / final_score
   - final_score schema：score + rating + bull_factors + bear_factors + key_quote（对齐个股专家）
-  - followup_triggers（复查触发器，供股票列表页"下次关注"列 + CIO Tab 详情渲染使用）：
+  - followup_triggers（复查触发器，供股票列表页"关注"列 + CIO Tab 详情渲染使用）：
       * time_triggers[]：事件/日期驱动（event_ref 只能从已提供的三专家文本 + 数据收集中引用）
       * price_triggers[]：至少一组 break_up + break_down，price_basis 必须锚定具体技术/基本面位
       * review_horizon_days：短线 ≤ 10 / 中线 20~40 / 长线 ≤ 60

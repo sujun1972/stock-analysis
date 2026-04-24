@@ -874,13 +874,13 @@ function StocksPageContent() {
                       className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
                       title="CIO 复查触发器：上/下方触发价"
                     >
-                      下次关注价格
+                      关注价格
                     </th>
                     <th
                       className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
                       title="CIO 复查触发器：最近一个时间事件"
                     >
-                      <SortHeaderButton sortKey="cio_followup_time" label="下次关注时间" sortKeys={sortKeys} onClick={handleSortClick} />
+                      <SortHeaderButton sortKey="cio_followup_time" label="关注时间" sortKeys={sortKeys} onClick={handleSortClick} />
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
                   </tr>
