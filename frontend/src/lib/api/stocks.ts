@@ -55,7 +55,7 @@ export async function getConceptBoards(params?: {
 
 export async function getStock(code: string): Promise<StockInfo> {
   const response = await axiosInstance.get(`/api/stocks/list`, {
-    params: { search: code, limit: 20, list_status: 'L' }
+    params: { search: code, limit: 20, list_status: 'L', include_analysis: true }
   })
   const result = response.data as ApiResponse<PaginatedResponse<StockInfo>>
   if (result.data?.items && result.data.items.length > 0) {

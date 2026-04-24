@@ -204,6 +204,8 @@ LEFT JOIN stock_realtime sr ON sr.code = sb.code   -- ✅ 正确
 -- LEFT JOIN stock_realtime sr ON sr.ts_code = ... -- ❌ 该列不存在
 ```
 
+**`pre_close` 会为 0**：`stock_realtime.pre_close` 在行情增量回补延迟时常常是 `0.000`，直接显示会得到空值。展示"昨收"的前端组件必须做兜底 —— 用 `latest_price - change_amount` 推算（参考 [analysis/page.tsx](src/app/analysis/page.tsx) 的 `resolvePreClose`）。修数据源时也别急着删这个 fallback，回补时效性不可控。
+
 ---
 
 ## API 响应格式

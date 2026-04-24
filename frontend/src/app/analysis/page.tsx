@@ -65,30 +65,82 @@ function fmtShare(v: number | null | undefined) {
   return v.toFixed(2) + '万股'
 }
 
-/** 涨跌颜色 */
+/** 涨跌颜色（A 股配色：正数红、负数绿，用语义 token） */
 function priceColor(pct?: number | null) {
   if (pct === null || pct === undefined) return 'text-gray-900 dark:text-white'
-  if (pct > 0) return 'text-red-600 dark:text-red-400'
-  if (pct < 0) return 'text-green-600 dark:text-green-400'
+  if (pct > 0) return 'text-positive'
+  if (pct < 0) return 'text-negative'
   return 'text-gray-900 dark:text-white'
+}
+
+/** 价值度量配色（ROC/EY/安全边际：正数红、负数绿、0 黑） */
+function valueMetricColor(v?: number | null) {
+  if (v == null || !isFinite(v)) return ''
+  if (v > 0) return 'text-positive'
+  if (v < 0) return 'text-negative'
+  return ''
+}
+
+/** 评分色阶（与共享 ScoreBadge 对齐：≥8 红、≥6 黄、其余灰） */
+function scoreColor(s?: number | null) {
+  if (s == null) return 'text-gray-400 dark:text-gray-500'
+  if (s >= 8) return 'text-red-600 dark:text-red-400'
+  if (s >= 6) return 'text-yellow-600 dark:text-yellow-500'
+  return 'text-gray-500 dark:text-gray-400'
+}
+
+/** 百分比（小数 → %，用于 ROC / 收益率 / 安全边际） */
+function fmtPct(v?: number | null, decimals = 1) {
+  if (v == null || !isFinite(v)) return '-'
+  return (v * 100).toFixed(decimals) + '%'
+}
+
+/** 评分格式化：整数补一位小数，缺失显示 '-' */
+function fmtScore(s?: number | null) {
+  if (s == null) return '-'
+  return Number.isInteger(s) ? s.toFixed(1) : String(s)
+}
+
+// 昨收兜底：stock_realtime.pre_close 在数据同步层偶有 0 值（Tushare 增量回补延迟），
+// 此时用 latest_price - change_amount 推算，避免卡片出现 "-"
+function resolvePreClose(q: StockQuotePanel): number | null {
+  if (q.pre_close != null && q.pre_close > 0) return q.pre_close
+  if (q.latest_price != null && q.change_amount != null) return q.latest_price - q.change_amount
+  return null
 }
 
 // ─────────────────────────────────────────
 // 行情卡片
 // ─────────────────────────────────────────
 
-function QuotePanel({ q }: { q: StockQuotePanel }) {
+function QuotePanel({ q, stock }: { q: StockQuotePanel; stock: StockInfo | null }) {
   const pc = q.pct_change
   const color = priceColor(pc)
+  const preClose = resolvePreClose(q)
 
-  const items: { label: string; value: string; color?: string }[] = [
+  const vm = stock?.value_metrics ?? null
+  // CIO 复查触发器：time_triggers 取最近一个 expected_date；price_triggers 分上/下方向
+  const triggers = stock?.latest_analysis_cio?.followup_triggers
+  const nearestTime = triggers?.time_triggers
+    ?.filter(t => !!t.expected_date)
+    .sort((a, b) => String(a.expected_date).localeCompare(String(b.expected_date)))[0]
+  const breakUp = triggers?.price_triggers?.find(t => t.direction === 'break_up' && t.price != null)
+  const breakDown = triggers?.price_triggers?.find(t => t.direction === 'break_down' && t.price != null)
+  const followupPriceDisplay = breakUp || breakDown
+    ? [
+        breakUp ? `▲ ${breakUp.price?.toFixed(2)}` : null,
+        breakDown ? `▼ ${breakDown.price?.toFixed(2)}` : null,
+      ].filter(Boolean).join(' / ')
+    : '-'
+
+  const items: { label: string; value: string; color?: string; title?: string }[] = [
     { label: '最新价',   value: fmt(q.latest_price), color },
     { label: '涨跌幅',   value: pc != null ? `${pc > 0 ? '+' : ''}${pc.toFixed(2)}%` : '-', color },
     { label: '涨跌额',   value: fmt(q.change_amount), color },
     { label: '今开',     value: fmt(q.open) },
     { label: '最高',     value: fmt(q.high) },
     { label: '最低',     value: fmt(q.low) },
-    { label: '昨收',     value: fmt(q.pre_close) },
+    { label: '昨收',     value: fmt(preClose) },
     { label: '振幅',     value: fmt(q.amplitude, 2, '%') },
     { label: '成交量',   value: fmtVol(q.volume) },
     { label: '成交额',   value: fmtAmt(q.amount) },
@@ -103,21 +155,69 @@ function QuotePanel({ q }: { q: StockQuotePanel }) {
     { label: '流通市值', value: fmtMv(q.circ_mv) },
     { label: '总股本',   value: fmtShare(q.total_share) },
     { label: '流通股本', value: fmtShare(q.float_share) },
+    {
+      label: 'ROC',
+      value: fmtPct(vm?.roc),
+      color: valueMetricColor(vm?.roc),
+      title: '资本收益率 ROC = EBIT / (净营运资本 + 净固定资产)',
+    },
+    {
+      label: '收益率',
+      value: fmtPct(vm?.earnings_yield),
+      color: valueMetricColor(vm?.earnings_yield),
+      title: '收益率 EY = EBIT / EV',
+    },
+    {
+      label: '安全边际',
+      value: fmtPct(vm?.intrinsic_margin, 0),
+      color: valueMetricColor(vm?.intrinsic_margin),
+      title: vm?.intrinsic_value != null
+        ? `格雷厄姆内在价值 ${vm.intrinsic_value.toFixed(2)} 元（g=${((vm.g_rate ?? 0) * 100).toFixed(1)}%）`
+        : '格雷厄姆内在价值数据不足',
+    },
+    {
+      label: '关注时间',
+      value: nearestTime?.expected_date ? `⏱ ${nearestTime.expected_date}` : '-',
+      title: nearestTime?.reason ?? '',
+    },
+    {
+      label: '关注价格',
+      value: followupPriceDisplay,
+      title: [breakUp?.price_basis, breakDown?.price_basis].filter(Boolean).join(' / '),
+    },
+  ]
+
+  // 四专家评分独立成行（游资 / 中线 / 价值 / CIO）
+  const scoreRow: { label: string; score?: number | null }[] = [
+    { label: '游资评分', score: stock?.latest_analysis_hot_money?.score },
+    { label: '中线评分', score: stock?.latest_analysis_midline?.score },
+    { label: '价值评分', score: stock?.latest_analysis_longterm?.score },
+    { label: 'CIO评分',  score: stock?.latest_analysis_cio?.score },
   ]
 
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 gap-x-4 gap-y-3">
-      {items.map(({ label, value, color: c }) => (
-        <div key={label}>
-          <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
-          <p className={`text-sm font-semibold ${c ?? 'text-gray-900 dark:text-white'}`}>{value}</p>
-        </div>
-      ))}
-      {q.daily_date && (
-        <div className="col-span-full mt-1">
-          <p className="text-xs text-gray-400 dark:text-gray-600">估值数据日期：{q.daily_date}</p>
-        </div>
-      )}
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 gap-x-4 gap-y-3">
+        {items.map(({ label, value, color: c, title }) => (
+          <div key={label} title={title || undefined}>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+            <p className={`text-sm font-semibold tabular-nums ${c ?? 'text-gray-900 dark:text-white'}`}>{value}</p>
+          </div>
+        ))}
+        {q.daily_date && (
+          <div className="col-span-full mt-1">
+            <p className="text-xs text-gray-400 dark:text-gray-600">估值数据日期：{q.daily_date}</p>
+          </div>
+        )}
+      </div>
+      <div className="grid grid-cols-4 gap-x-4 gap-y-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+        {scoreRow.map(({ label, score }) => (
+          <div key={label}>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+            <p className={`text-sm font-semibold tabular-nums ${scoreColor(score)}`}>{fmtScore(score)}</p>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -318,10 +418,8 @@ function AnalysisContent() {
   const [longtermLoading, setLongtermLoading] = useState(false)
   const [cioContent, setCioContent] = useState('')
   const [cioLoading, setCioLoading] = useState(false)
-  const [latestAnalysis, setLatestAnalysis] = useState<{ score: number | null; version: number } | null>(null)
 
   useEffect(() => {
-    setLatestAnalysis(null)
     if (code) {
       loadStockInfo()
     } else {
@@ -350,25 +448,12 @@ function AnalysisContent() {
       setStockInfo(stockInfoData)
       setBasicInfo(basicInfoData)
       setQuotePanel(quotePanelData)
-      // 加载最新游资分析摘要（非阻塞，不影响主加载流程）
-      const tsCode = stockInfoData?.ts_code || toTsCode(code)
-      refreshLatestAnalysis(tsCode)
     } catch (err: any) {
       setError(err.message || '加载股票数据失败')
       console.error('Failed to load stock data:', err)
     } finally {
       setIsLoading(false)
     }
-  }
-
-  const refreshLatestAnalysis = (ts: string) => {
-    apiClient.getLatestStockAnalysis(ts, 'hot_money_view')
-      .then((res) => {
-        setLatestAnalysis(res?.code === 200 && res.data
-          ? { score: res.data.score, version: res.data.version }
-          : null)
-      })
-      .catch(() => { setLatestAnalysis(null) })
   }
 
   const openHotMoneyDialog = () => {
@@ -504,15 +589,6 @@ function AnalysisContent() {
           )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 pt-1">
-          {latestAnalysis?.score != null && (
-            <span className={`text-sm font-semibold px-2 py-0.5 rounded ${
-              latestAnalysis.score >= 8 ? 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400'
-              : latestAnalysis.score >= 6 ? 'bg-yellow-50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400'
-              : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
-            }`}>
-              游资 {latestAnalysis.score}
-            </span>
-          )}
           <button
             onClick={openHotMoneyDialog}
             className="text-xs px-3 py-1.5 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors"
@@ -538,7 +614,7 @@ function AnalysisContent() {
         longtermPromptLoading={longtermLoading}
         cioPrompt={cioContent}
         cioPromptLoading={cioLoading}
-        onSaved={() => refreshLatestAnalysis(tsCode)}
+        onSaved={() => { if (code) apiClient.getStock(code).then(setStockInfo).catch(() => {}) }}
       />
 
       {/* 行情卡片 */}
@@ -548,7 +624,7 @@ function AnalysisContent() {
         </CardHeader>
         <CardContent>
           {quotePanel ? (
-            <QuotePanel q={quotePanel} />
+            <QuotePanel q={quotePanel} stock={stockInfo} />
           ) : (
             <p className="text-sm text-gray-500 dark:text-gray-400">暂无行情数据</p>
           )}
