@@ -33,9 +33,9 @@ const ModelTableFilters = memo(function ModelTableFilters({
   onRefresh
 }: ModelTableFiltersProps) {
   return (
-    <div className="flex flex-col sm:flex-row gap-4 mb-4">
+    <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full lg:w-auto lg:min-w-0">
       {/* 搜索框 */}
-      <div className="relative flex-1">
+      <div className="relative flex-1 lg:min-w-[220px]">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
         <Input
           placeholder="搜索股票代码..."

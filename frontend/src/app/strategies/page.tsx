@@ -297,10 +297,10 @@ export default function StrategiesPage() {
   return (
     <div className="container mx-auto py-6 px-4 max-w-7xl">
       {/* 页面标题 */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">策略中心</h1>
-          <p className="text-muted-foreground mt-2">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">策略中心</h1>
+          <p className="text-muted-foreground mt-2 text-sm sm:text-base">
             浏览所有已启用的交易策略
           </p>
         </div>
@@ -308,7 +308,7 @@ export default function StrategiesPage() {
         {/* 创建策略下拉菜单 */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button>
+            <Button className="w-full sm:w-auto sm:shrink-0">
               <Plus className="mr-2 h-4 w-4" />
               创建策略
               <ChevronDown className="ml-2 h-4 w-4" />
@@ -337,32 +337,32 @@ export default function StrategiesPage() {
       {/* Tab 导航 */}
       <Tabs value={strategyType} onValueChange={handleTabChange} className="mb-6">
         <TabsList className="grid w-full max-w-lg grid-cols-3">
-          <TabsTrigger value="entry" className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4" />
-            入场策略
-            {statistics?.by_strategy_type?.entry && (
-              <Badge variant="secondary" className="ml-1">
+          <TabsTrigger value="entry" className="flex items-center gap-1 sm:gap-2 min-w-0">
+            <TrendingUp className="h-4 w-4 shrink-0" />
+            <span className="truncate">入场策略</span>
+            {statistics?.by_strategy_type?.entry ? (
+              <Badge variant="secondary" className="ml-0.5 sm:ml-1 tabular-nums shrink-0">
                 {statistics.by_strategy_type.entry}
               </Badge>
-            )}
+            ) : null}
           </TabsTrigger>
-          <TabsTrigger value="exit" className="flex items-center gap-2">
-            <TrendingDown className="h-4 w-4" />
-            离场策略
-            {statistics?.by_strategy_type?.exit && (
-              <Badge variant="secondary" className="ml-1">
+          <TabsTrigger value="exit" className="flex items-center gap-1 sm:gap-2 min-w-0">
+            <TrendingDown className="h-4 w-4 shrink-0" />
+            <span className="truncate">离场策略</span>
+            {statistics?.by_strategy_type?.exit ? (
+              <Badge variant="secondary" className="ml-0.5 sm:ml-1 tabular-nums shrink-0">
                 {statistics.by_strategy_type.exit}
               </Badge>
-            )}
+            ) : null}
           </TabsTrigger>
-          <TabsTrigger value="stock_selection" className="flex items-center gap-2">
-            <Filter className="h-4 w-4" />
-            选股策略
-            {statistics?.by_strategy_type?.stock_selection && (
-              <Badge variant="secondary" className="ml-1">
+          <TabsTrigger value="stock_selection" className="flex items-center gap-1 sm:gap-2 min-w-0">
+            <Filter className="h-4 w-4 shrink-0" />
+            <span className="truncate">选股策略</span>
+            {statistics?.by_strategy_type?.stock_selection ? (
+              <Badge variant="secondary" className="ml-0.5 sm:ml-1 tabular-nums shrink-0">
                 {statistics.by_strategy_type.stock_selection}
               </Badge>
-            )}
+            ) : null}
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -480,13 +480,13 @@ export default function StrategiesPage() {
 
           {/* 分页控件 */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="text-sm text-muted-foreground tabular-nums">
                 显示 {Math.min((currentPage - 1) * itemsPerPage + 1, filteredStrategies.length)} -{' '}
                 {Math.min(currentPage * itemsPerPage, filteredStrategies.length)} 条，共 {filteredStrategies.length} 条
               </div>
 
-              <Pagination>
+              <Pagination className="sm:justify-end sm:mx-0 sm:w-auto">
                 <PaginationContent>
                   <PaginationItem>
                     <PaginationPrevious

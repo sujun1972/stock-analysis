@@ -137,15 +137,15 @@ export default function MyStrategiesPage() {
   return (
     <div className="container mx-auto py-8 px-4">
       {/* 页面标题 */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">我的策略</h1>
-          <p className="text-muted-foreground mt-2">管理和发布你创建的策略</p>
+      <div className="flex items-start justify-between gap-3 mb-8">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl sm:text-3xl font-bold">我的策略</h1>
+          <p className="text-muted-foreground mt-2 text-sm sm:text-base">管理和发布你创建的策略</p>
         </div>
-        <Link href="/strategies/create">
+        <Link href="/strategies/create" className="shrink-0">
           <Button>
-            <Plus className="w-4 h-4 mr-2" />
-            创建新策略
+            <Plus className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">创建新策略</span>
           </Button>
         </Link>
       </div>
@@ -160,23 +160,25 @@ export default function MyStrategiesPage() {
 
       {/* 状态标签页 */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="all">
-            全部 <Badge variant="secondary" className="ml-2">{statusCounts.all}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="draft">
-            草稿 <Badge variant="secondary" className="ml-2">{statusCounts.draft}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="pending_review">
-            待审核 <Badge variant="secondary" className="ml-2">{statusCounts.pending_review}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="approved">
-            已发布 <Badge variant="secondary" className="ml-2">{statusCounts.approved}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="rejected">
-            已拒绝 <Badge variant="secondary" className="ml-2">{statusCounts.rejected}</Badge>
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto scrollbar-thin -mx-4 px-4 sm:mx-0 sm:px-0">
+          <TabsList className="inline-flex w-max sm:grid sm:w-full sm:grid-cols-5">
+            <TabsTrigger value="all" className="whitespace-nowrap">
+              全部 <Badge variant="secondary" className="ml-2">{statusCounts.all}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="draft" className="whitespace-nowrap">
+              草稿 <Badge variant="secondary" className="ml-2">{statusCounts.draft}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="pending_review" className="whitespace-nowrap">
+              待审核 <Badge variant="secondary" className="ml-2">{statusCounts.pending_review}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="approved" className="whitespace-nowrap">
+              已发布 <Badge variant="secondary" className="ml-2">{statusCounts.approved}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="rejected" className="whitespace-nowrap">
+              已拒绝 <Badge variant="secondary" className="ml-2">{statusCounts.rejected}</Badge>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value={activeTab} className="mt-6">
           {loading ? (
@@ -202,14 +204,16 @@ export default function MyStrategiesPage() {
               {filteredStrategies.map((strategy) => (
                 <Card key={strategy.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <CardTitle className="text-lg">{strategy.display_name}</CardTitle>
-                        <CardDescription className="mt-1 text-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <CardTitle className="text-lg break-words">{strategy.display_name}</CardTitle>
+                        <CardDescription className="mt-1 text-sm break-words">
                           {strategy.description || '暂无描述'}
                         </CardDescription>
                       </div>
-                      <PublishStatusBadge status={strategy.publish_status} />
+                      <div className="shrink-0">
+                        <PublishStatusBadge status={strategy.publish_status} />
+                      </div>
                     </div>
 
                     {/* 标签 */}
@@ -221,7 +225,7 @@ export default function MyStrategiesPage() {
                         {strategy.strategy_type === 'entry' ? '入场策略' : '离场策略'}
                       </Badge>
                       {strategy.category && (
-                        <Badge variant="outline" className="text-xs">
+                        <Badge variant="outline" className="text-xs max-w-[140px] truncate" title={strategy.category}>
                           {strategy.category}
                         </Badge>
                       )}
@@ -240,7 +244,7 @@ export default function MyStrategiesPage() {
                     )}
 
                     {/* 验证状态 */}
-                    <div className="flex items-center gap-2 mb-4 text-sm">
+                    <div className="flex flex-wrap items-center gap-2 mb-4 text-sm">
                       <span className="text-muted-foreground">验证状态:</span>
                       <Badge variant={strategy.validation_status === 'passed' ? 'default' : 'secondary'}>
                         {strategy.validation_status === 'passed' ? '已通过' : '未验证'}

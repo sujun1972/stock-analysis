@@ -30,21 +30,21 @@ export default function AILabPage() {
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
             AI 策略实验舱
           </h1>
-          <p className="text-gray-600 dark:text-gray-300 mt-2">
+          <p className="text-gray-600 dark:text-gray-300 mt-2 text-sm sm:text-base">
             可视化机器学习模型训练和预测
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 lg:shrink-0">
           {/* 训练模型按钮 - 使用绿色背景 */}
           <Button
             size="lg"
             onClick={() => setShowTrainingDialog(true)}
-            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
+            className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white"
           >
             <Plus className="h-5 w-5" />
             训练模型
@@ -53,7 +53,7 @@ export default function AILabPage() {
           <Button
             size="lg"
             onClick={() => router.push('/auto-experiment')}
-            className="flex items-center gap-2"
+            className="flex items-center justify-center gap-2"
           >
             <Rocket className="h-5 w-5" />
             自动化实验

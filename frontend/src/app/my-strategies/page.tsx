@@ -146,17 +146,17 @@ function MyStrategiesContent() {
   return (
     <div className="container mx-auto py-6 px-4 max-w-7xl">
       {/* 页面标题 */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">我的策略</h1>
-          <p className="text-muted-foreground mt-2">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">我的策略</h1>
+          <p className="text-muted-foreground mt-2 text-sm sm:text-base">
             管理您创建的所有交易策略
           </p>
         </div>
 
         {/* 创建策略按钮 */}
-        <Link href="/strategies/create">
-          <Button>
+        <Link href="/strategies/create" className="sm:shrink-0">
+          <Button className="w-full sm:w-auto">
             <Plus className="mr-2 h-4 w-4" />
             创建策略
           </Button>

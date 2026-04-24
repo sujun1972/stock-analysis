@@ -190,14 +190,14 @@ export default function BacktestHistoryContent() {
       {/* 筛选栏 */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="min-w-0">
               <CardTitle>回测记录</CardTitle>
               <CardDescription>共 {total} 条记录</CardDescription>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 sm:shrink-0">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[150px]">
+                <SelectTrigger className="w-full sm:w-[150px]">
                   <SelectValue placeholder="状态筛选" />
                 </SelectTrigger>
                 <SelectContent>
@@ -226,41 +226,41 @@ export default function BacktestHistoryContent() {
               {records.map((record) => (
                 <Card key={record.id} className="hover:shadow-md transition-shadow">
                   <CardContent className="pt-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div className="flex-1 min-w-0 space-y-3">
                         {/* 头部信息 */}
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                           {getStatusBadge(record.status)}
                           {record.strategy && (
-                            <span className="font-medium text-gray-900 dark:text-white">
+                            <span className="font-medium text-gray-900 dark:text-white break-words min-w-0">
                               {record.strategy.display_name || record.strategy.name}
                             </span>
                           )}
-                          <Badge variant="outline">{record.execution_type}</Badge>
+                          <Badge variant="outline" className="shrink-0">{record.execution_type}</Badge>
                         </div>
 
                         {/* 时间和参数 */}
-                        <div className="flex items-center gap-6 text-sm text-gray-600 dark:text-gray-400">
-                          <div className="flex items-center gap-1">
-                            <Calendar className="h-4 w-4" />
-                            <span>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 sm:gap-6 text-sm text-gray-600 dark:text-gray-400">
+                          <div className="flex items-center gap-1 min-w-0">
+                            <Calendar className="h-4 w-4 shrink-0" />
+                            <span className="tabular-nums">
                               {record.execution_params.start_date} ~ {record.execution_params.end_date}
                             </span>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-4 w-4" />
-                            <span>{formatDate(record.created_at)}</span>
+                          <div className="flex items-center gap-1 min-w-0">
+                            <Clock className="h-4 w-4 shrink-0" />
+                            <span className="tabular-nums">{formatDate(record.created_at)}</span>
                           </div>
                           <span>股票池: {record.execution_params.stock_pool.length} 只</span>
                         </div>
 
                         {/* 绩效指标 */}
                         {record.status === 'completed' && (
-                          <div className="grid grid-cols-6 gap-4 pt-2">
+                          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 sm:gap-4 pt-2">
                             <div>
                               <p className="text-xs text-gray-500 dark:text-gray-400">总收益</p>
                               <p
-                                className={`text-sm font-semibold ${
+                                className={`text-sm font-semibold tabular-nums ${
                                   record.metrics.total_return >= 0 ? 'text-green-600' : 'text-red-600'
                                 }`}
                               >
@@ -274,31 +274,31 @@ export default function BacktestHistoryContent() {
                             </div>
                             <div>
                               <p className="text-xs text-gray-500 dark:text-gray-400">年化收益</p>
-                              <p className="text-sm font-semibold">
+                              <p className="text-sm font-semibold tabular-nums">
                                 {formatPercent(record.metrics.annual_return)}
                               </p>
                             </div>
                             <div>
                               <p className="text-xs text-gray-500 dark:text-gray-400">夏普比率</p>
-                              <p className="text-sm font-semibold">
+                              <p className="text-sm font-semibold tabular-nums">
                                 {record.metrics.sharpe_ratio.toFixed(2)}
                               </p>
                             </div>
                             <div>
                               <p className="text-xs text-gray-500 dark:text-gray-400">最大回撤</p>
-                              <p className="text-sm font-semibold text-red-600">
+                              <p className="text-sm font-semibold text-red-600 tabular-nums">
                                 {formatPercent(record.metrics.max_drawdown)}
                               </p>
                             </div>
                             <div>
                               <p className="text-xs text-gray-500 dark:text-gray-400">胜率</p>
-                              <p className="text-sm font-semibold">
+                              <p className="text-sm font-semibold tabular-nums">
                                 {formatPercent(record.metrics.win_rate)}
                               </p>
                             </div>
                             <div>
                               <p className="text-xs text-gray-500 dark:text-gray-400">交易次数</p>
-                              <p className="text-sm font-semibold">{record.metrics.total_trades}</p>
+                              <p className="text-sm font-semibold tabular-nums">{record.metrics.total_trades}</p>
                             </div>
                           </div>
                         )}
@@ -307,15 +307,15 @@ export default function BacktestHistoryContent() {
                         {record.status === 'failed' && record.error_message && (
                           <Alert variant="destructive">
                             <AlertCircle className="h-4 w-4" />
-                            <AlertDescription className="text-sm">
+                            <AlertDescription className="text-sm break-words">
                               {record.error_message}
                             </AlertDescription>
                           </Alert>
                         )}
                       </div>
 
-                      {/* 操作按钮 */}
-                      <div className="flex items-center gap-2 ml-4">
+                      {/* 操作按钮：手机端换到第二行 + 靠右 */}
+                      <div className="flex items-center gap-2 justify-end sm:ml-4 sm:shrink-0">
                         {record.status === 'completed' && (
                           <Button
                             variant="outline"
@@ -330,6 +330,7 @@ export default function BacktestHistoryContent() {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleDelete(record.id)}
+                          aria-label="删除回测记录"
                         >
                           <Trash2 className="h-4 w-4 text-red-600" />
                         </Button>
@@ -343,11 +344,11 @@ export default function BacktestHistoryContent() {
 
           {/* 分页 */}
           {total > pageSize && (
-            <div className="flex items-center justify-between mt-6">
-              <div className="text-sm text-gray-600 dark:text-gray-400">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-6">
+              <div className="text-sm text-gray-600 dark:text-gray-400 tabular-nums">
                 显示 {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, total)} 条，共 {total} 条
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 justify-end sm:justify-start">
                 <Button
                   variant="outline"
                   size="sm"
@@ -356,7 +357,7 @@ export default function BacktestHistoryContent() {
                 >
                   上一页
                 </Button>
-                <span className="text-sm px-3">第 {page} 页</span>
+                <span className="text-sm px-3 tabular-nums">第 {page} 页</span>
                 <Button
                   variant="outline"
                   size="sm"

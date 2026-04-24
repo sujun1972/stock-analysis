@@ -101,30 +101,30 @@ const StrategyCard = memo(function StrategyCard({
   return (
     <Card className="hover:shadow-lg transition-shadow">
       <CardHeader>
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <CardTitle className="text-lg">{strategy.display_name}</CardTitle>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <CardTitle className="text-lg break-words">{strategy.display_name}</CardTitle>
                 {isStockSelectionStrategy && (
-                <Badge variant="secondary" className="text-xs">
+                <Badge variant="secondary" className="text-xs shrink-0">
                   选股策略
                 </Badge>
               )}
               {isExitStrategy && (
-                <Badge variant="secondary" className="text-xs">
+                <Badge variant="secondary" className="text-xs shrink-0">
                   离场策略
                 </Badge>
               )}
             </div>
-            <CardDescription className="line-clamp-2">
+            <CardDescription className="line-clamp-2 break-words">
               {strategy.description || '暂无描述'}
             </CardDescription>
           </div>
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-col items-end gap-2 shrink-0 max-w-[45%]">
             {/* 创建者信息 */}
-            <Badge variant="outline" className="flex items-center gap-1">
-              <User className="h-3 w-3" />
-              <span>{strategy.username || '未知用户'}</span>
+            <Badge variant="outline" className="flex items-center gap-1 max-w-full">
+              <User className="h-3 w-3 shrink-0" />
+              <span className="truncate">{strategy.username || '未知用户'}</span>
             </Badge>
             {getValidationBadge()}
           </div>
@@ -135,15 +135,19 @@ const StrategyCard = memo(function StrategyCard({
         {/* 标签和类别 */}
         <div className="flex flex-wrap gap-2">
           {strategy.category && (
-            <Badge variant="secondary">{strategy.category}</Badge>
+            <Badge variant="secondary" className="max-w-full truncate" title={strategy.category}>
+              {strategy.category}
+            </Badge>
           )}
           {strategy.tags?.map((tag, index) => (
-            <Badge key={index} variant="outline">{tag}</Badge>
+            <Badge key={index} variant="outline" className="max-w-[140px] truncate" title={tag}>
+              {tag}
+            </Badge>
           ))}
         </div>
 
         {/* 风险等级和统计信息（选股策略不显示风险等级） */}
-        <div className="grid grid-cols-2 gap-2 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
           {!isStockSelectionStrategy && (
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">风险等级:</span>
@@ -201,75 +205,84 @@ const StrategyCard = memo(function StrategyCard({
         )}
       </CardContent>
 
-      <CardFooter className="flex gap-2">
-        {/* 查看代码按钮 */}
-        <Link href={`/strategies/${strategy.id}/code`} className="flex-1">
-          <Button variant="outline" size="sm" className="w-full">
-            <Code className="mr-1 h-3 w-3" />
-            代码
-          </Button>
-        </Link>
+      <CardFooter className="flex flex-wrap gap-2">
+        {/* 主操作组：回测 / 查看选股结果（始终占第一行） */}
+        <div className="flex gap-2 w-full sm:w-auto sm:flex-1 min-w-0 order-1 sm:order-2">
+          {/* 选股策略：查看选股结果 */}
+          {isStockSelectionStrategy ? (
+            <Link href={`/stocks?stock_selection_strategy_id=${strategy.id}`} className="flex-1 min-w-0">
+              <Button size="sm" className="w-full">
+                <ExternalLink className="mr-1 h-3 w-3 shrink-0" />
+                <span className="truncate">查看选股结果</span>
+              </Button>
+            </Link>
+          ) : (
+            <>
+              {/* 回测按钮（入场策略） */}
+              {onBacktest && !isExitStrategy && (
+                <Link href={`/backtest?type=unified&id=${strategy.id}`} className="flex-1 min-w-0">
+                  <Button size="sm" className="w-full">
+                    <Play className="mr-1 h-3 w-3 shrink-0" />
+                    <span className="truncate">回测</span>
+                  </Button>
+                </Link>
+              )}
+              {onBacktest && isExitStrategy && (
+                <Button size="sm" className="w-full flex-1 min-w-0" disabled title="离场策略需要配合入场策略使用，不能单独回测">
+                  <Play className="mr-1 h-3 w-3 shrink-0" />
+                  <span className="truncate">不可回测</span>
+                </Button>
+              )}
+            </>
+          )}
+        </div>
 
-        {/* 选股策略：查看选股结果 */}
-        {isStockSelectionStrategy ? (
-          <Link href={`/stocks?stock_selection_strategy_id=${strategy.id}`} className="flex-1">
-            <Button size="sm" className="w-full">
-              <ExternalLink className="mr-1 h-3 w-3" />
-              查看选股结果
+        {/* 次要操作组：代码 + 克隆 / 编辑 / 删除（手机换到第二行，桌面回到左侧） */}
+        <div className="flex gap-2 items-center w-full sm:w-auto order-2 sm:order-1">
+          {/* 查看代码按钮 */}
+          <Link href={`/strategies/${strategy.id}/code`} className="flex-1 sm:flex-initial min-w-0">
+            <Button variant="outline" size="sm" className="w-full">
+              <Code className="mr-1 h-3 w-3 shrink-0" />
+              <span className="truncate">代码</span>
             </Button>
           </Link>
-        ) : (
-          <>
-            {/* 回测按钮（入场策略） */}
-            {onBacktest && !isExitStrategy && (
-              <Link href={`/backtest?type=unified&id=${strategy.id}`} className="flex-1">
-                <Button size="sm" className="w-full">
-                  <Play className="mr-1 h-3 w-3" />
-                  回测
-                </Button>
-              </Link>
-            )}
-            {onBacktest && isExitStrategy && (
-              <Button size="sm" className="w-full flex-1" disabled title="离场策略需要配合入场策略使用，不能单独回测">
-                <Play className="mr-1 h-3 w-3" />
-                不可回测
-              </Button>
-            )}
-          </>
-        )}
 
-        {/* 克隆按钮 */}
-        {onClone && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onClone(strategy.id)}
-          >
-            <Copy className="h-4 w-4" />
-          </Button>
-        )}
+          {/* 克隆按钮 */}
+          {onClone && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onClone(strategy.id)}
+              aria-label={`克隆策略 ${strategy.display_name}`}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          )}
 
-        {/* 编辑按钮（用户有权限时可编辑） */}
-        {onEdit && canModify && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onEdit(strategy.id)}
-          >
-            <Edit className="h-4 w-4" />
-          </Button>
-        )}
+          {/* 编辑按钮（用户有权限时可编辑） */}
+          {onEdit && canModify && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onEdit(strategy.id)}
+              aria-label={`编辑策略 ${strategy.display_name}`}
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+          )}
 
-        {/* 删除按钮（用户有权限时可删除） */}
-        {onDelete && canModify && (
-          <Button
-            size="sm"
-            variant="destructive"
-            onClick={() => onDelete(strategy.id)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        )}
+          {/* 删除按钮（用户有权限时可删除） */}
+          {onDelete && canModify && (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => onDelete(strategy.id)}
+              aria-label={`删除策略 ${strategy.display_name}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </CardFooter>
     </Card>
   )

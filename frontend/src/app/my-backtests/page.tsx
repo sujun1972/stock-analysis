@@ -15,8 +15,8 @@ export default function MyBacktestsPage() {
     <ProtectedRoute>
       <div className="container-custom py-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">我的回测</h1>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">我的回测</h1>
+          <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
             查看和管理您的历史回测记录
           </p>
         </div>

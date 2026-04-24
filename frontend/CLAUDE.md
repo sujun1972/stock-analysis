@@ -235,6 +235,25 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 [globals.css](src/app/globals.css) 定义的全局工具类，供窄屏横向滚动 Tab、弹窗内长列表使用。覆盖 Firefox (`scrollbar-width: thin`) + WebKit (`::-webkit-scrollbar` 6px)，自带深色模式配色。新增"内容可能溢出的容器"时直接 `className="overflow-x-auto scrollbar-thin"` 即可，不要再手写滚动条样式。
 
+### 卡片列表页的移动端响应式约定
+
+`/my-strategies` / `/strategies` / `/my-backtests` / `/ai-lab` 等"标题栏 + 筛选 + 卡片/表格列表 + 分页"型页面的常见溢出点和修复模式，新页面按此照抄即可：
+
+1. **页面标题栏**（`<h1> + 副标题 + 主操作按钮`）：`flex-col sm:flex-row sm:items-center sm:justify-between gap-4`。h1 字号 `text-2xl sm:text-3xl`，副标题 `text-sm sm:text-base`。主操作按钮手机端 `w-full` 独占一行，桌面 `sm:w-auto sm:shrink-0` 回到右上。
+2. **多列 Tab / 分段控件**（如 `grid-cols-5` 状态 Tab）：超过 3 列时在手机会挤烂。解决方式二选一——**(a)** 包 `overflow-x-auto scrollbar-thin -mx-4 px-4 sm:mx-0 sm:px-0`，`TabsList` 改 `inline-flex w-max sm:grid sm:w-full sm:grid-cols-N`，每个 `TabsTrigger` 加 `whitespace-nowrap`；**(b)** 列数 ≤3 时每个 trigger 加 `min-w-0` + `<span className="truncate">` 包文字、图标和 Badge 加 `shrink-0`。
+3. **卡片 Footer 按钮组**（`StrategyCard` 等）：`flex flex-wrap gap-2`，用 `order-1` / `sm:order-2` 在手机端把视觉优先级最高的按钮（如"回测"）提到第一行整行 `w-full`、次要按钮组（代码 + 克隆/编辑/删除）用 `order-2 sm:order-1` 放第二行——桌面 `sm:order-*` 再交换回来恢复"代码 / 回测 / 图标" 原顺序。不要用双份 DOM + `hidden md:block` 实现同一组按钮的顺序差异。
+4. **全宽列表卡片**（`StrategyListCard`、`BacktestHistoryContent` 单条 Card 等，含图标 + 信息区 + 操作区）：断点选 **`lg`** 而非 `sm`，因为平板也塞不下一排 5 个按钮。外层 `flex flex-col lg:flex-row`，主区（图标 + 信息）`flex-1 min-w-0`，操作区在手机端加 `border-t -mx-4 px-4 lg:border-t-0 lg:mx-0 lg:px-0` 做视觉分隔。
+5. **超宽表格**（≥12 列，如 AI 实验舱模型仓库）：外包 `overflow-x-auto scrollbar-thin`，`<Table>` 加 `min-w-[1200px]` 强制保留桌面列宽——手机端横向滑动查看完整数据，不牺牲任何列。桌面用户无感知。
+6. **分页栏**：`flex-col sm:flex-row sm:items-center sm:justify-between gap-3`——手机端"显示 X-Y 条"独占一行，按钮组 `justify-end` 换到下方靠右。
+7. **Badge / 标签行**：长用户名 / 类别 / tag 必须加 `max-w-[140px~180px] truncate` + `title={...}` 悬停完整，否则英文长串或 AI 生成长标签会撑破父容器。Badge 里带图标的用 `<Icon className="shrink-0" /> <span className="truncate">...</span>` 组合。
+8. **数字列加 `tabular-nums`**：统计徽章、分页计数、评分、日期等所有数字必须用等宽数字（项目全局规范，见"字体与排版约定"）。
+
+禁止的反模式：
+- 手机端用固定 `w-[150px]` / `w-[180px]` 的 Select / Input 宽度（断点下退化成 `w-full`）。
+- 卡片标题行用 `flex items-center gap-2` 但不加 `flex-wrap`——长标题会挤没验证状态 Badge。
+- Flex 子项不加 `min-w-0`——`min-width: auto` 的默认值会让子项拒绝收缩，导致父容器溢出而不是内部 `truncate` 生效。
+- 手机端保留桌面的 `justify-between` 双列布局——应先 `flex-col`，再在 `sm:` / `lg:` 断点恢复横排。
+
 ### 加载状态三档约定（骨架屏 / 区域 spinner / 按钮 spinner）
 
 大列表类页面的 loading 按"首次 vs 二次"分档，其他场景按尺寸分档，避免首屏空白闪烁和排序翻页时的 CLS：

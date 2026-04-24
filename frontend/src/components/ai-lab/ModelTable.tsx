@@ -405,12 +405,12 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
     <>
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
               <CardTitle>模型仓库</CardTitle>
               {selectedModels.size > 0 && (
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary" className="text-sm tabular-nums">
                     已选择 {selectedModels.size} 项
                   </Badge>
                   <Button
@@ -447,8 +447,8 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
-            <Table>
+          <div className="rounded-md border overflow-x-auto scrollbar-thin">
+            <Table className="min-w-[1200px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[50px]">
@@ -640,11 +640,11 @@ export default function ModelTable({ showTrainingDialog, setShowTrainingDialog }
 
           {/* 分页控件 */}
           {totalModels > 0 && (
-            <div className="flex items-center justify-between px-2 py-4">
-              <div className="text-sm text-muted-foreground">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-2 py-4">
+              <div className="text-sm text-muted-foreground tabular-nums">
                 共 {totalModels} 个模型，第 {currentPage} / {totalPages} 页
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 justify-end">
                 <Button
                   variant="outline"
                   size="sm"
