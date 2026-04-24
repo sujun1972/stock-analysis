@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import * as echarts from 'echarts'
+import { useEChartsTheme } from '@/hooks/useEChartsTheme'
 
 interface KLineData {
   date: string
@@ -47,16 +48,24 @@ export default function BacktestKLineChart({
 }: BacktestKLineChartProps) {
   const chartRef = useRef<HTMLDivElement>(null)
   const chartInstanceRef = useRef<echarts.ECharts | null>(null)
+  const { theme, echartsTheme, palette } = useEChartsTheme()
 
   // 检查是否有权益曲线数据
   const hasEquityData = equityCurve && equityCurve.length > 0
 
+  // 主题切换：dispose 旧 instance，让下一轮 effect 以新主题重新 init
+  useEffect(() => {
+    if (chartInstanceRef.current) {
+      chartInstanceRef.current.dispose()
+      chartInstanceRef.current = null
+    }
+  }, [theme])
+
   useEffect(() => {
     if (!chartRef.current || !data || data.length === 0) return
 
-    // 初始化图表
     if (!chartInstanceRef.current) {
-      chartInstanceRef.current = echarts.init(chartRef.current)
+      chartInstanceRef.current = echarts.init(chartRef.current, echartsTheme)
     }
 
     const chart = chartInstanceRef.current
@@ -160,7 +169,7 @@ export default function BacktestKLineChart({
 
     const option: echarts.EChartsOption = {
       animation: false,
-      backgroundColor: '#ffffff',
+      backgroundColor: palette.background,
       title: {
         text: `${stockCode} 回测K线图`,
         left: 'center',
@@ -253,11 +262,12 @@ export default function BacktestKLineChart({
         axisPointer: {
           type: 'cross'
         },
+        backgroundColor: palette.tooltipBg,
         borderWidth: 1,
-        borderColor: '#ccc',
+        borderColor: palette.tooltipBorder,
         padding: 10,
         textStyle: {
-          color: '#000'
+          color: palette.tooltipText
         },
         formatter: (params: any) => {
           if (!Array.isArray(params) || params.length === 0) return ''
@@ -273,7 +283,7 @@ export default function BacktestKLineChart({
             // 特殊处理权益曲线，显示真实资产数据
             if (seriesName === '权益曲线' && equityDataForTooltip[dataIndex]) {
               const equity = equityDataForTooltip[dataIndex]!
-              result += `<div style="margin-top:8px; padding-top:8px; border-top:1px solid #eee;">
+              result += `<div style="margin-top:8px; padding-top:8px; border-top:1px solid ${palette.divider};">
                 <div style="font-weight:bold; color:#ec4899; margin-bottom:4px;">
                   <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ec4899;margin-right:5px;"></span>
                   权益曲线
@@ -423,7 +433,7 @@ export default function BacktestKLineChart({
     return () => {
       window.removeEventListener('resize', handleResize)
     }
-  }, [data, signalPoints, stockCode, equityCurve])
+  }, [data, signalPoints, stockCode, equityCurve, theme, palette, echartsTheme])
 
   // 清理
   useEffect(() => {

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import * as echarts from 'echarts'
+import { useEChartsTheme } from '@/hooks/useEChartsTheme'
 
 interface EquityPoint {
   date: string
@@ -31,6 +32,15 @@ export default function EquityCurveChart({
 }: EquityCurveChartProps) {
   const chartRef = useRef<HTMLDivElement>(null)
   const chartInstanceRef = useRef<echarts.ECharts | null>(null)
+  const { theme, echartsTheme, palette } = useEChartsTheme()
+
+  // 主题切换：dispose 旧 instance，让下一轮 effect 以新主题重新 init
+  useEffect(() => {
+    if (chartInstanceRef.current) {
+      chartInstanceRef.current.dispose()
+      chartInstanceRef.current = null
+    }
+  }, [theme])
 
   useEffect(() => {
     if (!chartRef.current) return
@@ -39,9 +49,8 @@ export default function EquityCurveChart({
     const hasData = (strategyData && strategyData.length > 0) || (strategies && strategies.length > 0)
     if (!hasData) return
 
-    // 初始化图表
     if (!chartInstanceRef.current) {
-      chartInstanceRef.current = echarts.init(chartRef.current)
+      chartInstanceRef.current = echarts.init(chartRef.current, echartsTheme)
     }
 
     const chart = chartInstanceRef.current
@@ -125,6 +134,7 @@ export default function EquityCurveChart({
 
     // 配置图表选项
     const option: echarts.EChartsOption = {
+      backgroundColor: palette.background,
       title: {
         text: title,
         left: 'center',
@@ -141,6 +151,9 @@ export default function EquityCurveChart({
             backgroundColor: '#6a7985'
           }
         },
+        backgroundColor: palette.tooltipBg,
+        borderColor: palette.tooltipBorder,
+        textStyle: { color: palette.tooltipText },
         formatter: function (params: any) {
           let result = `<div style="font-weight:bold; margin-bottom:5px;">${params[0].axisValue}</div>`
           params.forEach((param: any) => {
@@ -227,7 +240,7 @@ export default function EquityCurveChart({
     return () => {
       window.removeEventListener('resize', handleResize)
     }
-  }, [strategyData, strategies, benchmarkData, title])
+  }, [strategyData, strategies, benchmarkData, title, theme, palette, echartsTheme])
 
   // 组件卸载时销毁图表
   useEffect(() => {

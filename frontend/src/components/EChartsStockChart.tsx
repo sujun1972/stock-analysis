@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import * as echarts from 'echarts'
 import { apiClient } from '@/lib/api-client'
+import { useEChartsTheme } from '@/hooks/useEChartsTheme'
 import {
   formatVolume as formatVolumeUtil,
   removeDateTimePart as removeDateTimePartUtil,
@@ -87,6 +88,7 @@ export default function EChartsStockChart({
 }: EChartsStockChartProps) {
   const chartRef = useRef<HTMLDivElement>(null)
   const chartInstanceRef = useRef<echarts.ECharts | null>(null)
+  const { theme, echartsTheme, palette } = useEChartsTheme()
   const [allData, setAllData] = useState<ChartData[]>(data)
   const allDataRef = useRef<ChartData[]>(data)  // ref 版本，供事件回调读取最新值
   const [isLoading, setIsLoading] = useState(false)
@@ -207,6 +209,14 @@ export default function EChartsStockChart({
                      otherPanelsHeight +
                      ZOOM_HEIGHT + BOTTOM_PADDING
 
+  // 主题切换：dispose 旧 instance，让下一轮 effect 以新主题重新 init
+  useEffect(() => {
+    if (chartInstanceRef.current) {
+      chartInstanceRef.current.dispose()
+      chartInstanceRef.current = null
+    }
+  }, [theme])
+
   // 初始化数据
   useEffect(() => {
     if (data.length > 0) {
@@ -312,7 +322,7 @@ export default function EChartsStockChart({
 
     // 初始化或获取图表实例
     if (!chartInstanceRef.current) {
-      chartInstanceRef.current = echarts.init(chartRef.current)
+      chartInstanceRef.current = echarts.init(chartRef.current, echartsTheme)
     }
 
     const chart = chartInstanceRef.current
@@ -583,7 +593,7 @@ export default function EChartsStockChart({
 
     const option: echarts.EChartsOption = {
       animation: false,
-      backgroundColor: '#ffffff',
+      backgroundColor: palette.background,
       legend: legends,
       grid: grids,
       xAxis: grids.map((_, index) => ({
@@ -601,7 +611,7 @@ export default function EChartsStockChart({
         axisPointer: {
           show: true,
           lineStyle: {
-            color: '#999',
+            color: palette.axisPointerLine,
             width: 1,
             type: 'dashed'
           },
@@ -661,16 +671,17 @@ export default function EChartsStockChart({
           type: 'cross',
           link: [{ xAxisIndex: 'all' }],  // 让十字线在所有x轴上联动
           crossStyle: {
-            color: '#999',
+            color: palette.axisPointerLine,
             width: 1,
             type: 'dashed'
           }
         },
+        backgroundColor: palette.tooltipBg,
         borderWidth: 1,
-        borderColor: '#ccc',
+        borderColor: palette.tooltipBorder,
         padding: 10,
         textStyle: {
-          color: '#000'
+          color: palette.tooltipText
         },
         formatter: (params: any) => {
           if (!Array.isArray(params)) return ''
@@ -683,8 +694,7 @@ export default function EChartsStockChart({
             </div>`
           }
 
-          // 分隔线样式
-          const divider = '<hr style="margin: 5px 0; border: none; border-top: 1px solid #ccc;" />'
+          const divider = `<hr style="margin: 5px 0; border: none; border-top: 1px solid ${palette.divider};" />`
 
           // 格式化日期并添加星期
           let result = `<div style="font-weight: bold; margin-bottom: 5px;">${formatDateWithWeekday(params[0].axisValue)}</div>`
@@ -1069,7 +1079,7 @@ export default function EChartsStockChart({
       window.removeEventListener('resize', handleResize)
       chart.off('dataZoom')
     }
-  }, [allData, visibleIndicators, hasBOLL, hasKDJ, hasMACD, hasRSI, loadMoreData, backtestMode, signalPoints, equityCurve, hasEquityData])
+  }, [allData, visibleIndicators, hasBOLL, hasKDJ, hasMACD, hasRSI, loadMoreData, backtestMode, signalPoints, equityCurve, hasEquityData, theme, palette, echartsTheme])
 
   // 显示加载状态
   useEffect(() => {
@@ -1078,15 +1088,15 @@ export default function EChartsStockChart({
         chartInstanceRef.current.showLoading({
           text: '加载更多历史数据...',
           color: '#3b82f6',
-          textColor: '#000',
-          maskColor: 'rgba(255, 255, 255, 0.8)',
+          textColor: palette.loadingText,
+          maskColor: palette.loadingMask,
           zlevel: 0
         })
       } else {
         chartInstanceRef.current.hideLoading()
       }
     }
-  }, [isLoading])
+  }, [isLoading, palette])
 
   // 监听容器高度变化，自动resize
   useEffect(() => {

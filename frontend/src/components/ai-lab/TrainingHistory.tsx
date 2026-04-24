@@ -8,18 +8,27 @@
 import { useEffect, useRef } from 'react';
 import { useMLStore } from '@/stores/ml-store';
 import * as echarts from 'echarts';
+import { useEChartsTheme } from '@/hooks/useEChartsTheme';
 
 export default function TrainingHistory() {
   const { currentTask } = useMLStore();
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.ECharts | null>(null);
+  const { theme, echartsTheme } = useEChartsTheme();
+
+  // 主题切换：dispose 旧 instance，让下一轮 effect 以新主题重新 init
+  useEffect(() => {
+    if (chartInstance.current) {
+      chartInstance.current.dispose();
+      chartInstance.current = null;
+    }
+  }, [theme]);
 
   useEffect(() => {
     if (!chartRef.current || !currentTask?.training_history) return;
 
-    // 初始化图表
     if (!chartInstance.current) {
-      chartInstance.current = echarts.init(chartRef.current);
+      chartInstance.current = echarts.init(chartRef.current, echartsTheme);
     }
 
     // 准备数据
@@ -105,7 +114,7 @@ export default function TrainingHistory() {
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [currentTask?.training_history]);
+  }, [currentTask?.training_history, theme, echartsTheme]);
 
   if (!currentTask?.training_history) return null;
 

@@ -8,18 +8,27 @@
 import { useEffect, useRef } from 'react';
 import { useMLStore } from '@/stores/ml-store';
 import * as echarts from 'echarts';
+import { useEChartsTheme } from '@/hooks/useEChartsTheme';
 
 export default function PredictionChart() {
   const { predictions, selectedModel } = useMLStore();
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.ECharts | null>(null);
+  const { theme, echartsTheme } = useEChartsTheme();
+
+  // 主题切换：dispose 旧 instance，让下一轮 effect 以新主题重新 init
+  useEffect(() => {
+    if (chartInstance.current) {
+      chartInstance.current.dispose();
+      chartInstance.current = null;
+    }
+  }, [theme]);
 
   useEffect(() => {
     if (!chartRef.current || !predictions || predictions.length === 0) return;
 
-    // 初始化图表
     if (!chartInstance.current) {
-      chartInstance.current = echarts.init(chartRef.current);
+      chartInstance.current = echarts.init(chartRef.current, echartsTheme);
     }
 
     // 数据下采样：如果数据点超过 500，进行下采样
@@ -203,7 +212,7 @@ export default function PredictionChart() {
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [predictions, selectedModel]);
+  }, [predictions, selectedModel, theme, echartsTheme]);
 
   // 清理图表实例
   useEffect(() => {

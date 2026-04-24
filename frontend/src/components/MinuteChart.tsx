@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import * as echarts from 'echarts'
 import type { MinuteData } from '@/types'
+import { useEChartsTheme } from '@/hooks/useEChartsTheme'
 
 interface MinuteChartProps {
   data: MinuteData[]
@@ -14,13 +15,21 @@ interface MinuteChartProps {
 export default function MinuteChart({ data, period, stockCode, stockName }: MinuteChartProps) {
   const chartRef = useRef<HTMLDivElement>(null)
   const chartInstance = useRef<echarts.ECharts | null>(null)
+  const { theme, echartsTheme } = useEChartsTheme()
+
+  // 主题切换：dispose 旧 instance，让下一轮 effect 以新主题重新 init
+  useEffect(() => {
+    if (chartInstance.current) {
+      chartInstance.current.dispose()
+      chartInstance.current = null
+    }
+  }, [theme])
 
   useEffect(() => {
     if (!chartRef.current || data.length === 0) return
 
-    // 初始化或获取图表实例
     if (!chartInstance.current) {
-      chartInstance.current = echarts.init(chartRef.current)
+      chartInstance.current = echarts.init(chartRef.current, echartsTheme)
     }
 
     const chart = chartInstance.current
@@ -214,7 +223,7 @@ export default function MinuteChart({ data, period, stockCode, stockName }: Minu
     return () => {
       window.removeEventListener('resize', handleResize)
     }
-  }, [data, period, stockCode, stockName])
+  }, [data, period, stockCode, stockName, theme, echartsTheme])
 
   // 清理
   useEffect(() => {

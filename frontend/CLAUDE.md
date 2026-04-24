@@ -149,6 +149,16 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 - 短代码自动补全：纯数字 `000001` → `000001.SZ`
 - 同步后清除 Redis 缓存：`cache.delete_pattern(f"daily_data:*{ts_code}*")`
 
+**主题联动（`useEChartsTheme`）**：所有 ECharts 实例组件（`EChartsStockChart` / `MinuteChart` / `BacktestKLineChart` / `EquityCurveChart` / `ai-lab/*` / `analysis` 筹码图）统一使用 [useEChartsTheme](src/hooks/useEChartsTheme.ts) 跟随 `next-themes` 的深浅主题。约定：
+
+1. 从 hook 取 `{ theme, echartsTheme, palette }`。`theme` 是稳定字符串 `'light' | 'dark'`；`palette` 是单例 frozen 对象（不会因父组件重渲染触发引用变化）。
+2. 用 **独立 useEffect + `[theme]` 依赖**先 `dispose()` 旧 instance 并置 `null`，下一轮渲染时主 effect 会以新主题重新 `echarts.init(el, echartsTheme)`——ECharts 不支持热切主题，只能重建。
+3. 主 effect 的 deps 要加 `theme`（触发重建）和 `palette`（如果有消费）、`echartsTheme`；禁止自己临时 `getChartPalette(theme)` 拿 palette，那样会每次渲染返回新对象从而污染 deps。
+4. `palette` 只覆盖业务组件必须手动引用的颜色：`background` / `tooltipBg` / `tooltipBorder` / `tooltipText` / `axisPointerLine` / `divider` / `loadingMask` / `loadingText`。axis / splitLine 等由 ECharts 内建 `'dark'` 主题自动处理。
+5. K 线红涨/绿跌（`#ef4444` / `#22c55e`）是 A 股业务约定，不走 palette，两种主题下保持一致。
+
+新增 ECharts 组件时照抄任意一个已迁移文件的模式即可；**禁止直接 `echarts.init(el)` 不传主题**，否则深色模式会白底。
+
 ---
 
 ## `/stocks` 页面筛选架构

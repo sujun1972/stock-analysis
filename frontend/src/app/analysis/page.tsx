@@ -7,6 +7,7 @@ import { apiClient } from '@/lib/api-client'
 import type { StockInfo, StockQuotePanel } from '@/types'
 import * as echarts from 'echarts'
 import { HotMoneyViewDialog } from '@/components/stocks/HotMoneyViewDialog'
+import { useEChartsTheme } from '@/hooks/useEChartsTheme'
 
 // 动态导入StockPriceCard组件（统一的图表组件）
 const StockPriceCard = dynamic(() => import('@/components/StockPriceCard'), {
@@ -130,10 +131,19 @@ interface ChipItem { price: number; percent: number; trade_date?: string }
 function ChipsDistributionCard({ tsCode, latestPrice }: { tsCode: string; latestPrice?: number | null }) {
   const chartRef = useRef<HTMLDivElement>(null)
   const chartInstance = useRef<echarts.ECharts | null>(null)
+  const { theme, echartsTheme } = useEChartsTheme()
   const [dataDate, setDataDate] = useState<string | null>(null)
   // null = 加载中，[] = 已加载但无数据，有元素 = 正常数据
   const [chips, setChips] = useState<ChipItem[] | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // 主题切换：dispose 旧 instance，让下一轮 effect 以新主题重新 init
+  useEffect(() => {
+    if (chartInstance.current) {
+      chartInstance.current.dispose()
+      chartInstance.current = null
+    }
+  }, [theme])
 
   // 获取筹码数据（后端会自动同步缺失/过期数据）
   useEffect(() => {
@@ -158,7 +168,7 @@ function ChipsDistributionCard({ tsCode, latestPrice }: { tsCode: string; latest
     if (!chips || chips.length === 0 || !chartRef.current) return
 
     if (!chartInstance.current) {
-      chartInstance.current = echarts.init(chartRef.current)
+      chartInstance.current = echarts.init(chartRef.current, echartsTheme)
     }
     const chart = chartInstance.current
 
@@ -223,7 +233,7 @@ function ChipsDistributionCard({ tsCode, latestPrice }: { tsCode: string; latest
       })
       chart.resize()
     })
-  }, [chips, latestPrice])
+  }, [chips, latestPrice, theme, echartsTheme])
 
   // 响应窗口大小变化；组件卸载时销毁图表实例
   useEffect(() => {
