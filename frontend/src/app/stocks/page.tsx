@@ -429,7 +429,8 @@ function StocksPageContent() {
   const handleSelectAllFiltered = useCallback(async () => {
     setSelectingAll(true)
     try {
-      const params: Parameters<typeof apiClient.getStockCodes>[0] = { list_status: 'L', limit: 5000 }
+      // limit 需覆盖全市场股票数 + 余量；后端 /codes/filtered 硬上限 10000
+      const params: Parameters<typeof apiClient.getStockCodes>[0] = { list_status: 'L', limit: 10000 }
       if (marketFilter === 'SSE') { params.market = '主板'; params.exchange = 'SSE' }
       else if (marketFilter === 'SZSE') { params.market = '主板'; params.exchange = 'SZSE' }
       else if (marketFilter !== 'all') { params.market = marketFilter }
@@ -444,7 +445,11 @@ function StocksPageContent() {
         result.codes.forEach((c) => next.add(c))
         return next
       })
-      toast.success(`已选中全部 ${result.codes.length} 只股票`)
+      if (result.total > result.codes.length) {
+        toast.warning(`已选中 ${result.codes.length} 只，筛选结果共 ${result.total} 只（单次上限 ${result.codes.length}），如需更多请缩小筛选范围`)
+      } else {
+        toast.success(`已选中全部 ${result.codes.length} 只股票`)
+      }
     } catch (err: unknown) {
       const e = err as { message?: string }
       toast.error(e?.message || '获取全部股票失败')

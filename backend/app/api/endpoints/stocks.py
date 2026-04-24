@@ -201,7 +201,7 @@ async def get_stock_codes(
     list_status: Optional[str] = Query(None, description="上市状态: L-上市, D-退市, P-暂停上市"),
     exchange: Optional[str] = Query(None, description="交易所: SSE-上交所, SZSE-深交所, BSE-北交所"),
     user_stock_list_id: Optional[int] = Query(None, description="自选列表ID，只返回该列表中的股票"),
-    limit: int = Query(500, ge=1, le=5000, description="最大返回数量，范围: 1-5000，默认 500"),
+    limit: int = Query(500, ge=1, le=10000, description="最大返回数量，范围: 1-10000，默认 500"),
 ):
     """
     获取符合筛选条件的股票代码列表
