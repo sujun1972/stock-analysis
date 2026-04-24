@@ -7,9 +7,9 @@ import { useAuthStore } from '@/stores/auth-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, AlertCircle, TrendingUp, CheckCircle2 } from 'lucide-react'
+import { Loader2, AlertCircle, CheckCircle2, Mail, Lock, User, IdCard } from 'lucide-react'
+import { AuthLayout } from '@/components/auth/AuthLayout'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -23,14 +23,12 @@ export default function RegisterPage() {
   const [success, setSuccess] = useState(false)
   const [validationError, setValidationError] = useState('')
 
-  // 已登录用户重定向
   useEffect(() => {
     if (isAuthenticated) {
       router.push('/')
     }
   }, [isAuthenticated, router])
 
-  // 清除错误
   useEffect(() => {
     return () => clearError()
   }, [clearError])
@@ -40,7 +38,6 @@ export default function RegisterPage() {
     clearError()
     setValidationError('')
 
-    // 验证密码
     if (password !== confirmPassword) {
       setValidationError('两次输入的密码不一致')
       return
@@ -61,7 +58,6 @@ export default function RegisterPage() {
 
       setSuccess(true)
 
-      // 3秒后跳转到登录页
       setTimeout(() => {
         router.push('/login?message=' + encodeURIComponent('注册成功，请登录'))
       }, 3000)
@@ -72,186 +68,185 @@ export default function RegisterPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 px-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto w-16 h-16 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mb-4">
-              <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400" />
-            </div>
-            <CardTitle className="text-2xl">注册成功！</CardTitle>
-            <CardDescription>
-              您的账户已创建，3秒后将跳转到登录页面...
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-center">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              您已获得试用账户权限：
-            </p>
-            <ul className="mt-4 text-sm text-left space-y-2">
-              <li>✓ 回测配额：5次/月</li>
-              <li>✓ ML预测配额：2次/月</li>
-              <li>✓ 最多创建3个策略</li>
-            </ul>
-            <Button
-              className="mt-6 w-full"
-              onClick={() => router.push('/login')}
-            >
-              立即登录
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      <AuthLayout title="注册成功" subtitle="3 秒后将自动跳转到登录页面">
+        <div className="rounded-xl border bg-card p-6 text-center space-y-4">
+          <div className="mx-auto w-14 h-14 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center">
+            <CheckCircle2 className="h-7 w-7 text-green-600 dark:text-green-400" />
+          </div>
+          <p className="text-sm text-muted-foreground">您已获得试用账户权限：</p>
+          <ul className="text-sm text-left space-y-1.5 max-w-xs mx-auto">
+            <li className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+              回测配额：5 次 / 月
+            </li>
+            <li className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+              ML 预测配额：2 次 / 月
+            </li>
+            <li className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+              最多创建 3 个策略
+            </li>
+          </ul>
+          <Button className="w-full h-11 mt-2" onClick={() => router.push('/login')}>
+            立即登录
+          </Button>
+        </div>
+      </AuthLayout>
     )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 px-4 py-8">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 mb-4">
-            <TrendingUp className="h-8 w-8 text-white" />
+    <AuthLayout
+      title="创建账户"
+      subtitle="开启您的 AI 量化投资之旅"
+      footer={
+        <div className="text-sm text-center text-muted-foreground">
+          已有账户？{' '}
+          <Link
+            href="/login"
+            className="text-primary font-medium hover:underline underline-offset-4"
+          >
+            立即登录
+          </Link>
+        </div>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {(error || validationError) && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error || validationError}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="email">
+            邮箱 <span className="text-destructive">*</span>
+          </Label>
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              id="email"
+              type="email"
+              placeholder="your@email.com"
+              className="pl-9"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              disabled={isLoading}
+              autoComplete="email"
+            />
           </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            股票分析系统
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">
-            开始您的智能投资之旅
-          </p>
         </div>
 
-        <Card>
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl">创建账户</CardTitle>
-            <CardDescription>
-              填写以下信息以创建您的账户
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {(error || validationError) && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error || validationError}</AlertDescription>
-                </Alert>
-              )}
+        <div className="space-y-2">
+          <Label htmlFor="username">
+            用户名 <span className="text-destructive">*</span>
+          </Label>
+          <div className="relative">
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              id="username"
+              type="text"
+              placeholder="3-50 个字符"
+              className="pl-9"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              disabled={isLoading}
+              minLength={3}
+              maxLength={50}
+              autoComplete="username"
+            />
+          </div>
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email">邮箱 *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  autoComplete="email"
-                />
-              </div>
+        <div className="space-y-2">
+          <Label htmlFor="fullName">
+            真实姓名 <span className="text-muted-foreground text-xs font-normal">（可选）</span>
+          </Label>
+          <div className="relative">
+            <IdCard className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              id="fullName"
+              type="text"
+              placeholder="张三"
+              className="pl-9"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              disabled={isLoading}
+              maxLength={100}
+            />
+          </div>
+        </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="username">用户名 *</Label>
-                <Input
-                  id="username"
-                  type="text"
-                  placeholder="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  minLength={3}
-                  maxLength={50}
-                  autoComplete="username"
-                />
-                <p className="text-xs text-gray-500">3-50个字符</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="fullName">真实姓名（可选）</Label>
-                <Input
-                  id="fullName"
-                  type="text"
-                  placeholder="张三"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  disabled={isLoading}
-                  maxLength={100}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">密码 *</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  minLength={6}
-                  autoComplete="new-password"
-                />
-                <p className="text-xs text-gray-500">至少6个字符</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">确认密码 *</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  placeholder="••••••••"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  minLength={6}
-                  autoComplete="new-password"
-                />
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full"
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="password">
+              密码 <span className="text-destructive">*</span>
+            </Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                id="password"
+                type="password"
+                placeholder="至少 6 位"
+                className="pl-9"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
                 disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    注册中...
-                  </>
-                ) : (
-                  '注册'
-                )}
-              </Button>
-            </form>
-          </CardContent>
-          <CardFooter className="flex flex-col space-y-4">
-            <div className="text-sm text-center text-gray-600 dark:text-gray-400">
-              已有账户？{' '}
-              <Link
-                href="/login"
-                className="text-blue-600 hover:text-blue-700 dark:text-blue-400 font-medium"
-              >
-                立即登录
-              </Link>
+                minLength={6}
+                autoComplete="new-password"
+              />
             </div>
-          </CardFooter>
-        </Card>
+          </div>
 
-        <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-          <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-2">
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword">
+              确认密码 <span className="text-destructive">*</span>
+            </Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                id="confirmPassword"
+                type="password"
+                placeholder="再输一次"
+                className="pl-9"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                disabled={isLoading}
+                minLength={6}
+                autoComplete="new-password"
+              />
+            </div>
+          </div>
+        </div>
+
+        <Button type="submit" className="w-full h-11" disabled={isLoading}>
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              注册中...
+            </>
+          ) : (
+            '创建账户'
+          )}
+        </Button>
+
+        <div className="rounded-lg border border-blue-200 dark:border-blue-900/50 bg-blue-50/60 dark:bg-blue-950/30 px-4 py-3">
+          <p className="text-xs font-semibold text-blue-900 dark:text-blue-300 mb-1.5">
             试用账户权益
-          </h3>
-          <ul className="text-xs text-blue-800 dark:text-blue-400 space-y-1">
-            <li>• 每月5次回测配额</li>
-            <li>• 每月2次ML预测配额</li>
-            <li>• 最多创建3个策略</li>
-            <li>• 升级为VIP解锁无限配额</li>
+          </p>
+          <ul className="text-xs text-blue-800/90 dark:text-blue-400/90 space-y-0.5 leading-relaxed">
+            <li>• 每月 5 次回测配额</li>
+            <li>• 每月 2 次 ML 预测配额</li>
+            <li>• 最多创建 3 个策略</li>
           </ul>
         </div>
-      </div>
-    </div>
+      </form>
+    </AuthLayout>
   )
 }
