@@ -60,6 +60,19 @@ toast({ title: '失败', description: err.message, variant: 'destructive' })
 
 **禁止**手写 `fixed top-4 right-4 bg-green-600` / `bg-red-600` 之类硬编码 toast JSX，也不要用 `window.alert` 做成功/失败提示。破坏性操作的二次确认（删除列表等）可继续用原生 `window.confirm`。
 
+---
+
+## 无障碍（a11y）约定
+
+- **键盘焦点环**：所有手写 `<button>` / `<a>` 必须带焦点环。用 [globals.css](src/app/globals.css) 预设的 `.focus-ring`（蓝环，默认）或 `.focus-ring-red`（删除类操作用红环），不要再手写 `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-*-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900` 这串长类名。shadcn `Button` / `TabsTrigger` 等基础组件已内置焦点环，无需再叠加。
+- **统一用 `focus-visible` 而非 `focus`**：键盘导航时才显示环，鼠标点击不显示（避免视觉噪音）。
+- **`aria-label` 动态化**：列表中重复按钮（排序、复选框、操作菜单）必须带上"本条记录的标识"让屏幕阅读器能区分，如 `选中 ${stock.name}（${stock.code}）`、`${stock.name} 操作菜单`。排序按钮按当前状态动态生成，如 `按涨跌幅排序，当前降序，优先级第 1`。
+- **`prefers-reduced-motion`**：[globals.css](src/app/globals.css) 全局把 `animation-duration` / `transition-duration` 降到 `0.01ms !important`——**不是 0**，因为 Radix 等库依赖 `animationend` / `transitionend` 事件驱动 `data-state=open/closed` 切换。写新动画时直接用 `animate-*` / `transition-*` 即可，无需自行判断系统偏好。
+- **手写 `<button>` 都要写 `type="button"`**：避免在 `<form>` 里意外触发 submit。
+- **sonner Toaster 默认已挂 `aria-live="polite"`**，无需额外配置；但 toast 文案应是完整句子而非碎片（便于屏幕阅读器朗读）。
+
+---
+
 已登录用户可在 `/stocks` 页面管理自选股列表。未登录用户不可见任何列表相关 UI。
 
 ### 数据库表

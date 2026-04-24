@@ -38,6 +38,7 @@ import {
   Filter,
   Sparkles,
   Loader2,
+  ArrowUpDown,
 } from 'lucide-react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { useSmartRefresh } from '@/hooks/useMarketStatus'
@@ -146,10 +147,15 @@ function SortHeaderButton({
   const active = idx >= 0
   const order = active ? sortKeys[idx].order : 'desc'
   const showPriority = active && sortKeys.length > 1
+  // 动态 aria-label 告知屏幕阅读器当前排序状态（未排序 / 升 / 降 + 多列优先级）
+  const stateText = !active ? '当前未排序' : order === 'desc' ? '当前降序' : '当前升序'
+  const ariaLabel = `按${label}排序，${stateText}${showPriority ? `，优先级第 ${idx + 1}` : ''}`
   return (
     <button
+      type="button"
       onClick={(e) => onClick(sortKey, e)}
-      className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200"
+      className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200 focus-ring rounded-sm"
+      aria-label={ariaLabel}
       title="点击单列排序；Shift+点击 追加为次级排序键"
     >
       {label}
@@ -720,10 +726,22 @@ function StocksPageContent() {
                     {list.name}<span className="ml-1 text-xs text-gray-500 dark:text-gray-400">({list.stock_count})</span>
                   </SelectItem>
                   <span className="flex items-center gap-1 pr-2 opacity-0 group-hover:opacity-100">
-                    <button title="重命名" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setRenameTarget(list); setRenameDialogOpen(true) }} className="p-0.5 hover:text-blue-600 rounded">
+                    <button
+                      type="button"
+                      title="重命名"
+                      aria-label={`重命名列表 ${list.name}`}
+                      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setRenameTarget(list); setRenameDialogOpen(true) }}
+                      className="p-0.5 hover:text-blue-600 rounded focus-ring"
+                    >
                       <Pencil className="h-3 w-3" />
                     </button>
-                    <button title="删除" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteList(list.id) }} className="p-0.5 hover:text-red-600 rounded">
+                    <button
+                      type="button"
+                      title="删除"
+                      aria-label={`删除列表 ${list.name}`}
+                      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteList(list.id) }}
+                      className="p-0.5 hover:text-red-600 rounded focus-ring-red"
+                    >
                       <Trash2 className="h-3 w-3" />
                     </button>
                   </span>
@@ -769,9 +787,11 @@ function StocksPageContent() {
             )}
           </div>
           <button
+            type="button"
             onClick={() => { setCurrentPage(1); updateURL({ stock_selection_strategy_id: null, page: null }) }}
-            className="flex-shrink-0 text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-200"
+            className="flex-shrink-0 text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-200 rounded focus-ring"
             title="清除策略筛选"
+            aria-label="清除选股策略筛选"
           >
             <X className="h-4 w-4" />
           </button>
@@ -967,7 +987,11 @@ function StocksPageContent() {
                           />
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <button className="h-4 w-4 flex items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" aria-label="全选选项">
+                              <button
+                                type="button"
+                                className="h-4 w-4 flex items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus-ring"
+                                aria-label="全选选项菜单"
+                              >
                                 <ChevronDown className="h-3 w-3" />
                               </button>
                             </DropdownMenuTrigger>
@@ -985,7 +1009,16 @@ function StocksPageContent() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">股票</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">最新价</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      <SortHeaderButton sortKey="pct_change" label="涨跌幅" sortKeys={sortKeys} onClick={handleSortClick} />
+                      <span className="inline-flex items-center gap-1">
+                        <SortHeaderButton sortKey="pct_change" label="涨跌幅" sortKeys={sortKeys} onClick={handleSortClick} />
+                        <span
+                          className="inline-flex text-gray-400 dark:text-gray-500 cursor-help"
+                          title="Shift+点击列头可追加次级排序"
+                          aria-hidden="true"
+                        >
+                          <ArrowUpDown className="h-3 w-3" />
+                        </span>
+                      </span>
                     </th>
                     {([['score_hot_money', '游资'], ['score_midline', '中线'], ['score_longterm', '价值'], ['cio_score', 'CIO评分'], ['cio_last_date', 'CIO日期']] as const).map(([key, label]) => (
                       <th key={key} className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">

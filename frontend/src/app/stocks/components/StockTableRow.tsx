@@ -128,7 +128,7 @@ export const StockTableRow = React.memo(function StockTableRow({
           <Checkbox
             checked={isSelected}
             onCheckedChange={() => onToggleSelect(tsCode)}
-            aria-label={`选择 ${stock.name}`}
+            aria-label={`选中 ${stock.name}（${stock.code}）`}
           />
         </td>
       )}
@@ -208,8 +208,10 @@ export const StockTableRow = React.memo(function StockTableRow({
           </span>
         ) : (
           <button
+            type="button"
             onClick={() => onOpenAnalysis(stock)}
-            className="text-xs px-2 py-1 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors whitespace-nowrap"
+            aria-label={`打开 ${stock.name} 的 AI 分析`}
+            className="text-xs px-2 py-1 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors whitespace-nowrap focus-ring"
           >
             AI 分析
           </button>

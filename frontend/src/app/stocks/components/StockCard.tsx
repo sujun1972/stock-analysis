@@ -78,7 +78,7 @@ export const StockCard = React.memo(function StockCard({
               <Checkbox
                 checked={isSelected}
                 onCheckedChange={() => onToggleSelect(tsCode)}
-                aria-label={`选择 ${stock.name}`}
+                aria-label={`选中 ${stock.name}（${stock.code}）`}
               />
             </div>
           )}
@@ -106,8 +106,9 @@ export const StockCard = React.memo(function StockCard({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                className="p-1.5 -mr-1 -mt-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400"
-                aria-label="股票操作菜单"
+                type="button"
+                className="p-1.5 -mr-1 -mt-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 focus-ring"
+                aria-label={`${stock.name} 操作菜单`}
               >
                 <MoreVertical className="h-4 w-4" />
               </button>
