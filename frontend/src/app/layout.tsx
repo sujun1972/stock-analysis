@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -12,6 +13,13 @@ import { BacktestTaskProvider } from "@/contexts/BacktestTaskContext";
 import { AIGenerationTaskProvider } from "@/contexts/AIGenerationTaskContext";
 import { AIGenerationTaskMonitor } from "@/components/AIGenerationTaskMonitor";
 
+// 拉丁字符走 Inter（next/font 自托管 + 子集化），中文落到系统字体栈（见 tailwind.config.ts fontFamily.sans）
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "A股AI量化交易系统",
   description: "Stock Analysis - AI量化交易分析平台",
@@ -23,8 +31,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
-      <body className="antialiased">
+    <html lang="zh-CN" suppressHydrationWarning className={inter.variable}>
+      <body className="font-sans antialiased">
         <ErrorBoundary>
           <QueryProvider>
             <BacktestTaskProvider>

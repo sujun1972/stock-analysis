@@ -21,7 +21,7 @@ function ScoreCell({ score }: { score?: number | null }) {
     score >= 8 ? 'text-red-600 dark:text-red-400'
     : score >= 6 ? 'text-yellow-600 dark:text-yellow-400'
     : 'text-gray-500 dark:text-gray-400'
-  return <span className={`text-sm font-semibold ${tone}`}>{score}</span>
+  return <span className={`text-sm font-semibold tabular-nums ${tone}`}>{score}</span>
 }
 
 function FollowupPriceCell({ triggers }: { triggers: CioFollowupTriggers | null }) {
@@ -36,12 +36,12 @@ function FollowupPriceCell({ triggers }: { triggers: CioFollowupTriggers | null 
   return (
     <div className="flex flex-col gap-0.5 min-w-[80px]">
       {breakUp && (
-        <span className="text-red-600 dark:text-red-400 whitespace-nowrap" title={breakUp.price_basis ?? ''}>
+        <span className="text-red-600 dark:text-red-400 whitespace-nowrap tabular-nums" title={breakUp.price_basis ?? ''}>
           ▲ {breakUp.price?.toFixed(2)}
         </span>
       )}
       {breakDown && (
-        <span className="text-green-600 dark:text-green-400 whitespace-nowrap" title={breakDown.price_basis ?? ''}>
+        <span className="text-green-600 dark:text-green-400 whitespace-nowrap tabular-nums" title={breakDown.price_basis ?? ''}>
           ▼ {breakDown.price?.toFixed(2)}
         </span>
       )}
@@ -61,7 +61,7 @@ function PercentCell({ value, decimals = 1 }: { value?: number | null; decimals?
     : pct >= 15 ? 'text-yellow-600 dark:text-yellow-400'
     : pct < 0 ? 'text-green-600 dark:text-green-400'
     : 'text-gray-700 dark:text-gray-300'
-  return <span className={`text-sm font-medium ${tone}`}>{pct.toFixed(decimals)}%</span>
+  return <span className={`text-sm font-medium tabular-nums ${tone}`}>{pct.toFixed(decimals)}%</span>
 }
 
 function IntrinsicCell({ iv, margin, gRate, gSource }: {
@@ -83,7 +83,7 @@ function IntrinsicCell({ iv, margin, gRate, gSource }: {
   const gLabel = gSource === 'analyst' ? '研报' : gSource === 'history' ? '历史' : ''
   const tip = `内在价值 ${iv.toFixed(2)} 元（g=${((gRate ?? 0) * 100).toFixed(1)}% · ${gLabel}）`
   return (
-    <span className={`text-sm font-medium ${tone}`} title={tip}>
+    <span className={`text-sm font-medium tabular-nums ${tone}`} title={tip}>
       {marginPct >= 0 ? '+' : ''}{marginPct.toFixed(0)}%
     </span>
   )
@@ -100,7 +100,7 @@ function FollowupTimeCell({ triggers }: { triggers: CioFollowupTriggers | null }
     return <span className="text-gray-300 dark:text-gray-600">—</span>
   }
   return (
-    <span className="text-gray-600 dark:text-gray-400 whitespace-nowrap" title={nearestTime.reason ?? ''}>
+    <span className="text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums" title={nearestTime.reason ?? ''}>
       ⏱ {String(nearestTime.expected_date)}
     </span>
   )
@@ -148,7 +148,7 @@ export const StockTableRow = React.memo(function StockTableRow({
           {stock.name}({stock.code})
         </a>
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium">
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium tabular-nums">
         {stock.latest_price ? (
           <span className={
             stock.pct_change != null
@@ -161,7 +161,7 @@ export const StockTableRow = React.memo(function StockTableRow({
           </span>
         ) : '-'}
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium">
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium tabular-nums">
         {stock.pct_change != null ? (
           <span className={stock.pct_change > 0 ? 'text-red-600 dark:text-red-400' : stock.pct_change < 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}>
             {stock.pct_change > 0 ? '+' : ''}{stock.pct_change.toFixed(2)}%
@@ -178,7 +178,7 @@ export const StockTableRow = React.memo(function StockTableRow({
           <ScoreCell score={analysis?.score} />
         </td>
       ))}
-      <td className="px-4 py-4 whitespace-nowrap text-right text-xs text-gray-600 dark:text-gray-400" onClick={(e) => e.stopPropagation()}>
+      <td className="px-4 py-4 whitespace-nowrap text-right text-xs text-gray-600 dark:text-gray-400 tabular-nums" onClick={(e) => e.stopPropagation()}>
         {stock.latest_analysis_cio?.created_at ? (
           stock.latest_analysis_cio.created_at.slice(0, 10)
         ) : (

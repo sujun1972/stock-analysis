@@ -27,6 +27,15 @@ import { apiClient } from '@/lib/api-client'
 
 ---
 
+## 字体与排版约定
+
+- **字体栈**：拉丁字符走 Inter（[layout.tsx](src/app/layout.tsx) 用 `next/font/google` 自托管 + 子集化），中文**故意不打包**字体，落到系统栈（macOS PingFang SC / Windows Microsoft YaHei / Linux Noto CJK SC）。Tailwind `font-sans` 已在 [tailwind.config.ts](tailwind.config.ts) 配置完整 fallback 链。
+- **不要为中文打包 Noto Sans SC / 思源黑体等 webfont**：CJK 子集化后仍 1-3MB，会显著拖慢首屏；浏览器内置中文字体已能满足绝大多数场景。
+- **OpenType 特性**：[globals.css](src/app/globals.css) 在 body 上启用 `cv11`（单层 a）+ `ss01`（曲线风格统一），勿随意改动。
+- **数字列必须加 `tabular-nums`**：股票列表、评分、价格、涨跌幅、ROC/EY、CIO 日期等所有数字单元格必须用 `tabular-nums` 等宽数字，否则静默刷新时数字宽度变化会导致表格列抖动。新增数字列时同步加。
+
+---
+
 ## 自选股功能（用户股票列表）
 
 已登录用户可在 `/stocks` 页面管理自选股列表。未登录用户不可见任何列表相关 UI。
