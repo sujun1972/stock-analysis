@@ -294,25 +294,21 @@ export default function EChartsStockChart({
 
   // 图表布局配置常量（像素）—— 业界标准比例 ~70/15/15
   const MAIN_CHART_HEIGHT = 480    // 主图（K线）高度
-  const VOLUME_PANEL_HEIGHT = 100  // 成交量副图高度
-  const SUB_PANEL_HEIGHT = 110     // 其他副图（MACD/KDJ/RSI）高度
-  const PANEL_GAP = 0              // 面板间隔
-  const LEGEND_HEIGHT = 20         // 单个图例高度
-  const LEGEND_PADDING = 10        // 图例上下padding
+  const VOLUME_PANEL_HEIGHT = 140  // 成交量副图高度（量价配合可读性，主图 ~29%）
+  const SUB_PANEL_HEIGHT = 130     // 其他副图（MACD/KDJ/RSI）高度
+  const PANEL_GAP = 8              // 副图间距——副图已隐顶/底刻度，留 8px 细缝区分面板即可
+  const PANEL_INNER_TOP = 6        // 面板内 graphic 图例距 grid 顶的内边距（避开第一条 K 线/Bar）
   const ZOOM_HEIGHT = 0            // DataZoom 滑块已移除，保留常量占位便于未来恢复
   const TOP_PADDING = 10           // 顶部padding
-  const BOTTOM_PADDING = 10        // 底部padding
+  const BOTTOM_PADDING = 28        // 底部 padding——给 X 轴日期标签预留空间，避免裁剪
 
   // 动态计算图表总高度（单位：像素）
-  const volumeHeight = visibleIndicators.volume
-    ? (LEGEND_PADDING + LEGEND_HEIGHT + LEGEND_PADDING + VOLUME_PANEL_HEIGHT + PANEL_GAP)
-    : 0
-  const indicatorPanelHeight = showIndicatorPanel
-    ? (LEGEND_PADDING + LEGEND_HEIGHT + LEGEND_PADDING + SUB_PANEL_HEIGHT + PANEL_GAP)
-    : 0
+  // 副图 legend 已内嵌为 graphic 浮层，不再独占图例行高度
+  const volumeHeight = visibleIndicators.volume ? (VOLUME_PANEL_HEIGHT + PANEL_GAP) : 0
+  const indicatorPanelHeight = showIndicatorPanel ? (SUB_PANEL_HEIGHT + PANEL_GAP) : 0
 
-  const chartHeight = TOP_PADDING + 30 + MAIN_CHART_HEIGHT +
-                     (subPanelCount > 0 ? PANEL_GAP + LEGEND_PADDING : 0) +
+  // 主图也已用 graphic 浮层取代 legend，TOP_PADDING 后直接接主图，无需 30px 图例占位
+  const chartHeight = TOP_PADDING + MAIN_CHART_HEIGHT +
                      volumeHeight +
                      indicatorPanelHeight +
                      ZOOM_HEIGHT + BOTTOM_PADDING
@@ -574,68 +570,10 @@ export default function EChartsStockChart({
     else if (showKDJPanel) enabledIndicators.push('kdj')
     else if (showRSIPanel) enabledIndicators.push('rsi')
 
-    // 动态构建图例（使用像素定位）
-    // BOLL 三轨在 series 里仍独立（用不同颜色），图例只列 'BOLL上轨' 代表三者
-    // 中轨/下轨从图例 data 里删掉，但 series 仍渲染（图例 data 不影响 series 显示）
-    const mainLegendData = (() => {
-      const base = ['K线', 'MA5', 'MA20', 'MA60']
-      if (visibleIndicators.boll && hasBOLL) base.push('BOLL上轨')
-      if (hasEquityData) base.push('权益曲线')
-      return base
-    })()
-
-    const legends: any[] = [
-      {
-        data: mainLegendData,
-        top: TOP_PADDING,
-        left: 'center',
-        icon: 'roundRect',
-        itemWidth: 12,
-        itemHeight: 4,
-        itemGap: 12,
-        textStyle: { fontWeight: 'bold', fontSize: 12 },
-        // 显示更短的图例文字（'BOLL上轨' → 'BOLL'）
-        formatter: (name: string) => name === 'BOLL上轨' ? 'BOLL' : name,
-      }
-    ]
-
-    // 构建副图图例，计算每个图例的垂直位置
-    let currentTop = TOP_PADDING + 30 + MAIN_CHART_HEIGHT + PANEL_GAP + LEGEND_PADDING
-
-    // 成交量图例
-    if (visibleIndicators.volume) {
-      legends.push({
-        data: ['成交量'],
-        top: currentTop,
-        left: 'center',
-        textStyle: { fontWeight: 'bold' }
-      })
-      currentTop += VOLUME_PANEL_HEIGHT + PANEL_GAP + LEGEND_HEIGHT + LEGEND_PADDING * 2
-    }
-
-    // 技术指标副图图例（单选）
-    if (showMACDPanel) {
-      legends.push({
-        data: ['DIF', 'DEA', 'MACD'],
-        top: currentTop,
-        left: 'center',
-        textStyle: { fontWeight: 'bold' }
-      })
-    } else if (showKDJPanel) {
-      legends.push({
-        data: ['K', 'D', 'J'],
-        top: currentTop,
-        left: 'center',
-        textStyle: { fontWeight: 'bold' }
-      })
-    } else if (showRSIPanel) {
-      legends.push({
-        data: ['RSI'],
-        top: currentTop,
-        left: 'center',
-        textStyle: { fontWeight: 'bold' }
-      })
-    }
+    // 主图与副图均改为 graphic 浮层显示图例（含当前 hover 位的实时数值），
+    // ECharts 内置 legend 全部移除——节省垂直空间，且数值随十字线移动实时更新。
+    // BOLL 等开关由"指标设置"弹窗控制，不再依赖 legend 点击。
+    const legends: any[] = []
 
     // 是否启用右侧筹码分布面板（A 股看盘软件惯例：K 线主图右侧嵌入横向筹码条）
     // 闸门：① 用户在指标设置中开启 chips ② 有 chipsHistory 或 chipsData 数据
@@ -645,27 +583,30 @@ export default function EChartsStockChart({
     const MAIN_RIGHT = hasChips ? '26%' : '8%'
 
     // 构建图表网格，定义每个面板的绘图区域
+    // 主图直接接 TOP_PADDING（legend 已移除），副图之间用 PANEL_GAP 留缝
+    const MAIN_TOP = TOP_PADDING
+    const VOLUME_TOP = MAIN_TOP + MAIN_CHART_HEIGHT + PANEL_GAP
     const grids = [
       {
         left: '8%',
         right: MAIN_RIGHT,
-        top: TOP_PADDING + 30,  // 30为主图图例高度
+        top: MAIN_TOP,
         height: MAIN_CHART_HEIGHT
       }
     ]
 
     // 计算副图网格的垂直位置
-    let gridTop = TOP_PADDING + 30 + MAIN_CHART_HEIGHT + PANEL_GAP + LEGEND_PADDING
+    let gridTop = VOLUME_TOP
 
     // 成交量网格（right 与主图保持一致，确保跨面板垂直十字线 x 坐标对齐）
     if (visibleIndicators.volume) {
       grids.push({
         left: '8%',
         right: MAIN_RIGHT,
-        top: gridTop + LEGEND_HEIGHT + LEGEND_PADDING,
+        top: gridTop,
         height: VOLUME_PANEL_HEIGHT
       })
-      gridTop += VOLUME_PANEL_HEIGHT + PANEL_GAP + LEGEND_HEIGHT + LEGEND_PADDING * 2
+      gridTop += VOLUME_PANEL_HEIGHT + PANEL_GAP
     }
 
     // 技术指标副图网格（单选：MACD / KDJ / RSI 三选一共享同一个 grid）
@@ -673,7 +614,7 @@ export default function EChartsStockChart({
       grids.push({
         left: '8%',
         right: MAIN_RIGHT,
-        top: gridTop + LEGEND_HEIGHT + LEGEND_PADDING,
+        top: gridTop,
         height: SUB_PANEL_HEIGHT
       })
     }
@@ -744,8 +685,25 @@ export default function EChartsStockChart({
       if (lows.length === 0 || highs.length === 0) return null
       const klineLow = Math.min(...lows)
       const klineHigh = Math.max(...highs)
-      // 上下各留 3% 边距，避免顶/底紧贴边
-      return { loBound: klineLow * 0.97, hiBound: klineHigh * 1.03 }
+      // 上下各留 3% 边距避免紧贴边；再按价格量级把边界 floor/ceil 到 nice step（整数 / 0.5 / 0.1 ...）
+      // 让 51.0899 这种长尾浮点对齐成 51 — 否则 y 轴会出现 51.0899 / 53.6451 这种零碎刻度
+      const rawLo = klineLow * 0.97
+      const rawHi = klineHigh * 1.03
+      const range = rawHi - rawLo
+      const niceStep = (() => {
+        if (range >= 200) return 5
+        if (range >= 100) return 2
+        if (range >= 50) return 1
+        if (range >= 20) return 0.5
+        if (range >= 10) return 1
+        if (range >= 5) return 0.5
+        if (range >= 2) return 0.1
+        if (range >= 1) return 0.05
+        return 0.01
+      })()
+      const loBound = Math.floor(rawLo / niceStep) * niceStep
+      const hiBound = Math.ceil(rawHi / niceStep) * niceStep
+      return { loBound, hiBound }
     }
 
     // 主图 y 轴显式 min/max（让 ECharts 不再自行 scale 留白）
@@ -797,10 +755,258 @@ export default function EChartsStockChart({
 
     const { visible: sortedChips } = computeVisibleChips(initialChipSelection.chips, latestClose)
 
+    // 面板内嵌图例浮层（替代 ECharts 内置 legend）
+    // 业界惯例（同花顺/东财/富途）：每个面板左上角驻留"指标名 + 当前 hover 位实时数值"，鼠标移动时跟随
+    // axisPointer 刷新；离开图表回落到最新一根。每个面板一个 group graphic 元素，id 形如 `legend-${panel}`
+    // 便于后续 setOption 用 `replaceMerge: ['graphic']` 增量替换。
+    const isPaletteLight = theme !== 'dark'
+    const labelColor = isPaletteLight ? '#374151' : '#e5e7eb'
+    const dimColor   = isPaletteLight ? '#6b7280' : '#9ca3af'
+    // K 线红涨/绿跌（A 股业务约定，参考 frontend CLAUDE.md 语义色规范）：深色下提亮保证 WCAG AA 对比度
+    const pick = (light: string, dark: string) => isPaletteLight ? light : dark
+    const colorRed     = pick('#ef4444', '#f87171')
+    const colorGreen   = pick('#22c55e', '#4ade80')
+    const colorBlue    = pick('#3b82f6', '#60a5fa')
+    const colorPurple  = pick('#8b5cf6', '#a78bfa')
+    const colorAmber   = pick('#f59e0b', '#fbbf24')
+    const colorMa5     = pick('#d97706', '#fbbf24')
+    const colorMa20    = pick('#059669', '#34d399')
+    const colorMa60    = pick('#7c3aed', '#a78bfa')
+    const colorBollUp  = pick('#db2777', '#f472b6')
+    const colorBollMid = pick('#0891b2', '#22d3ee')
+
+    const fmtNum = (v: any, digits = 2): string => {
+      if (v == null || v === '-' || (typeof v === 'number' && isNaN(v))) return '--'
+      const n = typeof v === 'number' ? v : parseFloat(v)
+      return isNaN(n) ? '--' : n.toFixed(digits)
+    }
+
+    // 主图浮层：第 1 行 日期+OHLC+涨跌幅，第 2 行 MA5/MA20/MA60+BOLL（按可见性条件渲染）
+    const buildMainLegendText = (idx: number): string => {
+      if (idx < 0 || idx >= sortedData.length) return ''
+      const d = sortedData[idx]
+      const prev = idx > 0 ? sortedData[idx - 1] : null
+      const isUp = d.close >= d.open
+      const priceTag = isUp ? 'red' : 'green'
+      let pctStr = '--'
+      let pctTag = 'neutral'
+      if (prev && prev.close > 0) {
+        const pct = ((d.close - prev.close) / prev.close) * 100
+        pctStr = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%'
+        pctTag = pct >= 0 ? 'red' : 'green'
+      }
+      // 第 1 行：日期 + OHLC + 涨跌幅
+      const line1: string[] = []
+      line1.push(`{title|${formatDateWithWeekday(dates[idx])}}`)
+      line1.push(`{label|开}{${priceTag}|${fmtNum(d.open)}}`)
+      line1.push(`{label|高}{${priceTag}|${fmtNum(d.high)}}`)
+      line1.push(`{label|低}{${priceTag}|${fmtNum(d.low)}}`)
+      line1.push(`{label|收}{${priceTag}|${fmtNum(d.close)}}`)
+      line1.push(`{${pctTag}|${pctStr}}`)
+      // 第 2 行：MA + BOLL
+      const line2: string[] = []
+      if (d.MA5 != null) line2.push(`{label|MA5}{maShort|${fmtNum(d.MA5)}}`)
+      if (d.MA20 != null) line2.push(`{label|MA20}{maMid|${fmtNum(d.MA20)}}`)
+      if (d.MA60 != null) line2.push(`{label|MA60}{maLong|${fmtNum(d.MA60)}}`)
+      if (visibleIndicators.boll && hasBOLL && d.BOLL_UPPER != null) {
+        line2.push(`{label|BOLL上}{bollUp|${fmtNum(d.BOLL_UPPER)}}`)
+        line2.push(`{label|中}{bollMid|${fmtNum(d.BOLL_MIDDLE)}}`)
+        line2.push(`{label|下}{bollLow|${fmtNum(d.BOLL_LOWER)}}`)
+      }
+      const lines = [line1.join('')]
+      if (line2.length > 0) lines.push(line2.join(''))
+      return lines.join('\n')
+    }
+
+    const buildVolumeLegendText = (idx: number): string => {
+      if (idx < 0 || idx >= sortedData.length) return ''
+      const d = sortedData[idx]
+      const tag = d.close >= d.open ? 'red' : 'green'
+      return `{title|成交量}{${tag}|${formatVolume(d.volume)}}`
+    }
+
+    const buildMacdLegendText = (idx: number): string => {
+      if (idx < 0 || idx >= sortedData.length) return ''
+      const d = sortedData[idx]
+      const histTag = (d.MACD_HIST ?? 0) >= 0 ? 'red' : 'green'
+      return [
+        '{title|MACD(12,26,9)}',
+        `{label|DIF}{red|${fmtNum(d.MACD)}}`,
+        `{label|DEA}{blue|${fmtNum(d.MACD_SIGNAL)}}`,
+        `{label|MACD}{${histTag}|${fmtNum(d.MACD_HIST)}}`,
+      ].join('')
+    }
+
+    const buildKdjLegendText = (idx: number): string => {
+      if (idx < 0 || idx >= sortedData.length) return ''
+      const d = sortedData[idx]
+      return [
+        '{title|KDJ(9,3,3)}',
+        `{label|K}{blue|${fmtNum(d.KDJ_K)}}`,
+        `{label|D}{amber|${fmtNum(d.KDJ_D)}}`,
+        `{label|J}{purple|${fmtNum(d.KDJ_J)}}`,
+      ].join('')
+    }
+
+    const buildRsiLegendText = (idx: number): string => {
+      if (idx < 0 || idx >= sortedData.length) return ''
+      const d = sortedData[idx]
+      return [
+        '{title|RSI}',
+        `{label|RSI6}{purple|${fmtNum(d.RSI6)}}`,
+        `{label|RSI12}{amber|${fmtNum(d.RSI12)}}`,
+        `{label|RSI24}{blue|${fmtNum(d.RSI24)}}`,
+      ].join('')
+    }
+
+    // 用 rect+多段 text 在面板左上角叠出"浅色半透明面板 + 着色文字"，避免文字被 K 线/bar 遮挡。
+    // 不用 ECharts 富文本 rich——某些版本下渲染不可靠（段间距/字色丢失），改用每段一个独立 text 元素累加排版。
+    const overlayBg = isPaletteLight ? 'rgba(255,255,255,0.85)' : 'rgba(17,24,39,0.85)'
+    const overlayBorder = isPaletteLight ? 'rgba(229,231,235,0.6)' : 'rgba(75,85,99,0.4)'
+
+    type Seg = { text: string; color: string; fontWeight?: number; fontSize: number }
+    const segStyles: Record<string, Omit<Seg, 'text'>> = {
+      label:   { color: dimColor,   fontSize: 11 },
+      neutral: { color: labelColor, fontSize: 11, fontWeight: 600 },
+      title:   { color: labelColor, fontSize: 11, fontWeight: 700 },
+      maShort: { color: colorMa5,    fontSize: 11, fontWeight: 600 },
+      maMid:   { color: colorMa20,   fontSize: 11, fontWeight: 600 },
+      maLong:  { color: colorMa60,   fontSize: 11, fontWeight: 600 },
+      bollUp:  { color: colorBollUp, fontSize: 11, fontWeight: 600 },
+      bollMid: { color: colorBollMid,fontSize: 11, fontWeight: 600 },
+      bollLow: { color: colorBollUp, fontSize: 11, fontWeight: 600 },
+      red:     { color: colorRed,    fontSize: 11, fontWeight: 600 },
+      green:   { color: colorGreen,  fontSize: 11, fontWeight: 600 },
+      blue:    { color: colorBlue,   fontSize: 11, fontWeight: 600 },
+      purple:  { color: colorPurple, fontSize: 11, fontWeight: 600 },
+      amber:   { color: colorAmber,  fontSize: 11, fontWeight: 600 },
+    }
+    // 解析 '{tag|text}文本{tag|text}\n第二行' → Seg[][]（外层数组每项是一行）
+    const TAG_RE = /\{([a-zA-Z][a-zA-Z]*)\|([^}]*)\}/g
+    const parseRichText = (raw: string): Seg[][] => {
+      const lines = raw.split('\n')
+      return lines.map(line => {
+        const segs: Seg[] = []
+        let lastIdx = 0
+        let m: RegExpExecArray | null
+        TAG_RE.lastIndex = 0
+        while ((m = TAG_RE.exec(line)) !== null) {
+          if (m.index > lastIdx) {
+            // 标签外的纯文本走默认 label 样式
+            segs.push({ text: line.slice(lastIdx, m.index), ...segStyles.label })
+          }
+          const tag = m[1]
+          const text = m[2]
+          const style = segStyles[tag] ?? segStyles.label
+          segs.push({ text, ...style })
+          lastIdx = m.index + m[0].length
+        }
+        if (lastIdx < line.length) {
+          segs.push({ text: line.slice(lastIdx), ...segStyles.label })
+        }
+        return segs
+      })
+    }
+
+    // 段宽度近似估算（避免引入 canvas measureText 复杂度）：CJK 字符 1em，ASCII 0.55em
+    // 11px 字体下：CJK ≈ 11px, ASCII ≈ 6.5px；segPadRight 8px 间距
+    const SEG_PAD_RIGHT = 8
+    const LINE_HEIGHT = 16
+    const measureSeg = (s: Seg): number => {
+      let w = 0
+      for (const ch of s.text) {
+        // 简单分类：ASCII 半宽，其他全宽
+        w += ch.charCodeAt(0) < 128 ? s.fontSize * 0.6 : s.fontSize * 1.0
+      }
+      return w
+    }
+
+    const buildLegendGraphics = (idx: number): any[] => {
+      const elements: any[] = []
+      const buildPanel = (panelId: string, topPx: number, raw: string) => {
+        const lines = parseRichText(raw)
+        // 计算面板背景宽高（取最长一行 + padding）
+        const lineWidths = lines.map(line => line.reduce((acc, s) => acc + measureSeg(s) + SEG_PAD_RIGHT, 0))
+        const maxLineW = Math.max(0, ...lineWidths) - SEG_PAD_RIGHT  // 末段不加间距
+        const totalH = lines.length * LINE_HEIGHT
+        const padH = 4
+        const padV = 4
+
+        // 背景 group：rect 浅色面板
+        const groupChildren: any[] = [
+          {
+            type: 'rect',
+            left: 0,
+            top: 0,
+            shape: { width: maxLineW + padH * 2, height: totalH + padV * 2, r: 4 },
+            style: {
+              fill: overlayBg,
+              stroke: overlayBorder,
+              lineWidth: 1,
+            },
+            silent: true,
+          }
+        ]
+        // 文字 segs：按行累加 x
+        lines.forEach((segs, lineIdx) => {
+          let x = padH
+          const y = padV + lineIdx * LINE_HEIGHT
+          for (const s of segs) {
+            if (s.text.length > 0) {
+              groupChildren.push({
+                type: 'text',
+                left: x,
+                top: y,
+                style: {
+                  text: s.text,
+                  fill: s.color,
+                  fontSize: s.fontSize,
+                  fontWeight: s.fontWeight ?? 400,
+                  textAlign: 'left',
+                  textVerticalAlign: 'top',
+                },
+                silent: true,
+              })
+            }
+            x += measureSeg(s) + SEG_PAD_RIGHT
+          }
+        })
+
+        elements.push({
+          id: panelId,
+          type: 'group',
+          left: '9%',
+          top: topPx,
+          z: 100,
+          silent: true,
+          children: groupChildren,
+        })
+      }
+
+      buildPanel('legend-main', MAIN_TOP + PANEL_INNER_TOP, buildMainLegendText(idx))
+      let panelTop = VOLUME_TOP
+      if (visibleIndicators.volume) {
+        buildPanel('legend-volume', panelTop + PANEL_INNER_TOP, buildVolumeLegendText(idx))
+        panelTop += VOLUME_PANEL_HEIGHT + PANEL_GAP
+      }
+      if (showIndicatorPanel) {
+        const text = showMACDPanel ? buildMacdLegendText(idx)
+                   : showKDJPanel ? buildKdjLegendText(idx)
+                   : showRSIPanel ? buildRsiLegendText(idx)
+                   : ''
+        if (text) buildPanel('legend-indicator', panelTop + PANEL_INNER_TOP, text)
+      }
+      return elements
+    }
+
+    const initialLegendIdx = sortedData.length - 1
+    const initialGraphics = buildLegendGraphics(initialLegendIdx)
+
     const option: echarts.EChartsOption = {
       animation: false,
       backgroundColor: palette.background,
       legend: legends,
+      graphic: { elements: initialGraphics } as any,
       grid: grids,
       // 顶层 axisPointer：启用跨 grid 联动，让垂直十字线穿透所有副图（K线→成交量→MACD→KDJ→RSI）
       // 只联动常规面板的 xAxis（索引 0..normalGridCount-1），筹码图 xAxis 独立
@@ -821,6 +1027,8 @@ export default function EChartsStockChart({
           splitLine: { show: false },
           axisLabel: {
             show: index === normalGridCount - 1,  // 只在最后一个常规面板显示x轴标签
+            margin: 10,                            // 与轴线留 10px 间距，避免标签与轴重叠
+            hideOverlap: true,                     // 标签密集时自动隐藏溢出的，保留可读性
             formatter: removeDateTimePart
           },
           axisTick: { show: index === normalGridCount - 1 },
@@ -834,10 +1042,8 @@ export default function EChartsStockChart({
               width: 1,
               type: 'dashed' as const
             },
-            label: {
-              show: index === normalGridCount - 1,
-              formatter: (params: any) => removeDateTimePart(params.value || '')
-            }
+            // 底部日期 pill 隐藏——日期已在主图 graphic 浮层显示，避免重复
+            label: { show: false }
           }
         })),
         // 筹码图专用 xAxis：占比百分比（value 类型，与日期轴完全独立）
@@ -860,20 +1066,32 @@ export default function EChartsStockChart({
         ...Array.from({ length: normalGridCount }, (_, index) => {
           const isMainPanel = index === 0
           const isRSIPanel = index > 0 && enabledIndicators[index - 1] === 'rsi'
+          const isKDJPanel = index > 0 && enabledIndicators[index - 1] === 'kdj'
           const isVolumePanel = index > 0 && enabledIndicators[index - 1] === 'volume'
+
+          // KDJ/RSI 固定刻度范围（A 股惯例：0-100 标尺易读；J 值偶尔溢出由参考线 + graphic 浮层数值显示）
+          const fixedMin = isMainPanel && mainYAxisMin != null
+            ? mainYAxisMin
+            : isRSIPanel ? 0
+            : isKDJPanel ? 0
+            : null
+          const fixedMax = isMainPanel && mainYAxisMax != null
+            ? mainYAxisMax
+            : isRSIPanel ? 100
+            : isKDJPanel ? 100
+            : null
 
           const yAxisConfig: any = {
             scale: true,
             gridIndex: index,
             // 主图（K线）：永远用 dataZoom 视图内的 [low*0.97, high*1.03] 锁定 y 轴
             // —— 不依赖 ECharts 的 scale 自动算法，避免视图内空白且与筹码图严格垂直对齐
-            // RSI 固定 0-100；其他面板显式 null 重置（防止 RSI/KDJ 切换时 min/max 残留）
-            min: isMainPanel && mainYAxisMin != null
-              ? mainYAxisMin
-              : isRSIPanel ? 0 : null,
-            max: isMainPanel && mainYAxisMax != null
-              ? mainYAxisMax
-              : isRSIPanel ? 100 : null,
+            // KDJ/RSI 固定 0-100；其他面板显式 null 重置（防止 RSI/KDJ 切换时 min/max 残留）
+            min: fixedMin,
+            max: fixedMax,
+            // KDJ/RSI 固定 0-100 刻度：interval 强制 25（显示 0/25/50/75/100），splitNumber 是建议值
+            // 用 interval 才能强制；splitNumber 会被 ECharts nice scale 重写
+            ...(isKDJPanel || isRSIPanel ? { interval: 25 } : {}),
             // 主图用淡 splitLine（不要满屏条纹）；副图保留 splitArea 增强参考
             splitArea: { show: !isMainPanel },
             splitLine: isMainPanel ? { show: true, lineStyle: { color: palette.divider, opacity: 0.3 } } : { show: false },
@@ -891,13 +1109,36 @@ export default function EChartsStockChart({
             }
           }
 
+          // 副图（成交量 / MACD / KDJ / RSI）默认隐藏顶/底边界刻度，避免与相邻面板的边界刻度重叠
+          // （成交量底部 500.00万 与 KDJ 顶部 100.00 / 主图底部 50.00 与成交量顶部 4000万 重叠）
+          const subPanelLabelExtras = !isMainPanel ? { showMinLabel: false, showMaxLabel: false } : {}
+
           // 成交量Y轴：添加万/亿单位格式化
           if (isVolumePanel) {
             yAxisConfig.axisLabel = {
+              ...subPanelLabelExtras,
               formatter: (value: number) => formatVolume(value)
             }
             yAxisConfig.axisPointer.label = {
               formatter: (params: any) => formatVolume(params.value)
+            }
+          } else if (isMainPanel) {
+            // 主图（K 线）：刻度统一 2 位小数（A 股价格惯例），避免 51.0899 这种长尾浮点
+            // 保留 min/max 边界标签，让用户看到完整价格区间；防重叠靠加大 PANEL_GAP + 副图隐顶底
+            yAxisConfig.axisLabel = {
+              formatter: (value: number) => Number(value).toFixed(2)
+            }
+            yAxisConfig.axisPointer.label = {
+              formatter: (params: any) => Number(params.value).toFixed(2)
+            }
+          } else {
+            // 其他副图（MACD/KDJ/RSI）：刻度保留 2 位小数，避免 ECharts 默认的浮点尾数
+            yAxisConfig.axisLabel = {
+              ...subPanelLabelExtras,
+              formatter: (value: number) => Number(value).toFixed(2)
+            }
+            yAxisConfig.axisPointer.label = {
+              formatter: (params: any) => Number(params.value).toFixed(2)
             }
           }
 
@@ -906,24 +1147,54 @@ export default function EChartsStockChart({
         // 筹码图 yAxis：category 类型（每个价位一条 bar），价格由低到高排列。
         // 仅保留落在 K 线价格范围内的档位（见 sortedChips 过滤），
         // 并显示价格刻度（稀疏），让用户能将筹码价位与 K 线价位对齐阅读。
-        ...(hasChips ? [{
-          type: 'category' as const,
-          gridIndex: chipsGridIndex,
-          data: sortedChips.map(d => d.price.toFixed(2)),
-          position: 'right' as const,
-          // 稀疏显示价格刻度：档位数 / 6 步长
-          axisLabel: {
-            show: true,
-            fontSize: 9,
-            color: '#9ca3af',
-            interval: Math.max(1, Math.floor(sortedChips.length / 6))
-          },
-          axisLine: { show: false },
-          axisTick: { show: false },
-          splitLine: { show: false },
-          axisPointer: { show: false },
-          inverse: false
-        }] : [])
+        ...(hasChips ? [(() => {
+          // 在所有骨架档中预选目标显示价（每个 step 整数倍取最近的一档），其他档全部隐藏
+          // 这样标签数始终 ≤ 8 个，互相不重叠，且对齐到主图相同的整数刻度
+          const range = (klineBounds?.hiBound ?? 100) - (klineBounds?.loBound ?? 0)
+          const step = range >= 100 ? 10 : range >= 50 ? 5 : range >= 20 ? 5 : range >= 10 ? 2 : range >= 5 ? 1 : 0.5
+          const targetIndices = new Set<number>()
+          if (sortedChips.length > 0) {
+            const lo = sortedChips[0].price
+            const hi = sortedChips[sortedChips.length - 1].price
+            const startTick = Math.ceil(lo / step) * step
+            for (let v = startTick; v <= hi + 1e-9; v += step) {
+              // 找到最接近 v 的骨架档索引
+              let bestIdx = 0
+              let bestDiff = Infinity
+              for (let i = 0; i < sortedChips.length; i++) {
+                const diff = Math.abs(sortedChips[i].price - v)
+                if (diff < bestDiff) { bestDiff = diff; bestIdx = i }
+              }
+              targetIndices.add(bestIdx)
+            }
+          }
+          const labelInterval = (idx: number, _value: string): boolean => targetIndices.has(idx)
+          // 标签格式化：显示整数（避免 76.40 → "76"）
+          const labelFormatter = (value: string) => {
+            const n = Number(value)
+            if (!isFinite(n)) return value
+            return step >= 1 ? String(Math.round(n)) : n.toFixed(2)
+          }
+          return {
+            type: 'category' as const,
+            gridIndex: chipsGridIndex,
+            data: sortedChips.map(d => d.price.toFixed(2)),
+            position: 'right' as const,
+            axisLabel: {
+              show: true,
+              fontSize: 10,
+              color: '#9ca3af',
+              margin: 4,
+              interval: labelInterval,
+              formatter: labelFormatter
+            },
+            axisLine: { show: false },
+            axisTick: { show: false },
+            splitLine: { show: false },
+            axisPointer: { show: false },
+            inverse: false
+          }
+        })()] : [])
       ],
       // 仅保留 inside 缩放（鼠标滚轮/双指捏合/拖拽），移除底部 slider 滑块
       // 与同花顺/东财/富途等主流 A 股软件保持一致——缩放交互走手势而非滑块
@@ -936,130 +1207,89 @@ export default function EChartsStockChart({
           end: currentDataZoomRef.current?.end ?? 100
         }
       ],
+      // tooltip 弹层默认关闭——OHLC / MA / BOLL / 成交量 / 副图当前值已由顶部 graphic 浮层驻留显示，
+      // 再弹一个浮窗会遮挡视图且与浮层重复（业界标准 同花顺/东财 的做法）。
+      // 仅在回测模式（hasEquityData）保留 tooltip，专门显示权益曲线数据。
+      // 注意：必须保留 trigger:'axis' 才能驱动 updateAxisPointer 事件，否则浮层无法跟随 hover 刷新。
       tooltip: {
         trigger: 'axis',
+        show: hasEquityData,  // 非回测模式不显示 tooltip 弹层（但 axisPointer 仍触发联动）
         axisPointer: {
           type: 'cross',
-          // 只联动常规面板的 xAxis，筹码图 xAxis 不参与 tooltip 联动
           link: [{ xAxisIndex: Array.from({ length: normalGridCount }, (_, i) => i) }],
           crossStyle: {
             color: palette.axisPointerLine,
             width: 1,
             type: 'dashed'
-          }
+          },
+          // 隐藏 axisPointer 弹出的"X 轴日期 pill"——浮层日期已显示
+          label: { show: false }
         },
-        // 智能定位：默认放鼠标右侧 +20px；若会越过主图右边界（覆盖筹码图）则反弹到鼠标左侧
-        // mainRightPct 与 grid.right 同步：有筹码时 26%，无筹码时 8%
-        position: (point: number[], _params: any, _dom: any, _rect: any, size: any) => {
-          const [mouseX, mouseY] = point
-          const viewW = size.viewSize[0]
-          const tipW = size.contentSize[0]
-          const tipH = size.contentSize[1]
-          const mainRightPct = hasChips ? 0.26 : 0.08
-          const mainRightBound = viewW * (1 - mainRightPct)
-          let x = mouseX + 20
-          if (x + tipW > mainRightBound) {
-            x = mouseX - tipW - 20
-          }
-          if (x < 8) x = 8
-          const y = mouseY < tipH + 20 ? mouseY + 20 : 10
-          return [x, y]
-        },
-        backgroundColor: palette.tooltipBg,
-        borderWidth: 1,
-        borderColor: palette.tooltipBorder,
-        padding: 10,
-        textStyle: {
-          color: palette.tooltipText
-        },
-        formatter: (params: any) => {
-          if (!Array.isArray(params)) return ''
-
-          // 主组（开/收/低/高 + 涨跌幅）：突出显示
-          const createPriceRow = (label: string, value: string, color: string) =>
-            `<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">
-              <span style="color:#9ca3af;">${label}</span>
-              <span style="margin-left:24px;color:${color};font-weight:600;">${value}</span>
+        ...(hasEquityData ? {
+          position: (point: number[], _params: any, _dom: any, _rect: any, size: any) => {
+            const [mouseX, mouseY] = point
+            const viewW = size.viewSize[0]
+            const tipW = size.contentSize[0]
+            const tipH = size.contentSize[1]
+            const mainRightPct = hasChips ? 0.26 : 0.08
+            const mainRightBound = viewW * (1 - mainRightPct)
+            let x = mouseX + 20
+            if (x + tipW > mainRightBound) x = mouseX - tipW - 20
+            if (x < 8) x = 8
+            const y = mouseY < tipH + 20 ? mouseY + 20 : 10
+            return [x, y]
+          },
+          backgroundColor: palette.tooltipBg,
+          borderWidth: 1,
+          borderColor: palette.tooltipBorder,
+          padding: 10,
+          textStyle: { color: palette.tooltipText },
+          // 回测模式：仅显示权益曲线段（OHLC 由浮层负责）
+          formatter: (params: any) => {
+            if (!Array.isArray(params)) return ''
+            const equityParam = params.find((p: any) => p.seriesName === '权益曲线')
+            if (!equityParam) return ''
+            const equity = equityDataForTooltip[equityParam.dataIndex]
+            if (!equity) return ''
+            return `<div style="font-size:11px;">
+              <div style="font-weight:600;color:#ec4899;margin-bottom:3px;">权益曲线</div>
+              <div style="color:#9ca3af;">总资产 <span style="color:${palette.tooltipText};">¥${equity.total.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+              <div style="color:#9ca3af;">持仓 <span style="color:${palette.tooltipText};">¥${(equity.holdings || 0).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+              <div style="color:#9ca3af;">现金 <span style="color:${palette.tooltipText};">¥${(equity.cash || 0).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
             </div>`
-          // 副组（MA/BOLL/RSI 等指标）：小一号字 + 灰色标签
-          const createIndicatorRow = (label: string, value: string, color: string) =>
-            `<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;">
-              <span style="color:#9ca3af;">${label}</span>
-              <span style="margin-left:24px;color:${color};">${value}</span>
-            </div>`
-
-          const divider = `<div style="height:1px;background:${palette.divider};margin:6px 0;opacity:0.5;"></div>`
-
-          // 标题：日期+星期
-          let result = `<div style="font-weight:600;font-size:12px;margin-bottom:6px;">${formatDateWithWeekday(params[0].axisValue)}</div>`
-          let priceContent = ''
-          let indicatorContent = ''
-
-          // 提取K线数据 + 计算涨跌幅（与前一日收盘价比较）
-          let klineData: any = null
-          let klineDataIndex = -1
-          params.forEach((param: any) => {
-            if (param.seriesName === 'K线' && Array.isArray(param.value)) {
-              klineData = param.value
-              klineDataIndex = param.dataIndex
-            }
-          })
-          const isRising = klineData && klineData[2] >= klineData[1]
-          const priceColor = isRising ? '#ef4444' : '#22c55e'
-
-          // 涨跌幅 = (收 - 前收) / 前收 × 100%；前一日收盘从 sortedData 取
-          let pctChangeStr = '-'
-          let pctColor = palette.tooltipText
-          if (klineData && klineDataIndex > 0) {
-            const prevBar = sortedData[klineDataIndex - 1]
-            if (prevBar && prevBar.close > 0) {
-              const pct = ((Number(klineData[2]) - prevBar.close) / prevBar.close) * 100
-              pctChangeStr = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%'
-              pctColor = pct >= 0 ? '#ef4444' : '#22c55e'
-            }
           }
-
-          params.forEach((param: any) => {
-            const { seriesName, value, color } = param
-            const dataIndex = param.dataIndex
-
-            if (seriesName === '成交量') {
-              const volumeValue = Array.isArray(value) ? value[1] : value
-              indicatorContent += createIndicatorRow('成交量', formatVolume(volumeValue), color)
-            } else if (seriesName === '权益曲线' && equityDataForTooltip[dataIndex]) {
-              const equity = equityDataForTooltip[dataIndex]!
-              indicatorContent += `<div style="margin-top:6px;padding-top:6px;border-top:1px solid ${palette.divider};font-size:11px;">
-                <div style="font-weight:600;color:#ec4899;margin-bottom:3px;">权益曲线</div>
-                <div style="color:#9ca3af;">总资产 <span style="color:${palette.tooltipText};">¥${equity.total.toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
-                <div style="color:#9ca3af;">持仓 <span style="color:${palette.tooltipText};">¥${(equity.holdings || 0).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
-                <div style="color:#9ca3af;">现金 <span style="color:${palette.tooltipText};">¥${(equity.cash || 0).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
-              </div>`
-            } else if (seriesName === 'K线' && Array.isArray(value)) {
-              priceContent += createPriceRow('开', Number(value[1]).toFixed(2), priceColor)
-              priceContent += createPriceRow('收', Number(value[2]).toFixed(2), priceColor)
-              priceContent += createPriceRow('低', Number(value[3]).toFixed(2), priceColor)
-              priceContent += createPriceRow('高', Number(value[4]).toFixed(2), priceColor)
-              priceContent += createPriceRow('涨跌幅', pctChangeStr, pctColor)
-            } else if (seriesName !== '权益曲线') {
-              const displayValue = Array.isArray(value) ? value[1] : value
-              if (displayValue !== '-' && displayValue !== null && displayValue !== undefined) {
-                const formattedValue = typeof displayValue === 'number' ? displayValue.toFixed(2) : displayValue
-                indicatorContent += createIndicatorRow(seriesName, formattedValue, color)
-              }
-            }
-          })
-
-          // 组装：日期 → 价格主组（开/收/低/高 + 涨跌幅） → 指标副组（MA/BOLL/RSI/成交量等）
-          if (priceContent) result += divider + priceContent
-          if (indicatorContent) result += divider + indicatorContent
-          return result
-        }
+        } : {})
       },
       series: (() => {
         const series: any[] = []
         let gridIndex = 1 // 从1开始，因为主图占用gridIndex 0
 
         // 主图: K线 + MA + BOLL
+        // 现价水平虚线：贯穿主图绘图区，让用户瞬间看到当前价位于历史哪个位置（同花顺/东财惯例）
+        // 用 [起点, 终点] 两点段显式声明跨主图整个 x 轴，避免 ECharts 把单 yAxis line 截断
+        const lastBar = sortedData.length > 0 ? sortedData[sortedData.length - 1] : null
+        const currentPriceLine = lastBar != null
+          ? {
+              silent: true,
+              symbol: 'none',
+              lineStyle: { color: '#f59e0b', width: 1, type: 'dashed' as const, opacity: 0.85 },
+              label: {
+                show: true,
+                position: 'insideEndTop' as const,
+                formatter: `现价 ${lastBar.close.toFixed(2)}`,
+                color: '#f59e0b',
+                fontSize: 10,
+                backgroundColor: 'transparent'
+              },
+              data: [
+                [
+                  { coord: [dates[0], lastBar.close], symbol: 'none' },
+                  { coord: [dates[dates.length - 1], lastBar.close], symbol: 'none' }
+                ]
+              ]
+            }
+          : null
+
         series.push(
           {
             name: 'K线',
@@ -1073,6 +1303,8 @@ export default function EChartsStockChart({
               borderColor: '#ef4444',
               borderColor0: '#22c55e'
             },
+            // 现价水平虚线（无论是否有筹码图都贯穿主图）
+            ...(currentPriceLine ? { markLine: currentPriceLine } : {}),
             // 回测模式：添加买卖信号markPoint
             ...(backtestMode && (buyMarkPoints.length > 0 || sellMarkPoints.length > 0) ? {
               markPoint: {
@@ -1218,7 +1450,15 @@ export default function EChartsStockChart({
               type: 'bar',
               data: macdHistData,
               xAxisIndex: gridIndex,
-              yAxisIndex: gridIndex
+              yAxisIndex: gridIndex,
+              // 0 轴参考线（A 股惯例：DIF 上穿/下穿 0 轴是中长期多空分水岭）
+              markLine: {
+                silent: true,
+                symbol: 'none',
+                lineStyle: { color: '#999', type: 'dashed' as const, width: 1 },
+                label: { show: false },
+                data: [{ yAxis: 0 }]
+              }
             },
             {
               name: 'DIF',
@@ -1443,11 +1683,12 @@ export default function EChartsStockChart({
 
     // 网格数量变化时完全替换配置；仅 series 集合变化（指标 Tab 切换）时同时替换 series + yAxis，
     // 否则 RSI→KDJ 切换会保留 RSI 的 yAxis min/max=0-100，把 KDJ 的 J 值截断
+    // graphic 用同 id 元素替换内嵌图例文字；网格/series 变化时一并重建
     chart.setOption(option, {
       notMerge: gridChanged,
       replaceMerge: gridChanged
-        ? ['grid', 'xAxis', 'yAxis', 'series']
-        : (seriesChanged ? ['series', 'yAxis'] : undefined)
+        ? ['grid', 'xAxis', 'yAxis', 'series', 'graphic']
+        : (seriesChanged ? ['series', 'yAxis', 'graphic'] : ['graphic'])
     })
 
     // 确保布局正确
@@ -1491,6 +1732,15 @@ export default function EChartsStockChart({
             Math.abs(c.price - referencePrice) < Math.abs(visible[best].price - referencePrice) ? i : best, 0)
         : -1
 
+      // 与初始构造保持一致的 nice step interval 规则——hover 切换日期时刻度仍对齐到整数
+      const chipLabelInterval = (_idx: number, value: string): boolean => {
+        const price = Number(value)
+        if (!isFinite(price)) return false
+        const range = (klineBounds?.hiBound ?? 100) - (klineBounds?.loBound ?? 0)
+        const step = range >= 50 ? 5 : range >= 20 ? 2 : range >= 10 ? 2 : range >= 5 ? 1 : 0.5
+        return Math.abs(price - Math.round(price / step) * step) < step / 4
+      }
+
       const currentOpt = chart.getOption() as any
       chart.setOption({
         yAxis: (currentOpt.yAxis as any[]).map((y: any, i: number) =>
@@ -1498,7 +1748,7 @@ export default function EChartsStockChart({
             ? {
                 ...y,
                 data: visible.map(d => d.price.toFixed(2)),
-                axisLabel: { ...y.axisLabel, interval: Math.max(1, Math.floor(visible.length / 6)) }
+                axisLabel: { ...y.axisLabel, interval: chipLabelInterval }
               }
             : y
         ),
@@ -1526,9 +1776,21 @@ export default function EChartsStockChart({
               markLine: {
                 silent: true,
                 symbol: 'none',
-                lineStyle: { color: '#f59e0b', width: 1, type: 'dashed' as const, opacity: 0.6 },
-                label: { show: false },
-                data: [{ yAxis: referencePrice }]
+                lineStyle: { color: '#f59e0b', width: 1, type: 'dashed' as const, opacity: 0.85 },
+                label: {
+                  show: true,
+                  position: 'insideEndTop' as const,
+                  formatter: `现价 ${referencePrice.toFixed(2)}`,
+                  color: '#f59e0b',
+                  fontSize: 10,
+                  backgroundColor: 'transparent'
+                },
+                data: [
+                  [
+                    { coord: [dates[0], referencePrice], symbol: 'none' },
+                    { coord: [dates[dates.length - 1], referencePrice], symbol: 'none' }
+                  ]
+                ]
               }
             }
           }
@@ -1588,71 +1850,86 @@ export default function EChartsStockChart({
       loadMoreData()
     })
 
-    // 监听 axisPointer 移动：鼠标划过某根 K 线时，把筹码图切换到该日
-    // updateAxisPointer 是 ECharts 内部事件，带有 dataIndex 字段
-    // 仅当筹码图启用且有历史数据时绑定，避免关闭后无谓触发 setState
+    // 监听 axisPointer 移动：
+    //  ① 把筹码图切换到鼠标当前日期（仅 hasChips && hasChipsHistory 时启用）
+    //  ② 同步刷新所有面板的内嵌图例浮层（OHLC / MA / 成交量 / MACD / KDJ / RSI 当前值）
     chart.off('updateAxisPointer')
-    if (hasChips && hasChipsHistory) {
-      chart.on('updateAxisPointer', (evt: any) => {
-        const axesInfo = evt?.axesInfo ?? []
-        const xInfo = axesInfo.find((a: any) => a.axisDim === 'x' && typeof a.value !== 'undefined')
-        // value 可能是 category（日期字符串）或数字索引；我们主图 xAxis 是 category，value 直接是 dates[i]
-        let dateKey: string | null = null
-        if (xInfo) {
-          if (typeof xInfo.value === 'string') {
-            dateKey = removeDateTimePart(xInfo.value)
-          } else if (typeof xInfo.value === 'number' && Number.isFinite(xInfo.value)) {
-            const idx = Math.round(xInfo.value)
-            if (idx >= 0 && idx < dates.length) dateKey = dates[idx]
+    let lastLegendIdx = initialLegendIdx
+    chart.on('updateAxisPointer', (evt: any) => {
+      const axesInfo = evt?.axesInfo ?? []
+      // 找主图 x 轴上的 hover 信息（category 轴）
+      const xInfo = axesInfo.find((a: any) => a.axisDim === 'x' && typeof a.value !== 'undefined')
+      let hoverIdx: number | null = null
+      let dateKey: string | null = null
+      if (xInfo) {
+        if (typeof xInfo.value === 'string') {
+          dateKey = removeDateTimePart(xInfo.value)
+          const i = dates.indexOf(dateKey)
+          if (i >= 0) hoverIdx = i
+        } else if (typeof xInfo.value === 'number' && Number.isFinite(xInfo.value)) {
+          const idx = Math.round(xInfo.value)
+          if (idx >= 0 && idx < dates.length) {
+            hoverIdx = idx
+            dateKey = dates[idx]
           }
         }
+      }
 
-        const historyMap = chipsHistory as Map<string, ChipItem[]>
-        const latestDateKey = (() => {
-          const keys = Array.from(historyMap.keys()).sort()
-          return keys[keys.length - 1] ?? null
-        })()
+      // —— 图例浮层刷新 ——（不论是否有筹码图都要做）
+      const targetIdx = hoverIdx != null ? hoverIdx : initialLegendIdx
+      if (targetIdx !== lastLegendIdx) {
+        lastLegendIdx = targetIdx
+        chart.setOption({ graphic: { elements: buildLegendGraphics(targetIdx) } } as any)
+      }
 
-        // 鼠标离开：dateKey 为 null → 回到最新日
-        if (!dateKey) {
-          hoverDateRef.current = null
-          if (activeChipsDateRef.current !== null) {
-            activeChipsDateRef.current = null
-            setActiveChipsDateLabel(latestDateKey)
-            refreshChipsPanel(null)
-          }
-          return
-        }
+      // —— 筹码图日期联动 ——
+      if (!(hasChips && hasChipsHistory)) return
 
-        // 同一 dateKey 反复触发时，hoverDateRef 已经是该值，直接早返回避免重复 setState
-        if (hoverDateRef.current === dateKey) return
-        hoverDateRef.current = dateKey
+      const historyMap = chipsHistory as Map<string, ChipItem[]>
+      const latestDateKey = (() => {
+        const keys = Array.from(historyMap.keys()).sort()
+        return keys[keys.length - 1] ?? null
+      })()
 
-        const bucket = historyMap.get(dateKey)
-        // date 是否已在父组件已拉取的任一区间内（区间已请求过后端，未返回该日 = 后端确认无数据）
-        const inFetchedRange = (chipsFetchedRanges ?? []).some(
-          r => dateKey >= r.start && dateKey <= r.end
-        )
-
-        if (bucket && bucket.length > 0) {
-          // 命中且有数据：切换筹码图
-          activeChipsDateRef.current = dateKey
-          setActiveChipsDateLabel(dateKey)
-          refreshChipsPanel(dateKey)
-        } else if ((bucket && bucket.length === 0) || inFetchedRange) {
-          // 已确认无数据：bucket 为空数组（按需拉取后写入的哨兵）或 date 在已拉区间但 bucket 不存在
+      // 鼠标离开：dateKey 为 null → 回到最新日
+      if (!dateKey) {
+        hoverDateRef.current = null
+        if (activeChipsDateRef.current !== null) {
           activeChipsDateRef.current = null
-          setActiveChipsDateLabel(`${dateKey}（无数据）`)
-          clearChipsPanel()
-        } else {
-          // 未命中且未拉过：badge 显示"加载中"，清空筹码图，触发父组件按需拉取
-          activeChipsDateRef.current = null
-          setActiveChipsDateLabel(`${dateKey}（加载中…）`)
-          clearChipsPanel()
-          onChipsDateMiss?.(dateKey)
+          setActiveChipsDateLabel(latestDateKey)
+          refreshChipsPanel(null)
         }
-      })
-    }
+        return
+      }
+
+      // 同一 dateKey 反复触发时，hoverDateRef 已经是该值，直接早返回避免重复 setState
+      if (hoverDateRef.current === dateKey) return
+      hoverDateRef.current = dateKey
+
+      const bucket = historyMap.get(dateKey)
+      // date 是否已在父组件已拉取的任一区间内（区间已请求过后端，未返回该日 = 后端确认无数据）
+      const inFetchedRange = (chipsFetchedRanges ?? []).some(
+        r => dateKey! >= r.start && dateKey! <= r.end
+      )
+
+      if (bucket && bucket.length > 0) {
+        // 命中且有数据：切换筹码图
+        activeChipsDateRef.current = dateKey
+        setActiveChipsDateLabel(dateKey)
+        refreshChipsPanel(dateKey)
+      } else if ((bucket && bucket.length === 0) || inFetchedRange) {
+        // 已确认无数据：bucket 为空数组（按需拉取后写入的哨兵）或 date 在已拉区间但 bucket 不存在
+        activeChipsDateRef.current = null
+        setActiveChipsDateLabel(`${dateKey}（无数据）`)
+        clearChipsPanel()
+      } else {
+        // 未命中且未拉过：badge 显示"加载中"，清空筹码图，触发父组件按需拉取
+        activeChipsDateRef.current = null
+        setActiveChipsDateLabel(`${dateKey}（加载中…）`)
+        clearChipsPanel()
+        onChipsDateMiss?.(dateKey)
+      }
+    })
 
     // 响应式调整
     const handleResize = () => {
@@ -1824,6 +2101,7 @@ export default function EChartsStockChart({
       {/* 相对定位容器，让筹码日期 badge 与复位按钮浮在右上 */}
       <div className="relative min-w-0 max-w-full">
         <div ref={chartRef} className="min-w-0 max-w-full" style={{ width: '100%', height: `${chartHeight}px` }} />
+
         {/* 复位按钮：把 dataZoom 和缩放重置到默认 70-100 视图 */}
         <button
           type="button"
@@ -1838,46 +2116,87 @@ export default function EChartsStockChart({
         >
           ⟲ 复位
         </button>
-        {activeChipsDateLabel && (
+        {/* 仅在筹码"加载中"或"无数据"状态显示 badge——常规情况下日期已由主图浮层呈现 */}
+        {activeChipsDateLabel && /(加载中|无数据)/.test(activeChipsDateLabel) && (
           <div
             className="pointer-events-none absolute top-1 right-2 px-1.5 py-0.5 text-[10px] rounded bg-gray-700/40 dark:bg-gray-200/30 text-gray-100 dark:text-gray-700 tabular-nums"
-            title="筹码分布日期（移动鼠标切换）"
+            title="筹码分布日期"
           >
             {activeChipsDateLabel}
           </div>
         )}
       </div>
 
-      {/* 技术指标副图 Tab 切换栏（业界标准：底部 Tab 单选 MACD / KDJ / RSI） */}
-      <div className="mt-2 flex items-center gap-1 border-t border-gray-200 dark:border-gray-700 pt-2 px-2 overflow-x-auto scrollbar-thin">
-        {([
-          { key: 'macd' as const, label: 'MACD', available: hasMACD },
-          { key: 'kdj' as const,  label: 'KDJ',  available: hasKDJ },
-          { key: 'rsi' as const,  label: 'RSI',  available: hasRSI },
-        ]).map(tab => {
-          const isActive = activeIndicator === tab.key
-          const disabled = !tab.available
-          return (
+      {/* 底部工具栏：左侧 MACD/KDJ/RSI 单选 Tab，右侧 1M/3M/6M/1Y/All 快速时间窗 */}
+      <div className="mt-2 flex items-center justify-between gap-2 border-t border-gray-200 dark:border-gray-700 pt-2 px-2">
+        <div className="flex items-center gap-1 overflow-x-auto scrollbar-thin">
+          {([
+            { key: 'macd' as const, label: 'MACD', available: hasMACD },
+            { key: 'kdj' as const,  label: 'KDJ',  available: hasKDJ },
+            { key: 'rsi' as const,  label: 'RSI',  available: hasRSI },
+          ]).map(tab => {
+            const isActive = activeIndicator === tab.key
+            const disabled = !tab.available
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => !disabled && !isActive && switchIndicator(tab.key)}
+                disabled={disabled}
+                className={[
+                  'px-3 py-1 text-xs rounded-md transition-colors duration-fast whitespace-nowrap tabular-nums focus-ring',
+                  isActive
+                    ? 'bg-blue-600 text-white'
+                    : disabled
+                      ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                ].join(' ')}
+                aria-pressed={isActive}
+                title={disabled ? `${tab.label}（无数据）` : tab.label}
+              >
+                {tab.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* 快速时间窗（业界标准：1M / 3M / 6M / 1Y / All） */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          {([
+            { key: '1M', label: '1月', days: 22 },
+            { key: '3M', label: '3月', days: 66 },
+            { key: '6M', label: '6月', days: 132 },
+            { key: '1Y', label: '1年', days: 252 },
+            { key: 'All', label: '全部', days: -1 },
+          ] as const).map(opt => (
             <button
-              key={tab.key}
+              key={opt.key}
               type="button"
-              onClick={() => !disabled && !isActive && switchIndicator(tab.key)}
-              disabled={disabled}
-              className={[
-                'px-3 py-1 text-xs rounded-md transition-colors duration-fast whitespace-nowrap tabular-nums focus-ring',
-                isActive
-                  ? 'bg-blue-600 text-white'
-                  : disabled
-                    ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed'
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-              ].join(' ')}
-              aria-pressed={isActive}
-              title={disabled ? `${tab.label}（无数据）` : tab.label}
+              onClick={() => {
+                const chart = chartInstanceRef.current
+                if (!chart) return
+                const total = allDataRef.current.length
+                if (total === 0) return
+                let start = 0
+                const end = 100
+                if (opt.days > 0) {
+                  const showCount = Math.min(opt.days, total)
+                  start = Math.max(0, ((total - showCount) / total) * 100)
+                }
+                currentDataZoomRef.current = { start, end }
+                chart.dispatchAction({ type: 'dataZoom', start, end })
+                // 'All' 视图触发懒加载续载更早历史
+                if (opt.days === -1) {
+                  requestAnimationFrame(() => loadMoreData())
+                }
+              }}
+              className="px-1.5 py-0.5 text-[11px] rounded text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-fast focus-ring tabular-nums"
+              title={`显示最近${opt.label}`}
             >
-              {tab.label}
+              {opt.key}
             </button>
-          )
-        })}
+          ))}
+        </div>
       </div>
 
       {/* 回测信号统计 */}

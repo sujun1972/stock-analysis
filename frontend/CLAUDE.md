@@ -275,6 +275,30 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 - `localStorage` 用 `{ ...DEFAULT_INDICATORS, ...JSON.parse(saved) }` 兜底新增字段（如 `chips`），保证旧用户数据兼容
 - **`switchIndicator` 不要在 `setState(updater)` 的 updater 函数里同步调父组件回调**——updater 在 React render/commit 阶段执行，同步触发父 setState 会报 "Cannot update a component (StockPriceCard) while rendering a different component (EChartsStockChart)"。已有的 `switchIndicator` 用 `queueMicrotask` 把 `onIndicatorsChange` 派发推到 commit 之后，新增类似的"子状态变更需要回流父组件"模式时照抄
 
+**面板内嵌图例浮层（取代 ECharts 内置 legend）**（同花顺/东财/富途看盘软件惯例）：
+- 主图 / 成交量 / MACD / KDJ / RSI 每个面板左上角驻留一个 `graphic` group（id 形如 `legend-main` / `legend-volume` / `legend-indicator`），由 `rect` 半透明背板 + 多个独立 `text` 元素组合渲染。**不用 ECharts 富文本 `rich`**——某些版本下段间距/字色丢失。`segStyles` 表 + `parseRichText('{tag|text}')` 解析自定义标签
+- 数值随 `chart.on('updateAxisPointer')` 实时刷新：从 `evt.axesInfo` 解出 `hoverIdx`（category 轴是日期字符串 → `dates.indexOf` 反查），变化时 `chart.setOption({ graphic: { elements: buildLegendGraphics(idx) } })`。鼠标离开图表 hoverIdx 回落到最新一根
+- ECharts `legend` 数组保留为空 `[]`（不能删字段否则切换 BOLL 显隐时会残留旧图例），主图 `top` 直接接 `TOP_PADDING`，无需为 legend 预留高度
+- 切换 indicator Tab / 缩放等会触发 `setOption` 重建 graphic 时，`replaceMerge` 数组**必须包含 `'graphic'`**（已在主 `setOption` 三个分支都加上），否则旧面板的浮层会残留
+- 段宽度估算用 ASCII 0.6em / CJK 1.0em 近似（避免引入 canvas measureText）；浅色背景 `rgba(255,255,255,0.85)`、深色 `rgba(17,24,39,0.85)`，提供足够对比度让文字可读但不遮挡 K 线
+
+**Y 轴刻度对齐 / 副图边界刻度**（避免长尾浮点 + 相邻面板边界刻度重叠）：
+- 主图 `[loBound, hiBound]` 计算时按 `range` 量级 floor/ceil 到 nice step（≥100 用 2 元、≥10 用 1 元、≥1 用 0.05 元），把 `51.0899` 对齐成 `51`；筹码图也按同一 step 选择目标显示价（`labelInterval` 函数过滤），保持两图刻度同步
+- 主图所有 `axisLabel.formatter` 强制 `Number(value).toFixed(2)` 避免默认浮点尾数；副图（成交量除外，走 `formatVolume`）也统一 2 位小数
+- 副图 `axisLabel` 必须 `showMinLabel: false, showMaxLabel: false` 隐藏顶/底边界刻度——否则成交量底部 `500.00万` 会与 KDJ 顶部 `100.00` 重叠（PANEL_GAP=8px 留缝不够），主图 `BOTTOM_PADDING=28` 给 X 轴日期标签预留空间
+- KDJ/RSI 固定 `min: 0 / max: 100` + `interval: 25` 强制刻度 `0/25/50/75/100`。**用 `interval` 不能用 `splitNumber`**——后者是建议值，会被 ECharts nice scale 重写
+
+**装饰参考线**：
+- 主图现价水平虚线（贯穿绘图区，让用户瞬间定位当前价位）：`markLine` 用 `[起点, 终点]` 两点段（`coord: [dates[0], close]` → `coord: [dates[-1], close]`），单 yAxis line 会被 ECharts 截断到数据范围而非 x 轴整段
+- MACD 0 轴参考线：`markLine: { data: [{ yAxis: 0 }] }`，DIF/DEA 上穿/下穿 0 轴是中长期多空分水岭
+- dataZoom 缩放后 hover 切换日期时，现价线 markLine 必须按相同 `[起点, 终点]` 模式重建（在 `dataZoom` 事件回调里），否则缩放区间外现价线会消失
+
+**tooltip 仅回测模式启用**：
+- 浮层已显示 OHLC + 涨跌幅 + MA + BOLL + 成交量 + MACD/KDJ/RSI 当前值，再弹 tooltip 浮窗会重复 + 遮挡视图。`tooltip.show` 仅在 `hasEquityData`（回测）时为 true，专门显示权益曲线总资产/持仓/现金
+- **但 `trigger: 'axis'` 必须保留**——`updateAxisPointer` 事件依赖它触发，否则浮层无法跟随 hover 刷新。`axisPointer.label.show: false` 隐藏 X 轴日期 pill，避免与浮层日期重复
+
+**快速时间窗（1M/3M/6M/1Y/All）**：底部工具栏右侧，按钮 onClick 用 `chart.dispatchAction({ type: 'dataZoom', start, end })` + 同步 `currentDataZoomRef`。`All` 视图触发 `requestAnimationFrame(() => loadMoreData())` 续载更早历史。交易日折算用 22/66/132/252（约月/季/半年/年）
+
 **主题联动（`useEChartsTheme`）**：所有 ECharts 实例组件（`EChartsStockChart` / `MinuteChart` / `BacktestKLineChart` / `EquityCurveChart` / `ai-lab/*`）统一使用 [useEChartsTheme](src/hooks/useEChartsTheme.ts) 跟随 `next-themes` 的深浅主题。约定：
 
 1. 从 hook 取 `{ theme, echartsTheme, palette }`。`theme` 是稳定字符串 `'light' | 'dark'`；`palette` 是单例 frozen 对象（不会因父组件重渲染触发引用变化）。
