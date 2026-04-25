@@ -47,6 +47,7 @@ interface ChartData {
   volume: number
   amount?: number | null
   MA5?: number | null
+  MA10?: number | null
   MA20?: number | null
   MA60?: number | null
   MACD?: number | null
@@ -457,6 +458,7 @@ export default function EChartsStockChart({
 
     // MA线数据
     const ma5Data = sortedData.map(d => d.MA5 ?? '-')
+    const ma10Data = sortedData.map(d => d.MA10 ?? '-')
     const ma20Data = sortedData.map(d => d.MA20 ?? '-')
     const ma60Data = sortedData.map(d => d.MA60 ?? '-')
 
@@ -770,9 +772,12 @@ export default function EChartsStockChart({
     const colorBlue    = pick('#3b82f6', '#60a5fa')
     const colorPurple  = pick('#8b5cf6', '#a78bfa')
     const colorAmber   = pick('#f59e0b', '#fbbf24')
-    const colorMa5     = pick('#d97706', '#fbbf24')
-    const colorMa20    = pick('#059669', '#34d399')
-    const colorMa60    = pick('#7c3aed', '#a78bfa')
+    // MA 配色按"明度阶梯"递降，避开 BOLL（粉/青）和 K 线（红/绿）：
+    //   MA5 最快线（暖橙黄）→ MA10 橙色 → MA20 红色（细线区分 K 线红）→ MA60 紫
+    const colorMa5     = pick('#d97706', '#fbbf24')   // amber-600 / amber-300
+    const colorMa10    = pick('#ea580c', '#fb923c')   // orange-600 / orange-400
+    const colorMa20    = pick('#dc2626', '#f87171')   // red-600 / red-400（lineWidth=1.2 与 K 线红区分）
+    const colorMa60    = pick('#7c3aed', '#a78bfa')   // violet-600 / violet-400
     const colorBollUp  = pick('#db2777', '#f472b6')
     const colorBollMid = pick('#0891b2', '#22d3ee')
 
@@ -804,11 +809,12 @@ export default function EChartsStockChart({
       line1.push(`{label|低}{${priceTag}|${fmtNum(d.low)}}`)
       line1.push(`{label|收}{${priceTag}|${fmtNum(d.close)}}`)
       line1.push(`{${pctTag}|${pctStr}}`)
-      // 第 2 行：MA + BOLL（参数标注与同花顺/通达信一致）
+      // 第 2 行：MA + BOLL（参数标注与同花顺/通达信一致；MA10 是 A 股短线生命线）
       const line2: string[] = []
-      const hasAnyMA = d.MA5 != null || d.MA20 != null || d.MA60 != null
-      if (hasAnyMA) line2.push('{title|MA(5,20,60)}')
+      const hasAnyMA = d.MA5 != null || d.MA10 != null || d.MA20 != null || d.MA60 != null
+      if (hasAnyMA) line2.push('{title|MA(5,10,20,60)}')
       if (d.MA5 != null) line2.push(`{maShort|${fmtNum(d.MA5)}}`)
+      if (d.MA10 != null) line2.push(`{maMid10|${fmtNum(d.MA10)}}`)
       if (d.MA20 != null) line2.push(`{maMid|${fmtNum(d.MA20)}}`)
       if (d.MA60 != null) line2.push(`{maLong|${fmtNum(d.MA60)}}`)
       if (visibleIndicators.boll && hasBOLL && d.BOLL_UPPER != null) {
@@ -902,6 +908,7 @@ export default function EChartsStockChart({
       neutral: { color: labelColor, fontSize: 11, fontWeight: 600 },
       title:   { color: labelColor, fontSize: 11, fontWeight: 700 },
       maShort: { color: colorMa5,    fontSize: 11, fontWeight: 600 },
+      maMid10: { color: colorMa10,   fontSize: 11, fontWeight: 600 },
       maMid:   { color: colorMa20,   fontSize: 11, fontWeight: 600 },
       maLong:  { color: colorMa60,   fontSize: 11, fontWeight: 600 },
       bollUp:  { color: colorBollUp, fontSize: 11, fontWeight: 600 },
@@ -1402,7 +1409,21 @@ export default function EChartsStockChart({
             lineStyle: {
               opacity: 0.8,
               width: 1,
-              color: '#f59e0b'
+              color: colorMa5
+            },
+            showSymbol: false
+          },
+          {
+            name: 'MA10',
+            type: 'line',
+            data: ma10Data,
+            xAxisIndex: 0,
+            yAxisIndex: 0,
+            smooth: true,
+            lineStyle: {
+              opacity: 0.8,
+              width: 1,
+              color: colorMa10
             },
             showSymbol: false
           },
@@ -1415,8 +1436,8 @@ export default function EChartsStockChart({
             smooth: true,
             lineStyle: {
               opacity: 0.8,
-              width: 1,
-              color: '#10b981'
+              width: 1.2,
+              color: colorMa20
             },
             showSymbol: false
           },
@@ -1430,7 +1451,7 @@ export default function EChartsStockChart({
             lineStyle: {
               opacity: 0.8,
               width: 1,
-              color: '#8b5cf6'
+              color: colorMa60
             },
             showSymbol: false
           }
