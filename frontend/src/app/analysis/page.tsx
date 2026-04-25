@@ -4,6 +4,8 @@ import { useEffect, useState, Suspense, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
+import { getLatestStockAnalysis } from '@/lib/api/stocks'
+import { useAuthStore } from '@/stores/auth-store'
 import type { StockInfo, StockQuotePanel } from '@/types'
 import { HotMoneyViewDialog } from '@/components/stocks/HotMoneyViewDialog'
 import { MoneyflowCard } from '@/components/stocks/MoneyflowCard'
@@ -395,7 +397,7 @@ function ScoreRings({ scores }: { scores: { label: string; score: number | null 
 // 行情卡片
 // ─────────────────────────────────────────
 
-function QuotePanel({ q, stock }: { q: StockQuotePanel; stock: StockInfo | null }) {
+function QuotePanel({ q, stock, cioKeyQuote }: { q: StockQuotePanel; stock: StockInfo | null; cioKeyQuote?: string | null }) {
   const pc = q.pct_change
   const priceTone = priceColor(pc)
   const preClose = resolvePreClose(q)
@@ -529,6 +531,14 @@ function QuotePanel({ q, stock }: { q: StockQuotePanel; stock: StockInfo | null 
               </span>
             )}
           </div>
+          {cioKeyQuote && (
+            <div className="flex items-baseline gap-2 pt-1.5">
+              <span className="text-gray-400 dark:text-gray-500 shrink-0">一句话观点</span>
+              <span className="text-gray-700 dark:text-gray-300 italic" title="来自 CIO 综合分析 final_score.key_quote">
+                "{cioKeyQuote}"
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -559,6 +569,11 @@ function AnalysisContent() {
   const [fetchedChipsRanges, setFetchedChipsRanges] = useState<Array<{ start: string; end: string }>>([])
   const inflightChipsRangesRef = useRef<Array<{ start: string; end: string }>>([])  // 正在拉的区间
   const chipsMissDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)   // 防抖句柄
+
+  // ── CIO 一句话观点（§9 AI 摘要） ──
+  // 仅登录态拉取最新一条 cio_directive，从 final_score.key_quote 提取一句话；失败/缺失静默不渲染
+  const [cioKeyQuote, setCioKeyQuote] = useState<string | null>(null)
+  const isAuthenticated = useAuthStore(s => s.isAuthenticated)
 
   // ── AI 分析弹窗 ──
   const [hotMoneyOpen, setHotMoneyOpen] = useState(false)
@@ -621,6 +636,35 @@ function AnalysisContent() {
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [basicInfo?.ts_code, code])
+
+  // CIO 一句话观点（§9）：登录态拉最新一条 cio_directive，从 final_score.key_quote 提取
+  useEffect(() => {
+    const tsCode = basicInfo?.ts_code || (code ? toTsCode(code) : null)
+    if (!tsCode || !isAuthenticated) {
+      setCioKeyQuote(null)
+      return
+    }
+    let cancelled = false
+    getLatestStockAnalysis(tsCode, 'cio_directive').then(res => {
+      if (cancelled) return
+      // 后端返回 ApiResponse<{ id, score, version, analysis_text, created_at }>
+      const text = (res as any)?.data?.analysis_text
+      if (!text || typeof text !== 'string') return
+      try {
+        // analysis_text 可能是裸 JSON 或带 ```json 围栏；ai_output_parser 已统一返回干净 JSON 字符串
+        const parsed = JSON.parse(text)
+        const quote = parsed?.final_score?.key_quote
+        if (typeof quote === 'string' && quote.trim()) {
+          setCioKeyQuote(quote.trim())
+        }
+      } catch {
+        // 解析失败静默
+      }
+    }).catch(() => {
+      // 401/404 等静默
+    })
+    return () => { cancelled = true }
+  }, [basicInfo?.ts_code, code, isAuthenticated])
 
   /**
    * 按需拉取某日期附近的筹码数据（K 线 hover 触发）
@@ -873,7 +917,7 @@ function AnalysisContent() {
         </CardHeader>
         <CardContent>
           {quotePanel ? (
-            <QuotePanel q={quotePanel} stock={stockInfo} />
+            <QuotePanel q={quotePanel} stock={stockInfo} cioKeyQuote={cioKeyQuote} />
           ) : (
             <p className="text-sm text-gray-500 dark:text-gray-400">暂无行情数据</p>
           )}
