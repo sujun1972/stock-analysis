@@ -72,9 +72,10 @@ export function MoneyflowCard({ tsCode }: { tsCode: string }) {
     setLoading(true)
     setError(null)
     const { start, end } = calcDateRange(period)
-    apiClient.get<{ code: number; data: { items: MoneyflowItem[] } }>(
+    apiClient.get<{ items: MoneyflowItem[] }>(
       `/api/moneyflow?ts_code=${encodeURIComponent(tsCode)}&start_date=${start}&end_date=${end}&limit=${period + 5}`
     ).then(res => {
+      // apiGet 已返回 ApiResponse<T> = { code, data: T, ... }；T 这里是 { items }
       if (cancelled) return
       const list: MoneyflowItem[] = (res?.data?.items ?? []).slice(0, period)
       // 后端按 trade_date DESC 返回，N 日折线/柱图需要按时间正序
@@ -155,10 +156,28 @@ export function MoneyflowCard({ tsCode }: { tsCode: string }) {
             </a>
           </div>
         )}
-        {isAuthenticated && loading && <p className="text-sm text-gray-500 dark:text-gray-400">加载中...</p>}
         {isAuthenticated && error && <p className="text-sm text-amber-600 dark:text-amber-400">{error}</p>}
-        {isAuthenticated && !loading && !error && agg && items && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
+        {/* 状态机分四档：(1) 无旧数据 + 加载中 → 等高占位避免抖动；(2) 无旧数据 + 不加载 → 空态；
+            (3) 有旧数据 + 加载中 → stale-while-revalidate，旧数据半透明保留 + aria-busy；
+            (4) 有旧数据 + 不加载 → 正常显示。period 切换时主要走 (3)，
+            视觉上柱条用 transition-[width] 平滑过渡，避免 50/100ms 内"闪空再填"抖动。 */}
+        {isAuthenticated && !error && !agg && loading && (
+          <div className="min-h-[200px] flex items-center justify-center">
+            <p className="text-sm text-gray-500 dark:text-gray-400">加载中...</p>
+          </div>
+        )}
+        {isAuthenticated && !error && !loading && !agg && (
+          <div className="min-h-[200px] flex items-center justify-center">
+            <p className="text-sm text-gray-500 dark:text-gray-400">暂无资金流向数据</p>
+          </div>
+        )}
+        {isAuthenticated && !error && agg && items && (
+          <div
+            className={`grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4 transition-opacity duration-fast ${
+              loading ? 'opacity-60' : 'opacity-100'
+            }`}
+            aria-busy={loading}
+          >
             {/* 左栏：4 档买卖堆叠条 + 主力净流入摘要 */}
             <div>
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">4 档买/卖（{period} 日累计）</p>
@@ -172,14 +191,22 @@ export function MoneyflowCard({ tsCode }: { tsCode: string }) {
                       <div className="flex items-baseline justify-between text-xs mb-0.5">
                         <span className="text-gray-600 dark:text-gray-400" title={b.hint}>{b.label}</span>
                         <span className="tabular-nums text-gray-500 dark:text-gray-400">
-                          买 <span className="text-positive font-semibold">{fmtWan(b.buy)}</span>
+                          买 <span className="text-positive font-semibold tabular-nums">{fmtWan(b.buy)}</span>
                           {' / '}
-                          卖 <span className="text-negative font-semibold">{fmtWan(b.sell)}</span>
+                          卖 <span className="text-negative font-semibold tabular-nums">{fmtWan(b.sell)}</span>
                         </span>
                       </div>
                       <div className="flex h-2 rounded-sm overflow-hidden bg-gray-100 dark:bg-gray-800">
-                        <div className="bg-positive" style={{ width: `${buyPct}%` }} title={`买入占比 ${buyPct.toFixed(1)}%`} />
-                        <div className="bg-negative" style={{ width: `${sellPct}%` }} title={`卖出占比 ${sellPct.toFixed(1)}%`} />
+                        <div
+                          className="bg-positive transition-[width] duration-normal ease-out"
+                          style={{ width: `${buyPct}%` }}
+                          title={`买入占比 ${buyPct.toFixed(1)}%`}
+                        />
+                        <div
+                          className="bg-negative transition-[width] duration-normal ease-out"
+                          style={{ width: `${sellPct}%` }}
+                          title={`卖出占比 ${sellPct.toFixed(1)}%`}
+                        />
                       </div>
                     </div>
                   )
@@ -196,7 +223,7 @@ export function MoneyflowCard({ tsCode }: { tsCode: string }) {
             </div>
 
             {/* 右栏：N 日主力净流入柱图（仅在 ≥5 日 时显示，单日只看左栏即可） */}
-            <div>
+            <div className="min-h-[112px]">
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{period} 日主力净流入</p>
               {items.length <= 1 ? (
                 <p className="text-xs text-gray-400 dark:text-gray-600">单日数据见左栏</p>
@@ -205,9 +232,6 @@ export function MoneyflowCard({ tsCode }: { tsCode: string }) {
               )}
             </div>
           </div>
-        )}
-        {isAuthenticated && !loading && !error && (!items || items.length === 0) && (
-          <p className="text-sm text-gray-500 dark:text-gray-400">暂无资金流向数据</p>
         )}
         <p className="mt-3 text-[10px] text-gray-400 dark:text-gray-600">
           口径：主力 = 超大单(≥100 万) + 大单(20–100 万)；单位：万元；数据来源：Tushare moneyflow

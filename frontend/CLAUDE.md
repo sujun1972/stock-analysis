@@ -227,6 +227,17 @@ const items = response.data.data    // 无双重嵌套
 const total = response.meta.total   // meta 在 data 下，不在顶层
 ```
 
+**`apiClient.get<T>()` / `apiGet<T>()` 的 T 是 envelope 内层**——`apiGet` 返回类型已经是 `ApiResponse<T> = { code, data: T, ... }`，调用时只传 `T = { items: ... }`，**不要再嵌一层 `{ code, data: ... }`**：
+
+```typescript
+// ✅ 正确
+apiClient.get<{ items: MoneyflowItem[] }>(url).then(res => res.data?.items)
+
+// ❌ 错误：T 又包一层 envelope，res.data 类型变成 { items },
+//    res.data.items 推断成 undefined（编译错误 TS2339）
+apiClient.get<{ code: number; data: { items: MoneyflowItem[] } }>(url)
+```
+
 **数字格式化**（永远不要直接用 `.toFixed()`）：
 
 ```typescript
