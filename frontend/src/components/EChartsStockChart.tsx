@@ -223,6 +223,31 @@ export default function EChartsStockChart({
     // 切换 period 时重置缩放（周/月数据点数显著少于日 K，旧 zoom 百分比失去意义）
     currentDataZoomRef.current = { start: 70, end: 100 }
   }, [period])
+  // 用户画线（v1：水平线）：双击锁定，右键删除，localStorage 持久化按 stockCode 隔离
+  interface UserLine {
+    id: string
+    price: number
+    createdAt: string
+  }
+  const userLinesStorageKey = `chart_user_lines:${stockCode}`
+  const [userLines, setUserLines] = useState<UserLine[]>([])
+  const userLinesRef = useRef<UserLine[]>([])  // ref 供 ECharts 事件回调读最新
+  useEffect(() => {
+    if (typeof window === 'undefined') { setUserLines([]); return }
+    try {
+      const saved = localStorage.getItem(userLinesStorageKey)
+      const next = saved ? (JSON.parse(saved) as UserLine[]) : []
+      setUserLines(Array.isArray(next) ? next : [])
+    } catch {
+      setUserLines([])
+    }
+  }, [userLinesStorageKey])
+  useEffect(() => {
+    userLinesRef.current = userLines
+    if (typeof window === 'undefined') return
+    try { localStorage.setItem(userLinesStorageKey, JSON.stringify(userLines)) } catch {}
+  }, [userLines, userLinesStorageKey])
+
   const [allData, setAllData] = useState<ChartData[]>(data)
   const allDataRef = useRef<ChartData[]>(data)  // ref 版本，供事件回调读取最新值
   const [isLoading, setIsLoading] = useState(false)
@@ -1498,6 +1523,25 @@ export default function EChartsStockChart({
             { coord: [dates[dates.length - 1], limitDown], symbol: 'none' }
           ])
         }
+        // 用户画线（v1：水平线）：青色 #06b6d4 实线区分系统线（黄/红/绿）
+        for (const line of userLines) {
+          markLineSegments.push([
+            {
+              coord: [dates[0], line.price],
+              symbol: 'none',
+              lineStyle: { color: '#06b6d4', width: 1, type: 'solid' as const, opacity: 0.9 },
+              label: {
+                show: true,
+                position: 'insideEndTop' as const,
+                formatter: `${line.price.toFixed(2)}`,
+                color: '#06b6d4',
+                fontSize: 10,
+                backgroundColor: 'transparent',
+              },
+            },
+            { coord: [dates[dates.length - 1], line.price], symbol: 'none' }
+          ])
+        }
         const currentPriceLine = markLineSegments.length > 0
           ? {
               silent: true,
@@ -2075,6 +2119,25 @@ export default function EChartsStockChart({
                 { coord: [dates[dates.length - 1], limitDown], symbol: 'none' }
               ])
             }
+            // 用户画线在 hover 联动时也保留
+            for (const line of userLinesRef.current) {
+              segs.push([
+                {
+                  coord: [dates[0], line.price],
+                  symbol: 'none',
+                  lineStyle: { color: '#06b6d4', width: 1, type: 'solid' as const, opacity: 0.9 },
+                  label: {
+                    show: true,
+                    position: 'insideEndTop' as const,
+                    formatter: `${line.price.toFixed(2)}`,
+                    color: '#06b6d4',
+                    fontSize: 10,
+                    backgroundColor: 'transparent',
+                  },
+                },
+                { coord: [dates[dates.length - 1], line.price], symbol: 'none' }
+              ])
+            }
             return {
               ...s,
               markLine: {
@@ -2231,6 +2294,50 @@ export default function EChartsStockChart({
       }
     })
 
+    // 用户画线（v1）：双击主图锁定一条水平虚线，右键删除最近的一条
+    // chart.getZr() 提供原生屏幕坐标事件；convertFromPixel 转回 yAxis 价格
+    const zr = chart.getZr()
+    const handleDblClick = (e: any) => {
+      try {
+        // 仅响应 K 线主图（gridIndex 0）；筹码图 / 副图忽略
+        const point = chart.convertFromPixel({ gridIndex: 0 }, [e.offsetX, e.offsetY])
+        if (!point || !Array.isArray(point) || point[1] == null) return
+        const price = +Number(point[1]).toFixed(2)
+        if (!isFinite(price) || price <= 0) return
+        const newLine: UserLine = {
+          id: `hline_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          price,
+          createdAt: new Date().toISOString(),
+        }
+        setUserLines(prev => [...prev, newLine])
+      } catch {}
+    }
+    const handleContextMenu = (e: any) => {
+      try {
+        const point = chart.convertFromPixel({ gridIndex: 0 }, [e.offsetX, e.offsetY])
+        if (!point || point[1] == null) return
+        const targetPrice = Number(point[1])
+        const yAxisRange = (mainYAxisMax ?? 100) - (mainYAxisMin ?? 0)
+        const tolerance = Math.max(yAxisRange * 0.01, 0.05)
+        const lines = userLinesRef.current
+        let nearestIdx = -1
+        let minDelta = Infinity
+        for (let i = 0; i < lines.length; i++) {
+          const delta = Math.abs(lines[i].price - targetPrice)
+          if (delta < tolerance && delta < minDelta) {
+            nearestIdx = i
+            minDelta = delta
+          }
+        }
+        if (nearestIdx >= 0) {
+          if (e.event && typeof e.event.preventDefault === 'function') e.event.preventDefault()
+          setUserLines(prev => prev.filter((_, i) => i !== nearestIdx))
+        }
+      } catch {}
+    }
+    zr.on('dblclick', handleDblClick)
+    zr.on('contextmenu', handleContextMenu)
+
     // 响应式调整
     const handleResize = () => {
       chart.resize()
@@ -2241,8 +2348,10 @@ export default function EChartsStockChart({
       window.removeEventListener('resize', handleResize)
       chart.off('dataZoom')
       chart.off('updateAxisPointer')
+      zr.off('dblclick', handleDblClick)
+      zr.off('contextmenu', handleContextMenu)
     }
-  }, [allData, period, visibleIndicators, hasBOLL, hasKDJ, hasMACD, hasRSI, loadMoreData, backtestMode, signalPoints, equityCurve, hasEquityData, chipsData, chipsHistory, chipsFetchedRanges, theme, palette, echartsTheme])
+  }, [allData, period, userLines, visibleIndicators, hasBOLL, hasKDJ, hasMACD, hasRSI, loadMoreData, backtestMode, signalPoints, equityCurve, hasEquityData, chipsData, chipsHistory, chipsFetchedRanges, theme, palette, echartsTheme])
 
   // 显示加载状态
   useEffect(() => {
@@ -2448,6 +2557,16 @@ export default function EChartsStockChart({
 
         {/* 快速时间窗（业界标准：1M / 3M / 6M / 1Y / All） */}
         <div className="flex items-center gap-0.5 shrink-0">
+          {userLines.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setUserLines([])}
+              className="px-1.5 py-0.5 text-[11px] rounded text-cyan-600 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-900/20 transition-colors duration-fast focus-ring mr-1 tabular-nums"
+              title="清除全部用户画线（双击空白主图可添加新线，右键单条线可单独删除）"
+            >
+              清线 {userLines.length}
+            </button>
+          )}
           <button
             type="button"
             onClick={handleReset}
