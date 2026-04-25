@@ -14,7 +14,7 @@ export function useSyncConfigActions({
   loadData: (silent?: boolean) => Promise<void>
   setItems: React.Dispatch<React.SetStateAction<SyncOverviewItem[]>>
 }) {
-  const { dataSource: configData } = useConfigStore()
+  const { dataSource: configData, fetchDataSourceConfig } = useConfigStore()
   const { addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback } = useTaskStore()
   const callbacksRef = useRef<Map<string, () => void>>(new Map())
 
@@ -39,31 +39,36 @@ export function useSyncConfigActions({
     }
   }, [unregisterCompletionCallback])
 
+  // 全量同步统一注入全局 earliest_history_date 作为 start_date。
+  // 配置弹窗未打开时 store 可能为空（useGlobalConfig 只在 open 时 fetch），此处兜底懒加载。
+  // 端点未声明 start_date 的（如 daily_basic / income）会被 FastAPI 忽略，落到 Service 类常量兜底。
+  const resolveEarliestStartDate = useCallback(async (): Promise<string | undefined> => {
+    let earliest = configData?.earliest_history_date
+    if (!earliest) {
+      await fetchDataSourceConfig()
+      earliest = useConfigStore.getState().dataSource?.earliest_history_date
+    }
+    return earliest?.replace(/-/g, '')
+  }, [configData, fetchDataSourceConfig])
+
   const handleSync = useCallback(async (item: SyncOverviewItem, type: 'incremental' | 'full') => {
     if (!item.api_prefix) return
     try {
-      // 若增量和全量共用同一 Celery 任务（没有独立的 /sync-full-history 路由），
-      // 全量同步直接调用 /sync-async 并传入 start_date，由后端以全量模式处理。
+      // 共用任务（无独立 /sync-full-history 路由）走 /sync-async + start_date 模拟全量
       const isSharedTask = type === 'full' && item.full_sync_task_name === item.incremental_task_name
       const endpoint = type === 'full' && !isSharedTask
         ? `/api${item.api_prefix}/sync-full-history`
         : `/api${item.api_prefix}/sync-async`
       const params: Record<string, string | number> = {}
       if (type === 'full') {
+        const startDate = await resolveEarliestStartDate()
+        if (startDate) params.start_date = startDate
         if (!isSharedTask) {
           if (item.full_sync_concurrency) params.concurrency = item.full_sync_concurrency
-          // 独立全量任务：start_date 由后端从任务默认值读取
-          // 全量同步前先清除 Redis 续继进度，确保从头开始而非续继上次
           try {
             await syncDashboardApi.clearProgress(item.table_key)
           } catch {
             // 清除失败不阻止全量同步（Redis 可能无进度记录）
-          }
-        } else {
-          // 共用任务（基础数据类）：传入 earliest_history_date 作为 start_date
-          const earliest = configData?.earliest_history_date
-          if (earliest) {
-            params.start_date = earliest.replace(/-/g, '')
           }
         }
       }
@@ -94,7 +99,7 @@ export function useSyncConfigActions({
     } catch (err: any) {
       toast.error(`提交失败: ${err.message}`)
     }
-  }, [addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, loadData, configData])
+  }, [addTask, triggerPoll, registerCompletionCallback, unregisterCompletionCallback, loadData, resolveEarliestStartDate])
 
   const handleClearProgress = useCallback(async () => {
     if (!clearProgressItem) return

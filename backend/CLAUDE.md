@@ -708,6 +708,7 @@ for item in items:
 - [ ] 任务元数据添加到 `task_metadata.py`
 - [ ] API 端点包含查询、统计、异步同步（至少3个）
 - [ ] 全量同步端点提交前调用 `release_stale_lock(table_key)`
+- [ ] `/sync-full-history` 端点声明 `start_date: Optional[str] = Query(None)` 并透传给 task；前端 `useSyncConfigActions` 会从全局 `earliest_history_date` 注入该参数，未声明则被 FastAPI 忽略，落到 Service 类常量 `FULL_HISTORY_START_DATE` 兜底（参考 `cyq_chips.py` / `stock_daily.py`）
 - [ ] Tushare Provider 添加 `get_your_data()` 方法（用 `_query` + `_build_params`，**必须包含 `limit`/`offset` 参数**以支持 `run_incremental_sync` 翻页）
 - [ ] `sync_configs` 表登记（`105_create_sync_configs.sql` 追加并重新执行）
 - [ ] `FULL_SYNC_REDIS_KEYS` 更新（`sync_dashboard.py`）

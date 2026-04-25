@@ -238,6 +238,7 @@ useEffect(() => { return () => cleanup() }, [])
 - `handleFullSync` 只传 `start_date`，**不传**页面筛选器当前日期
 - 后端用 `CLEARABLE_TABLES` 白名单防止任意表注入，新增数据表时需同步更新 `data_ops.py`
 - 若每次普通同步本身就是全量拉取（如 `stock_basic`），不加全量同步按钮
+- **`useConfigStore` 懒加载陷阱**：`useGlobalConfig` 仅在数据源配置弹窗打开时 `fetchDataSourceConfig()`，未打开过则 store 为 `null`。任何全量同步入口读取 `earliest_history_date` 前必须兜底懒加载 + `useConfigStore.getState()` 取最新值（参考 `useSyncConfigActions.resolveEarliestStartDate`）；否则会静默落到后端 Service 类常量兜底，与设置不一致
 
 ---
 
