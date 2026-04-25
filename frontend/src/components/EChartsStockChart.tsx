@@ -119,6 +119,75 @@ interface EChartsStockChartProps {
   hideSettingsButton?: boolean  // 是否隐藏设置按钮
 }
 
+/**
+ * 把日 K 数据按"周（ISO 周）"或"月"聚合：开=组首 open / 收=组末 close / 高=max / 低=min / 量=sum / 额=sum
+ * 聚合后 MA 在 ChartData 上重算（基于聚合后的 close）；技术指标（MACD/KDJ/RSI/BOLL）在周/月模式下置 null（用户专注趋势）
+ */
+function aggregateBars(daily: ChartData[], period: 'W' | 'M'): ChartData[] {
+  if (daily.length === 0) return []
+  const sorted = [...daily].sort((a, b) =>
+    new Date(a.date.split('T')[0].split(' ')[0]).getTime() -
+    new Date(b.date.split('T')[0].split(' ')[0]).getTime()
+  )
+  const groupKeyOf = (dateStr: string): string => {
+    const ds = dateStr.split('T')[0].split(' ')[0]
+    const d = new Date(ds)
+    if (period === 'M') {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    }
+    // ISO 周：复制副本以防修改原对象，把日期归到当周四
+    const tmp = new Date(d)
+    tmp.setHours(0, 0, 0, 0)
+    tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
+    const yearStart = new Date(tmp.getFullYear(), 0, 4)
+    const week = 1 + Math.round(((tmp.getTime() - yearStart.getTime()) / 86400000 - 3 + ((yearStart.getDay() + 6) % 7)) / 7)
+    return `${tmp.getFullYear()}-W${String(week).padStart(2, '0')}`
+  }
+  const groups = new Map<string, ChartData[]>()
+  for (const d of sorted) {
+    const k = groupKeyOf(d.date)
+    if (!groups.has(k)) groups.set(k, [])
+    groups.get(k)!.push(d)
+  }
+  const aggregated: ChartData[] = []
+  const keys = Array.from(groups.keys()).sort()
+  for (const k of keys) {
+    const bars = groups.get(k)!
+    if (bars.length === 0) continue
+    const open = bars[0].open
+    const close = bars[bars.length - 1].close
+    const high = Math.max(...bars.map(b => b.high))
+    const low = Math.min(...bars.map(b => b.low))
+    const volume = bars.reduce((a, b) => a + (b.volume || 0), 0)
+    const amount = bars.reduce((a, b) => a + (b.amount ?? 0), 0)
+    aggregated.push({
+      date: bars[bars.length - 1].date,  // 用组内末日作为锚点（同花顺/通达信惯例）
+      open, close, high, low, volume, amount,
+    })
+  }
+  // 重算 MA（基于聚合后的 close）
+  const closes = aggregated.map(b => b.close)
+  const computeSMA = (period: number) => {
+    return aggregated.map((_, i) => {
+      if (i < period - 1) return null
+      let sum = 0
+      for (let j = i - period + 1; j <= i; j++) sum += closes[j]
+      return +(sum / period).toFixed(4)
+    })
+  }
+  const ma5 = computeSMA(5)
+  const ma10 = computeSMA(10)
+  const ma20 = computeSMA(20)
+  const ma60 = computeSMA(60)
+  return aggregated.map((b, i) => ({
+    ...b,
+    MA5: ma5[i] ?? null,
+    MA10: ma10[i] ?? null,
+    MA20: ma20[i] ?? null,
+    MA60: ma60[i] ?? null,
+  }))
+}
+
 export default function EChartsStockChart({
   data,
   stockCode,
@@ -137,6 +206,23 @@ export default function EChartsStockChart({
   const chartRef = useRef<HTMLDivElement>(null)
   const chartInstanceRef = useRef<echarts.ECharts | null>(null)
   const { theme, echartsTheme, palette } = useEChartsTheme()
+  // K 线周期：日 / 周 / 月（同花顺标配；分时和分钟级见任务 20，本期不实现）
+  const PERIOD_STORAGE_KEY = 'chart_period:v1'
+  const [period, setPeriod] = useState<'D' | 'W' | 'M'>('D')
+  // 客户端读取持久化的 period（SSR 安全：首帧 'D'，mount 后再读）
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const saved = localStorage.getItem(PERIOD_STORAGE_KEY)
+      if (saved === 'W' || saved === 'M' || saved === 'D') setPeriod(saved)
+    } catch {}
+  }, [])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try { localStorage.setItem(PERIOD_STORAGE_KEY, period) } catch {}
+    // 切换 period 时重置缩放（周/月数据点数显著少于日 K，旧 zoom 百分比失去意义）
+    currentDataZoomRef.current = { start: 70, end: 100 }
+  }, [period])
   const [allData, setAllData] = useState<ChartData[]>(data)
   const allDataRef = useRef<ChartData[]>(data)  // ref 版本，供事件回调读取最新值
   const [isLoading, setIsLoading] = useState(false)
@@ -431,9 +517,13 @@ export default function EChartsStockChart({
     chart.resize()
 
     // 准备数据（ECharts需要升序排列）
-    const sortedData = [...allData].sort((a, b) =>
+    // 周/月 K 用 aggregateBars 聚合；日 K 直接排序
+    const sortedDaily = [...allData].sort((a, b) =>
       new Date(removeDateTimePart(a.date)).getTime() - new Date(removeDateTimePart(b.date)).getTime()
     )
+    const sortedData: ChartData[] = period === 'D'
+      ? sortedDaily
+      : aggregateBars(sortedDaily, period)
 
     // 提取日期和数据（格式化日期为 YYYY-MM-DD）
     const dates = sortedData.map(d => {
@@ -442,10 +532,10 @@ export default function EChartsStockChart({
       return dateStr.split('T')[0].split(' ')[0]
     })
     // 涨跌停状态识别（A 股惯例：close 完全等于涨跌停价，精确到 2 位小数）
-    // 必须在 ohlcData 之前算（要把 itemStyle 注入数据点）
+    // 周/月 K 是聚合数据，涨跌停判定不适用（业界做法：仅日 K 标识）
     const limitPctForStatus = getLimitPct(stockCode, stockName)
     const limitStatus: Array<'up' | 'down' | null> = sortedData.map((d, i) => {
-      if (i === 0) return null
+      if (i === 0 || period !== 'D') return null
       const prev = sortedData[i - 1]
       const upPrice = +(prev.close * (1 + limitPctForStatus)).toFixed(2)
       const downPrice = +(prev.close * (1 - limitPctForStatus)).toFixed(2)
@@ -490,8 +580,9 @@ export default function EChartsStockChart({
     }
 
     // 涨跌停参考线数据（按代码 + 名称识别板块；hover 联动重建 markLine 时也复用）
+    // 周/月 K 不显示（涨跌停是日级概念，业界做法）
     const limitPct = getLimitPct(stockCode, stockName)
-    const limitRefBar = sortedData.length >= 2 ? sortedData[sortedData.length - 2] : null
+    const limitRefBar = period === 'D' && sortedData.length >= 2 ? sortedData[sortedData.length - 2] : null
     const limitUp = limitRefBar != null ? +(limitRefBar.close * (1 + limitPct)).toFixed(2) : null
     const limitDown = limitRefBar != null ? +(limitRefBar.close * (1 - limitPct)).toFixed(2) : null
     const limitPctLabel = `${(limitPct * 100).toFixed(0)}%`
@@ -2151,7 +2242,7 @@ export default function EChartsStockChart({
       chart.off('dataZoom')
       chart.off('updateAxisPointer')
     }
-  }, [allData, visibleIndicators, hasBOLL, hasKDJ, hasMACD, hasRSI, loadMoreData, backtestMode, signalPoints, equityCurve, hasEquityData, chipsData, chipsHistory, chipsFetchedRanges, theme, palette, echartsTheme])
+  }, [allData, period, visibleIndicators, hasBOLL, hasKDJ, hasMACD, hasRSI, loadMoreData, backtestMode, signalPoints, equityCurve, hasEquityData, chipsData, chipsHistory, chipsFetchedRanges, theme, palette, echartsTheme])
 
   // 显示加载状态
   useEffect(() => {
@@ -2296,9 +2387,35 @@ export default function EChartsStockChart({
         )}
       </div>
 
-      {/* 底部工具栏：左侧 MACD/KDJ/RSI 单选 Tab，右侧 1M/3M/6M/1Y/All 快速时间窗 */}
+      {/* 底部工具栏：左侧 周期 + MACD/KDJ/RSI 单选 Tab，右侧 1M/3M/6M/1Y/All 快速时间窗 */}
       <div className="mt-2 flex items-center justify-between gap-2 border-t border-gray-200 dark:border-gray-700 pt-2 px-2">
         <div className="flex items-center gap-1 overflow-x-auto scrollbar-thin">
+          {/* 周期切换：日 / 周 / 月（同花顺/通达信标配；分钟级见任务 20）*/}
+          {([
+            { key: 'D' as const, label: '日' },
+            { key: 'W' as const, label: '周' },
+            { key: 'M' as const, label: '月' },
+          ]).map(tab => {
+            const isActive = period === tab.key
+            return (
+              <button
+                key={`period-${tab.key}`}
+                type="button"
+                onClick={() => !isActive && setPeriod(tab.key)}
+                className={[
+                  'px-2.5 py-1 text-xs rounded-md transition-colors duration-fast whitespace-nowrap tabular-nums focus-ring',
+                  isActive
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                ].join(' ')}
+                aria-pressed={isActive}
+                title={`切换到${tab.label} K`}
+              >
+                {tab.label}
+              </button>
+            )
+          })}
+          <span className="mx-1 h-4 w-px bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
           {([
             { key: 'macd' as const, label: 'MACD', available: hasMACD },
             { key: 'kdj' as const,  label: 'KDJ',  available: hasKDJ },
