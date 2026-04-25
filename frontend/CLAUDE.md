@@ -273,6 +273,7 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 **indicator 单选 + 设置弹窗**：
 - MACD/KDJ/RSI 在底部 Tab 单选切换（`enforceSingleIndicator()` 强制三者互斥），设置弹窗只放成交量 / BOLL / 筹码分布开关
 - `localStorage` 用 `{ ...DEFAULT_INDICATORS, ...JSON.parse(saved) }` 兜底新增字段（如 `chips`），保证旧用户数据兼容
+- **`switchIndicator` 不要在 `setState(updater)` 的 updater 函数里同步调父组件回调**——updater 在 React render/commit 阶段执行，同步触发父 setState 会报 "Cannot update a component (StockPriceCard) while rendering a different component (EChartsStockChart)"。已有的 `switchIndicator` 用 `queueMicrotask` 把 `onIndicatorsChange` 派发推到 commit 之后，新增类似的"子状态变更需要回流父组件"模式时照抄
 
 **主题联动（`useEChartsTheme`）**：所有 ECharts 实例组件（`EChartsStockChart` / `MinuteChart` / `BacktestKLineChart` / `EquityCurveChart` / `ai-lab/*`）统一使用 [useEChartsTheme](src/hooks/useEChartsTheme.ts) 跟随 `next-themes` 的深浅主题。约定：
 

@@ -211,7 +211,9 @@ export default function EChartsStockChart({
     setVisibleIndicators(prev => {
       const next: IndicatorSettings = { ...prev, macd: false, kdj: false, rsi: false }
       next[target] = true
-      onIndicatorsChange?.(next)
+      // updater 在 render/commit 阶段执行——直接调父 setState 会报
+      // "Cannot update a component while rendering another"，必须异步派发
+      if (onIndicatorsChange) queueMicrotask(() => onIndicatorsChange(next))
       return next
     })
   }
