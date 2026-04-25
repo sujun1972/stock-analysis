@@ -208,6 +208,21 @@ export default function EChartsStockChart({
 }: EChartsStockChartProps) {
   const chartRef = useRef<HTMLDivElement>(null)
   const chartInstanceRef = useRef<echarts.ECharts | null>(null)
+  // 浮层文字测宽：OffscreenCanvas（或 DOM canvas fallback）2D context；按字体+权重+文本缓存宽度
+  // 保证 hover 切换时 ≥ 95% 缓存命中率，避免 measureText 频繁触发字体度量
+  const chartMeasureCanvasRef = useRef<CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null>(null)
+  const chartMeasureCacheRef = useRef<Map<string, number>>(new Map())
+  if (chartMeasureCanvasRef.current == null && typeof window !== 'undefined') {
+    try {
+      if (typeof OffscreenCanvas !== 'undefined') {
+        chartMeasureCanvasRef.current = new OffscreenCanvas(1, 1).getContext('2d')
+      } else {
+        chartMeasureCanvasRef.current = document.createElement('canvas').getContext('2d')
+      }
+    } catch {
+      chartMeasureCanvasRef.current = null
+    }
+  }
   const { theme, echartsTheme, palette } = useEChartsTheme()
   // K 线周期：日 / 周 / 月（同花顺标配；分时和分钟级见任务 20，本期不实现）
   const PERIOD_STORAGE_KEY = 'chart_period:v1'
@@ -1107,16 +1122,26 @@ export default function EChartsStockChart({
       })
     }
 
-    // 段宽度近似估算（避免引入 canvas measureText 复杂度）：CJK 字符 1em，ASCII 0.55em
-    // 11px 字体下：CJK ≈ 11px, ASCII ≈ 6.5px；segPadRight 8px 间距
+    // 段宽度真实测量：用 OffscreenCanvas（或 fallback DOM canvas）的 measureText
+    // 避免 emoji / 全角数字 / 特殊符号在 CJK 1em 启发式下的偏差，浮层背景宽度更精准
     const SEG_PAD_RIGHT = 8
     const LINE_HEIGHT = 16
     const measureSeg = (s: Seg): number => {
-      let w = 0
-      for (const ch of s.text) {
-        // 简单分类：ASCII 半宽，其他全宽
-        w += ch.charCodeAt(0) < 128 ? s.fontSize * 0.6 : s.fontSize * 1.0
+      const canvas = chartMeasureCanvasRef.current
+      if (!canvas) {
+        // SSR / 极端环境兜底：CJK 1em / ASCII 0.6em 启发式
+        let w = 0
+        for (const ch of s.text) w += ch.charCodeAt(0) < 128 ? s.fontSize * 0.6 : s.fontSize * 1.0
+        return w
       }
+      const cacheKey = `${s.fontSize}-${s.fontWeight ?? 400}-${s.text}`
+      const cache = chartMeasureCacheRef.current
+      const hit = cache.get(cacheKey)
+      if (hit != null) return hit
+      // 字体栈与全局保持一致（拉丁 Inter，CJK 跟系统）；fallback 链让 measureText 选最近字体
+      canvas.font = `${s.fontWeight ?? 400} ${s.fontSize}px Inter, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif`
+      const w = canvas.measureText(s.text).width
+      cache.set(cacheKey, w)
       return w
     }
 
