@@ -597,10 +597,15 @@ export default function EChartsStockChart({
         : { color: '#22c55e', borderColor: '#22c55e', borderWidth: 2, shadowColor: '#22c55e', shadowBlur: 10 }
       return { value: [d.open, d.close, d.low, d.high], itemStyle }
     })
+    // 副图（成交量、MACD 柱图）使用降饱和度的红绿（§16），
+    // 让 K 线主图保留高饱和度 #ef4444/#22c55e 主导阅读重心；
+    // 副图 #f87171/#34d399（对应 Tailwind red-400/emerald-400）保持 A 股语义同时降低视觉噪音
+    const SUBPLOT_RED = '#f87171'
+    const SUBPLOT_GREEN = '#34d399'
     const volumeData = sortedData.map((d, idx) => ({
       value: d.volume,
       itemStyle: {
-        color: d.close >= d.open ? '#ef4444' : '#22c55e'
+        color: d.close >= d.open ? SUBPLOT_RED : SUBPLOT_GREEN
       }
     }))
 
@@ -725,7 +730,8 @@ export default function EChartsStockChart({
     const macdHistData = sortedData.map((d, idx) => ({
       value: d.MACD_HIST ?? '-',
       itemStyle: {
-        color: (d.MACD_HIST ?? 0) >= 0 ? '#ef4444' : '#22c55e'
+        // 副图柱图复用 §16 降饱和红绿
+        color: (d.MACD_HIST ?? 0) >= 0 ? SUBPLOT_RED : SUBPLOT_GREEN
       }
     }))
 
