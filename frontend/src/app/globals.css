@@ -34,6 +34,13 @@
     --warning-soft: 48 96% 92%;
     --info: 221 83% 53%;          /* 信息蓝（= primary 近似值） */
 
+    /* 评分/价值指标色阶 —— 蓝（低）→ 金（中）→ 紫（高），故意避开行情红绿，
+       供 4 类专家评分（游资/中线/价值/CIO）和价值类指标（ROC / EY / 安全边际）使用。
+       禁止与 --positive / --negative 混用。负值/缺失走 muted-foreground。 */
+    --score-low: 217 91% 50%;     /* 低分蓝（4-6） */
+    --score-mid: 38 92% 45%;      /* 中分金（6-8） */
+    --score-high: 271 76% 53%;    /* 高分紫（≥8） */
+
     /* 过渡时长分档 —— 用 var(--duration-fast) 等，避免随手写 0.2s */
     --duration-fast: 120ms;
     --duration-normal: 200ms;
@@ -69,6 +76,10 @@
     --warning: 48 96% 70%;        /* yellow-300 on dark 更明显 */
     --warning-soft: 43 74% 17%;
     --info: 217 91% 70%;
+    /* 评分色阶在深色模式下整体提亮一档以保证 WCAG AA */
+    --score-low: 217 91% 70%;
+    --score-mid: 48 96% 65%;
+    --score-high: 271 91% 76%;
   }
 }
 

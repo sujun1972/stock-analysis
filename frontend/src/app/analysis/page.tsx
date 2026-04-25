@@ -71,20 +71,27 @@ function priceColor(pct?: number | null) {
   return 'text-gray-900 dark:text-white'
 }
 
-/** 价值度量配色（ROC/EY/安全边际：正数红、负数绿、0 黑） */
-function valueMetricColor(v?: number | null) {
+/**
+ * 价值类指标色阶（ROC / EY / 安全边际）
+ * 用 score-* 蓝-金-紫色阶，避免与行情红绿混淆。
+ * 各指标语境不同，调用方传自己的 [mid, high] 阈值边界（小数形式：0.15 = 15%）。
+ * 负值统一显示 muted（不再借用行情绿，避免与"跌"语义混淆）。
+ */
+function valueScaleColor(v: number | null | undefined, mid: number, high: number) {
   if (v == null || !isFinite(v)) return ''
-  if (v > 0) return 'text-positive'
-  if (v < 0) return 'text-negative'
-  return ''
+  if (v < 0) return 'text-muted-foreground'
+  if (v >= high) return 'text-score-high'
+  if (v >= mid) return 'text-score-mid'
+  return 'text-score-low'
 }
 
-/** 评分色阶（与共享 ScoreBadge 对齐：≥8 红、≥6 黄、其余灰） */
+/** 评分色阶（4 专家共用：≥8 紫、≥6 金、≥4 蓝、其余灰；与行情红绿独立） */
 function scoreColor(s?: number | null) {
   if (s == null) return 'text-gray-400 dark:text-gray-500'
-  if (s >= 8) return 'text-red-600 dark:text-red-400'
-  if (s >= 6) return 'text-yellow-600 dark:text-yellow-500'
-  return 'text-gray-500 dark:text-gray-400'
+  if (s >= 8) return 'text-score-high'
+  if (s >= 6) return 'text-score-mid'
+  if (s >= 4) return 'text-score-low'
+  return 'text-muted-foreground'
 }
 
 /** 百分比（小数 → %，用于 ROC / 收益率 / 安全边际） */
@@ -156,19 +163,19 @@ function QuotePanel({ q, stock }: { q: StockQuotePanel; stock: StockInfo | null 
     {
       label: 'ROC',
       value: fmtPct(vm?.roc),
-      color: valueMetricColor(vm?.roc),
+      color: valueScaleColor(vm?.roc, 0.15, 0.30),
       title: '资本收益率 ROC = EBIT / (净营运资本 + 净固定资产)',
     },
     {
       label: '收益率',
       value: fmtPct(vm?.earnings_yield),
-      color: valueMetricColor(vm?.earnings_yield),
+      color: valueScaleColor(vm?.earnings_yield, 0.10, 0.20),
       title: '收益率 EY = EBIT / EV',
     },
     {
       label: '安全边际',
       value: fmtPct(vm?.intrinsic_margin, 0),
-      color: valueMetricColor(vm?.intrinsic_margin),
+      color: valueScaleColor(vm?.intrinsic_margin, 0.30, 1.00),
       title: vm?.intrinsic_value != null
         ? `格雷厄姆内在价值 ${vm.intrinsic_value.toFixed(2)} 元（g=${((vm.g_rate ?? 0) * 100).toFixed(1)}%）`
         : '格雷厄姆内在价值数据不足',

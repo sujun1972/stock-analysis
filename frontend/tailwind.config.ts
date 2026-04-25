@@ -90,6 +90,12 @@ const config: Config = {
         info: {
           DEFAULT: "hsl(var(--info))",
         },
+        // 评分/价值指标色阶（蓝→金→紫），独立于行情红绿
+        score: {
+          low: "hsl(var(--score-low))",
+          mid: "hsl(var(--score-mid))",
+          high: "hsl(var(--score-high))",
+        },
       },
       transitionDuration: {
         fast: "var(--duration-fast)",

@@ -12,11 +12,17 @@ function resolveTone(score: number | null | undefined, variant: ScoreBadgeVarian
       ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600'
       : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
   }
+  // 评分色阶用 score-* token（蓝/金/紫），与行情红绿独立——避免评分 8 分和涨幅红色在同一行混淆
+  // 浅色模式：紫/蓝走白字（对比度 ≥4.5:1）；金色用深字（金色背景 white 字仅 ~2:1）
+  // 深色模式：score-* 整体提亮一档，全部走深字保证对比度
   if (score >= 8) {
-    return 'bg-red-600 text-white dark:bg-red-500 dark:text-white'
+    return 'bg-score-high text-white dark:text-gray-950'
   }
   if (score >= 6) {
-    return 'bg-yellow-300 text-yellow-900 dark:bg-yellow-500 dark:text-yellow-950'
+    return 'bg-score-mid text-gray-950'
+  }
+  if (score >= 4) {
+    return 'bg-score-low text-white dark:text-gray-950'
   }
   return 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
 }
