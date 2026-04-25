@@ -449,6 +449,26 @@ export default function EChartsStockChart({
       }
     }))
 
+    // 跳空缺口扫描：前一日 high < 今日 low（向上跳空）/ 前一日 low > 今日 high（向下跳空）
+    // 业界标准（同花顺/通达信）：用淡色矩形填充缺口区域，让用户直观看到"是否回补"
+    interface Gap { startDate: string; endDate: string; priceMin: number; priceMax: number; up: boolean }
+    const gaps: Gap[] = []
+    for (let i = 1; i < sortedData.length; i++) {
+      const prev = sortedData[i - 1]
+      const curr = sortedData[i]
+      if (curr.low > prev.high) {
+        const gapPct = (curr.low - prev.high) / prev.close
+        if (gapPct >= 0.005) {
+          gaps.push({ startDate: dates[i - 1], endDate: dates[i], priceMin: prev.high, priceMax: curr.low, up: true })
+        }
+      } else if (curr.high < prev.low) {
+        const gapPct = (prev.low - curr.high) / prev.close
+        if (gapPct >= 0.005) {
+          gaps.push({ startDate: dates[i - 1], endDate: dates[i], priceMin: curr.high, priceMax: prev.low, up: false })
+        }
+      }
+    }
+
     // 涨跌停参考线数据（按代码 + 名称识别板块；hover 联动重建 markLine 时也复用）
     const limitPct = getLimitPct(stockCode, stockName)
     const limitRefBar = sortedData.length >= 2 ? sortedData[sortedData.length - 2] : null
@@ -1390,6 +1410,16 @@ export default function EChartsStockChart({
             },
             // 现价水平虚线（无论是否有筹码图都贯穿主图）
             ...(currentPriceLine ? { markLine: currentPriceLine } : {}),
+            // 跳空缺口淡色矩形：向上跳空红色 / 向下跳空绿色，opacity 0.15 不抢戏
+            ...(gaps.length > 0 ? {
+              markArea: {
+                silent: true,
+                data: gaps.map(g => ([
+                  { coord: [g.startDate, g.priceMin], itemStyle: { color: g.up ? '#ef4444' : '#22c55e', opacity: 0.15 } },
+                  { coord: [g.endDate, g.priceMax] }
+                ]))
+              }
+            } : {}),
             // 回测模式：添加买卖信号markPoint
             ...(backtestMode && (buyMarkPoints.length > 0 || sellMarkPoints.length > 0) ? {
               markPoint: {
@@ -1929,7 +1959,17 @@ export default function EChartsStockChart({
                 silent: true,
                 symbol: 'none',
                 data: segs,
-              }
+              },
+              // hover 联动重建 K 线 series 时同步保留缺口标注
+              ...(gaps.length > 0 ? {
+                markArea: {
+                  silent: true,
+                  data: gaps.map(g => ([
+                    { coord: [g.startDate, g.priceMin], itemStyle: { color: g.up ? '#ef4444' : '#22c55e', opacity: 0.15 } },
+                    { coord: [g.endDate, g.priceMax] }
+                  ]))
+                }
+              } : {}),
             }
           }
           return s
