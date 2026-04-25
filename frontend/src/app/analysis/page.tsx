@@ -7,6 +7,7 @@ import { apiClient } from '@/lib/api-client'
 import type { StockInfo, StockQuotePanel } from '@/types'
 import { HotMoneyViewDialog } from '@/components/stocks/HotMoneyViewDialog'
 import { MoneyflowCard } from '@/components/stocks/MoneyflowCard'
+import { BillboardCard } from '@/components/stocks/BillboardCard'
 
 // 动态导入StockPriceCard组件（统一的图表组件）
 const StockPriceCard = dynamic(() => import('@/components/StockPriceCard'), {
@@ -939,6 +940,9 @@ function AnalysisContent() {
 
       {/* 资金流向（4 档分布 + N 日主力净流入） */}
       {tsCode && <MoneyflowCard tsCode={tsCode} />}
+
+      {/* 近 60 日龙虎榜（含席位明细折叠） */}
+      {tsCode && <BillboardCard tsCode={tsCode} />}
     </div>
   )
 }
