@@ -2169,11 +2169,11 @@ export default function EChartsStockChart({
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
           {([
-            { key: '1M', label: '1月', days: 22 },
-            { key: '3M', label: '3月', days: 66 },
-            { key: '6M', label: '6月', days: 132 },
-            { key: '1Y', label: '1年', days: 252 },
-            { key: 'All', label: '全部', days: -1 },
+            { key: '1M', label: '1月', calendarDays: 30 },
+            { key: '3M', label: '3月', calendarDays: 90 },
+            { key: '6M', label: '6月', calendarDays: 180 },
+            { key: '1Y', label: '1年', calendarDays: 365 },
+            { key: 'All', label: '全部', calendarDays: -1 },
           ] as const).map(opt => (
             <button
               key={opt.key}
@@ -2181,18 +2181,24 @@ export default function EChartsStockChart({
               onClick={() => {
                 const chart = chartInstanceRef.current
                 if (!chart) return
-                const total = allDataRef.current.length
+                const dataset = allDataRef.current
+                const total = dataset.length
                 if (total === 0) return
                 let start = 0
                 const end = 100
-                if (opt.days > 0) {
-                  const showCount = Math.min(opt.days, total)
-                  start = Math.max(0, ((total - showCount) / total) * 100)
+                if (opt.calendarDays > 0) {
+                  // 用最新一根 K 线的日期作为锚点（避免今天非交易日时锚点漂移）
+                  const lastDate = removeDateTimePart(dataset[total - 1].date)
+                  const cutoff = new Date(lastDate)
+                  cutoff.setDate(cutoff.getDate() - opt.calendarDays)
+                  const cutoffStr = cutoff.toISOString().slice(0, 10)
+                  const startIdx = dataset.findIndex(d => removeDateTimePart(d.date) >= cutoffStr)
+                  start = startIdx >= 0 ? (startIdx / total) * 100 : 0
                 }
                 currentDataZoomRef.current = { start, end }
                 chart.dispatchAction({ type: 'dataZoom', start, end })
                 // 'All' 视图触发懒加载续载更早历史
-                if (opt.days === -1) {
+                if (opt.calendarDays === -1) {
                   requestAnimationFrame(() => loadMoreData())
                 }
               }}
