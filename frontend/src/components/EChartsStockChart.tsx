@@ -1,11 +1,14 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { createPortal } from 'react-dom'
 import * as echarts from 'echarts'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Settings } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { useEChartsTheme } from '@/hooks/useEChartsTheme'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
 import {
   formatVolume as formatVolumeUtil,
   removeDateTimePart as removeDateTimePartUtil,
@@ -219,32 +222,8 @@ export default function EChartsStockChart({
     })
   }
 
-  // 设置对话框显示状态
+  // 设置对话框显示状态（shadcn Dialog 已内置 body 锁滚动 + Esc 关闭 + 焦点管理）
   const [showSettings, setShowSettings] = useState(false)
-
-  /**
-   * 控制 body 滚动：打开对话框时禁用，关闭时恢复
-   */
-  useEffect(() => {
-    if (showSettings) {
-      // 保存当前滚动位置
-      const scrollY = window.scrollY
-      document.body.style.overflow = 'hidden'
-      document.body.style.position = 'fixed'
-      document.body.style.top = `-${scrollY}px`
-      document.body.style.width = '100%'
-    } else {
-      // 恢复滚动
-      const scrollY = document.body.style.top
-      document.body.style.overflow = ''
-      document.body.style.position = ''
-      document.body.style.top = ''
-      document.body.style.width = ''
-      if (scrollY) {
-        window.scrollTo(0, parseInt(scrollY || '0') * -1)
-      }
-    }
-  }, [showSettings])
 
   // 检查是否有权益曲线数据
   const hasEquityData = backtestMode && equityCurve && equityCurve.length > 0
@@ -1999,105 +1978,79 @@ export default function EChartsStockChart({
       {/* 设置按钮（仅在未隐藏且非外部控制时显示） */}
       {!hideSettingsButton && !externalVisibleIndicators && (
         <div className="mb-4 flex justify-end">
-          <button
-            onClick={() => setShowSettings(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            指标设置
-          </button>
+          <Button variant="outline" size="sm" onClick={() => setShowSettings(true)}>
+            <Settings className="w-4 h-4 mr-2" /> 指标设置
+          </Button>
         </div>
       )}
 
-      {/* 设置对话框（使用 Portal 渲染到 body，确保遮罩层正确覆盖） */}
-      {showSettings && typeof window !== 'undefined' && createPortal(
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
-          onClick={() => setShowSettings(false)}
-          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
-        >
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">选择显示的指标</h3>
-              <button
-                onClick={() => setShowSettings(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+      {/* 设置对话框：shadcn Dialog 内置 Esc 关闭 / 遮罩点击 / 焦点循环 / body 锁滚动 */}
+      <Dialog
+        open={showSettings}
+        onOpenChange={(open) => {
+          setShowSettings(open)
+          if (!open) {
+            requestAnimationFrame(() => chartInstanceRef.current?.resize())
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>选择显示的指标</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="flex items-center gap-3">
+              <Checkbox
+                id="indicator-volume"
+                checked={visibleIndicators.volume}
+                onCheckedChange={(v) => setVisibleIndicators({ ...visibleIndicators, volume: v === true })}
+              />
+              <Label htmlFor="indicator-volume" className="cursor-pointer">成交量 (Volume)</Label>
+            </div>
+            <div className="flex items-center gap-3">
+              <Checkbox
+                id="indicator-boll"
+                checked={visibleIndicators.boll}
+                disabled={!hasBOLL}
+                onCheckedChange={(v) => setVisibleIndicators({ ...visibleIndicators, boll: v === true })}
+              />
+              <Label
+                htmlFor="indicator-boll"
+                className={hasBOLL ? 'cursor-pointer' : 'cursor-not-allowed text-muted-foreground'}
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+                布林带 (BOLL) {!hasBOLL && '(无数据)'}
+              </Label>
             </div>
-
-            <div className="space-y-3">
-              {/* 成交量 */}
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={visibleIndicators.volume}
-                  onChange={(e) => setVisibleIndicators({ ...visibleIndicators, volume: e.target.checked })}
-                  className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
-                />
-                <span className="ml-3 text-gray-900 dark:text-white">成交量 (Volume)</span>
-              </label>
-
-              {/* BOLL（叠加在主图） */}
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={visibleIndicators.boll}
-                  onChange={(e) => setVisibleIndicators({ ...visibleIndicators, boll: e.target.checked })}
-                  disabled={!hasBOLL}
-                  className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 disabled:opacity-50"
-                />
-                <span className={`ml-3 ${hasBOLL ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-600'}`}>
-                  布林带 (BOLL) {!hasBOLL && '(无数据)'}
-                </span>
-              </label>
-
-              {/* 筹码分布（嵌入主图右侧） */}
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={visibleIndicators.chips}
-                  onChange={(e) => setVisibleIndicators({ ...visibleIndicators, chips: e.target.checked })}
-                  disabled={!hasChipsData}
-                  className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 disabled:opacity-50"
-                />
-                <span className={`ml-3 ${hasChipsData ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-600'}`}>
-                  筹码分布 {!hasChipsData && '(无数据)'}
-                </span>
-              </label>
-
-              <p className="text-xs text-gray-500 dark:text-gray-400 pt-2 border-t border-gray-200 dark:border-gray-700">
-                MACD / KDJ / RSI 请在图表下方的 Tab 栏切换（业界标准：一次显示一个副图，避免纵向过长）
-              </p>
-            </div>
-
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={() => {
-                  setShowSettings(false)
-                  // 关闭对话框后立即触发图表resize，确保布局正确
-                  // 使用requestAnimationFrame确保DOM更新完成后再resize
-                  requestAnimationFrame(() => {
-                    if (chartInstanceRef.current) {
-                      chartInstanceRef.current.resize()
-                    }
-                  })
-                }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            <div className="flex items-center gap-3">
+              <Checkbox
+                id="indicator-chips"
+                checked={visibleIndicators.chips}
+                disabled={!hasChipsData}
+                onCheckedChange={(v) => setVisibleIndicators({ ...visibleIndicators, chips: v === true })}
+              />
+              <Label
+                htmlFor="indicator-chips"
+                className={hasChipsData ? 'cursor-pointer' : 'cursor-not-allowed text-muted-foreground'}
               >
-                确定
-              </button>
+                筹码分布 {!hasChipsData && '(无数据)'}
+              </Label>
             </div>
+            <p className="text-xs text-muted-foreground pt-2 border-t">
+              MACD / KDJ / RSI 请在图表下方的 Tab 栏切换（业界标准：一次显示一个副图，避免纵向过长）
+            </p>
           </div>
-        </div>,
-        document.body
-      )}
+          <div className="flex justify-end">
+            <Button
+              onClick={() => {
+                setShowSettings(false)
+                requestAnimationFrame(() => chartInstanceRef.current?.resize())
+              }}
+            >
+              确定
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* 回测模式提示 */}
       {backtestMode && hasEquityData && (
