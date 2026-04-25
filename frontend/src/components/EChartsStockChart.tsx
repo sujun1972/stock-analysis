@@ -1103,33 +1103,39 @@ export default function EChartsStockChart({
           // （成交量底部 500.00万 与 KDJ 顶部 100.00 / 主图底部 50.00 与成交量顶部 4000万 重叠）
           const subPanelLabelExtras = !isMainPanel ? { showMinLabel: false, showMaxLabel: false } : {}
 
+          // 十字线 Y 轴价格 pill：显式 show:true + backgroundColor + padding 让 pill 在 hover 时浮在右轴
+          // 对照同花顺/通达信，是十字线"测价"功能的核心；之前因整体覆盖丢失 show:true 导致部分主题下不渲染
+          const yAxisPointerPill = (formatter: (params: any) => string) => ({
+            show: true,
+            formatter,
+            backgroundColor: theme === 'dark' ? '#374151' : '#1f2937',
+            color: '#fff',
+            padding: [3, 6] as [number, number],
+            borderRadius: 3,
+            fontSize: 11,
+          })
+
           // 成交量Y轴：添加万/亿单位格式化
           if (isVolumePanel) {
             yAxisConfig.axisLabel = {
               ...subPanelLabelExtras,
               formatter: (value: number) => formatVolume(value)
             }
-            yAxisConfig.axisPointer.label = {
-              formatter: (params: any) => formatVolume(params.value)
-            }
+            yAxisConfig.axisPointer.label = yAxisPointerPill((params: any) => formatVolume(params.value))
           } else if (isMainPanel) {
             // 主图（K 线）：刻度统一 2 位小数（A 股价格惯例），避免 51.0899 这种长尾浮点
             // 保留 min/max 边界标签，让用户看到完整价格区间；防重叠靠加大 PANEL_GAP + 副图隐顶底
             yAxisConfig.axisLabel = {
               formatter: (value: number) => Number(value).toFixed(2)
             }
-            yAxisConfig.axisPointer.label = {
-              formatter: (params: any) => Number(params.value).toFixed(2)
-            }
+            yAxisConfig.axisPointer.label = yAxisPointerPill((params: any) => Number(params.value).toFixed(2))
           } else {
             // 其他副图（MACD/KDJ/RSI）：刻度保留 2 位小数，避免 ECharts 默认的浮点尾数
             yAxisConfig.axisLabel = {
               ...subPanelLabelExtras,
               formatter: (value: number) => Number(value).toFixed(2)
             }
-            yAxisConfig.axisPointer.label = {
-              formatter: (params: any) => Number(params.value).toFixed(2)
-            }
+            yAxisConfig.axisPointer.label = yAxisPointerPill((params: any) => Number(params.value).toFixed(2))
           }
 
           return yAxisConfig
