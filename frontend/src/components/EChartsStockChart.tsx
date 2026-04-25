@@ -1286,14 +1286,13 @@ export default function EChartsStockChart({
           }
         })),
         // 筹码图专用 xAxis：占比百分比（value 类型，与日期轴完全独立）
+        // axisLabel 故意隐藏——刻度文字若挂顶端会与主图顶部并列，看似"主图副标题"造成误读；
+        // 筹码柱长度本身已直观表达占比，hover tooltip 会显示精确百分比，无需刻度
         ...(hasChips ? [{
           type: 'value' as const,
           gridIndex: chipsGridIndex,
           position: 'top' as const,
-          axisLabel: {
-            fontSize: 9,
-            formatter: (v: number) => v.toFixed(1) + '%'
-          },
+          axisLabel: { show: false },
           axisLine: { show: false },
           axisTick: { show: false },
           splitLine: { show: false },
