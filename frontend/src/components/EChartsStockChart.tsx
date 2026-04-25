@@ -803,15 +803,18 @@ export default function EChartsStockChart({
       line1.push(`{label|低}{${priceTag}|${fmtNum(d.low)}}`)
       line1.push(`{label|收}{${priceTag}|${fmtNum(d.close)}}`)
       line1.push(`{${pctTag}|${pctStr}}`)
-      // 第 2 行：MA + BOLL
+      // 第 2 行：MA + BOLL（参数标注与同花顺/通达信一致）
       const line2: string[] = []
-      if (d.MA5 != null) line2.push(`{label|MA5}{maShort|${fmtNum(d.MA5)}}`)
-      if (d.MA20 != null) line2.push(`{label|MA20}{maMid|${fmtNum(d.MA20)}}`)
-      if (d.MA60 != null) line2.push(`{label|MA60}{maLong|${fmtNum(d.MA60)}}`)
+      const hasAnyMA = d.MA5 != null || d.MA20 != null || d.MA60 != null
+      if (hasAnyMA) line2.push('{title|MA(5,20,60)}')
+      if (d.MA5 != null) line2.push(`{maShort|${fmtNum(d.MA5)}}`)
+      if (d.MA20 != null) line2.push(`{maMid|${fmtNum(d.MA20)}}`)
+      if (d.MA60 != null) line2.push(`{maLong|${fmtNum(d.MA60)}}`)
       if (visibleIndicators.boll && hasBOLL && d.BOLL_UPPER != null) {
-        line2.push(`{label|BOLL上}{bollUp|${fmtNum(d.BOLL_UPPER)}}`)
-        line2.push(`{label|中}{bollMid|${fmtNum(d.BOLL_MIDDLE)}}`)
-        line2.push(`{label|下}{bollLow|${fmtNum(d.BOLL_LOWER)}}`)
+        line2.push('{title|BOLL(20,2)}')
+        line2.push(`{bollUp|${fmtNum(d.BOLL_UPPER)}}`)
+        line2.push(`{bollMid|${fmtNum(d.BOLL_MIDDLE)}}`)
+        line2.push(`{bollLow|${fmtNum(d.BOLL_LOWER)}}`)
       }
       const lines = [line1.join('')]
       if (line2.length > 0) lines.push(line2.join(''))
@@ -852,7 +855,7 @@ export default function EChartsStockChart({
       if (idx < 0 || idx >= sortedData.length) return ''
       const d = sortedData[idx]
       return [
-        '{title|RSI}',
+        '{title|RSI(6,12,24)}',
         `{label|RSI6}{purple|${fmtNum(d.RSI6)}}`,
         `{label|RSI12}{amber|${fmtNum(d.RSI12)}}`,
         `{label|RSI24}{blue|${fmtNum(d.RSI24)}}`,
