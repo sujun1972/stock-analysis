@@ -1298,7 +1298,7 @@ export default function EChartsStockChart({
             xAxisIndex: 0,
             yAxisIndex: 0,
             itemStyle: {
-              color: '#ef4444',
+              color: 'transparent',
               color0: '#22c55e',
               borderColor: '#ef4444',
               borderColor0: '#22c55e'
