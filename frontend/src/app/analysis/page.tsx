@@ -14,7 +14,7 @@ const StockPriceCard = dynamic(() => import('@/components/StockPriceCard'), {
 })
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { useSmartRefresh } from '@/hooks/useMarketStatus'
+import { useSmartRefresh, useMarketStatus } from '@/hooks/useMarketStatus'
 
 // ─────────────────────────────────────────
 // 辅助组件
@@ -104,6 +104,85 @@ function fmtPct(v?: number | null, decimals = 1) {
 function fmtScore(s?: number | null) {
   if (s == null) return '-'
   return Number.isInteger(s) ? s.toFixed(1) : String(s)
+}
+
+/** 估值日期 "20260424" → "2026-04-24"；非 8 位返回原值，避免破坏未知格式 */
+function fmtDailyDate(s?: string | null): string {
+  if (!s) return '-'
+  if (/^\d{8}$/.test(s)) return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`
+  return s
+}
+
+/**
+ * 行情时效 chip：根据 trade_time 距今分档显示"实时 / 延迟 / 收盘"。
+ * - trade_time 为 ISO/SQL 时间字符串；解析失败按"无数据"处理。
+ * - isTrading=true 且差 ≤30s → 实时（绿）
+ * - isTrading=true 且差 ≤15min → 延迟（橙）
+ * - 其他（非交易时段 / 跨日陈旧）→ 收盘（灰）
+ */
+function FreshnessChip({ tradeTime, isTrading }: { tradeTime?: string | null; isTrading: boolean }) {
+  // 每秒更新 now，让"实时 HH:mm:ss"走时
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  if (!tradeTime) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
+        无行情时间
+      </span>
+    )
+  }
+
+  // SQL 字符串 "2026-04-24 14:36:53" 跨浏览器兼容性差（Safari 不认空格分隔），用 'T' 替换；微秒部分忽略
+  const parsed = new Date(tradeTime.replace(' ', 'T').split('.')[0])
+  if (isNaN(parsed.getTime())) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
+        时间解析失败
+      </span>
+    )
+  }
+
+  const diffSec = Math.max(0, Math.floor((now.getTime() - parsed.getTime()) / 1000))
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const hh = pad(parsed.getHours())
+  const mm = pad(parsed.getMinutes())
+  const ss = pad(parsed.getSeconds())
+  const yyyy = parsed.getFullYear()
+  const dateStr = `${yyyy}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}`
+
+  let dot = 'bg-gray-400'
+  let label = ''
+  let title = `行情时间：${dateStr} ${hh}:${mm}:${ss}（距今 ${diffSec} 秒）`
+
+  if (isTrading && diffSec <= 30) {
+    // 实时绿点用 emerald-500（信号灯绿），与 A 股"跌色"绿在视觉上区分
+    dot = 'bg-emerald-500'
+    label = `实时 · ${hh}:${mm}:${ss}`
+  } else if (isTrading && diffSec <= 15 * 60) {
+    dot = 'bg-amber-500'
+    label = `延迟 ${Math.ceil(diffSec / 60)} 分钟 · ${hh}:${mm}`
+  } else {
+    dot = 'bg-gray-400'
+    // 同日 → "收盘 · HH:mm"；跨日 → "收盘 · YYYY-MM-DD HH:mm"
+    const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+    label = dateStr === todayStr ? `收盘 · ${hh}:${mm}` : `收盘 · ${dateStr} ${hh}:${mm}`
+  }
+
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 tabular-nums"
+      title={title}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+      {label}
+    </span>
+  )
 }
 
 // 昨收兜底：stock_realtime.pre_close 在数据同步层偶有 0 值（Tushare 增量回补延迟），
@@ -211,7 +290,12 @@ function QuotePanel({ q, stock }: { q: StockQuotePanel; stock: StockInfo | null 
         ))}
         {q.daily_date && (
           <div className="col-span-full mt-1">
-            <p className="text-xs text-gray-400 dark:text-gray-600">估值数据日期：{q.daily_date}</p>
+            <p
+              className="text-xs text-gray-400 dark:text-gray-600 tabular-nums"
+              title="daily_basic 表的快照日期（每日收盘后更新；PE/PB/换手率/股息率等估值类字段以此日为准）"
+            >
+              估值数据 · {fmtDailyDate(q.daily_date)}
+            </p>
           </div>
         )}
       </div>
@@ -235,6 +319,7 @@ function QuotePanel({ q, stock }: { q: StockQuotePanel; stock: StockInfo | null 
 function AnalysisContent() {
   const searchParams = useSearchParams()
   const code = searchParams.get('code')
+  const { isTrading } = useMarketStatus()
 
   const [stockInfo, setStockInfo] = useState<StockInfo | null>(null)
   const [basicInfo, setBasicInfo] = useState<StockInfo | null>(null)
@@ -554,7 +639,10 @@ function AnalysisContent() {
       {/* 行情卡片 */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">行情数据</CardTitle>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="text-base">行情数据</CardTitle>
+            <FreshnessChip tradeTime={quotePanel?.trade_time} isTrading={isTrading} />
+          </div>
         </CardHeader>
         <CardContent>
           {quotePanel ? (
