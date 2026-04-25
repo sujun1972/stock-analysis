@@ -193,13 +193,209 @@ function resolvePreClose(q: StockQuotePanel): number | null {
   return null
 }
 
+/**
+ * 名称行状态 Badge（央企 / 主板 / 沪股通 等）
+ * 数据源：stock_basic 表（act_ent_type / market / is_hs）
+ * §13 会扩展更全的状态（ST / 退市风险 / 融资融券）；当前仅做有数据的字段
+ */
+function StatusBadges({ basic }: { basic: StockInfo | null }) {
+  if (!basic) return null
+  const badges: { text: string; tone: 'neutral' | 'info' | 'warning' }[] = []
+
+  // 实控人性质 → 央企 / 国企 / 民企（act_ent_type 字段）
+  // Tushare 实际值如"中央企业"/"地方国有企业"/"民营企业"/"外资企业"——按关键字匹配，避免漏分类
+  const ent = basic.act_ent_type
+  if (ent) {
+    if (/中央/.test(ent)) badges.push({ text: '央企', tone: 'info' })
+    else if (/地方|国有/.test(ent)) badges.push({ text: '国企', tone: 'info' })
+    else if (/民营/.test(ent)) badges.push({ text: '民企', tone: 'neutral' })
+    else if (/外资|外商/.test(ent)) badges.push({ text: '外资', tone: 'neutral' })
+    else if (/集体/.test(ent)) badges.push({ text: '集体', tone: 'neutral' })
+  }
+  // 市场板块（market 字段：主板 / 创业板 / 科创板 / 北交所 / CDR）
+  if (basic.market) {
+    badges.push({ text: basic.market, tone: 'neutral' })
+  }
+  // 沪深港通（is_hs：H=沪股通 S=深股通 N=否）
+  if (basic.is_hs === 'H') badges.push({ text: '沪股通', tone: 'info' })
+  else if (basic.is_hs === 'S') badges.push({ text: '深股通', tone: 'info' })
+  // 退市状态（list_status：D=退市 P=暂停）
+  if (basic.list_status === 'D') badges.push({ text: '已退市', tone: 'warning' })
+  else if (basic.list_status === 'P') badges.push({ text: '暂停上市', tone: 'warning' })
+
+  if (badges.length === 0) return null
+  const toneClass = (t: 'neutral' | 'info' | 'warning') =>
+    t === 'info'    ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+    : t === 'warning' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+    :                   'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700'
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {badges.map((b, i) => (
+        <span key={i} className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] leading-tight ${toneClass(b.tone)}`}>
+          {b.text}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────
+// 行情卡片：辅助子组件
+// ─────────────────────────────────────────
+
+/** 横向 chip 列表（估值组 / 规模组 / 价值组通用） */
+function ChipGroup({ title, items }: { title: string; items: { label: string; value: string; color?: string; title?: string }[] }) {
+  const visible = items.filter(it => it.value && it.value !== '-')
+  if (visible.length === 0) return null
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
+      <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">{title}</span>
+      {visible.map((it, i) => (
+        <span key={it.label} className="inline-flex items-baseline gap-1 text-xs" title={it.title || undefined}>
+          <span className="text-gray-500 dark:text-gray-400">{it.label}</span>
+          <span className={`font-semibold tabular-nums ${it.color ?? 'text-gray-900 dark:text-white'}`}>{it.value}</span>
+          {i < visible.length - 1 && <span className="ml-1 text-gray-300 dark:text-gray-700">│</span>}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * 4 维度迷你雷达图（手写 SVG，无第三方依赖）
+ * 4 个轴：游资 / 中线 / 价值 / CIO；满分 10 分映射到外圈
+ * 节点用 score-* 色阶，与 §1 评分色对齐
+ */
+function MiniRadarChart({
+  scores,
+  size = 120,
+}: {
+  scores: { label: string; score: number | null | undefined }[]
+  size?: number
+}) {
+  // 上下左右各预留 24px 给标签（"游资 2.5"等双行文字宽度），雷达本体放在中央
+  // viewBox 比 size 大一圈：避免 4 个轴方向的标签溢出 SVG 边界
+  const PAD = 24
+  const vbSize = size + PAD * 2
+  const cx = vbSize / 2
+  const cy = vbSize / 2
+  const radius = size * 0.36
+  const labelRadius = size * 0.5 + 6  // 数据顶点之外、SVG 边缘之内
+  // 4 个轴朝向：上/右/下/左（顺时针）
+  const angles = scores.map((_, i) => -Math.PI / 2 + (i * 2 * Math.PI) / scores.length)
+
+  // 评分→坐标（满分 10 → radius；空值 → 0.5×radius 占位避免雷达图空塌）
+  const points = scores.map((s, i) => {
+    const v = (s.score ?? 0) / 10
+    const r = Math.max(0.05, Math.min(1, v)) * radius
+    return { x: cx + r * Math.cos(angles[i]), y: cy + r * Math.sin(angles[i]), score: s.score }
+  })
+  const polyline = points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+
+  // 三层同心圈（25/50/75/100% 满刻度参考）
+  const rings = [0.25, 0.5, 0.75, 1.0]
+
+  // 用 score-* token 取颜色：高分紫、中分金、低分蓝
+  const fillByScore = (s: number | null | undefined): string => {
+    if (s == null) return 'hsl(var(--muted-foreground))'
+    if (s >= 8) return 'hsl(var(--score-high))'
+    if (s >= 6) return 'hsl(var(--score-mid))'
+    if (s >= 4) return 'hsl(var(--score-low))'
+    return 'hsl(var(--muted-foreground))'
+  }
+
+  return (
+    <svg width={vbSize} height={vbSize} viewBox={`0 0 ${vbSize} ${vbSize}`} className="shrink-0">
+      {/* 同心圈（淡灰参考） */}
+      {rings.map(r => (
+        <circle key={r} cx={cx} cy={cy} r={radius * r} fill="none" stroke="currentColor" strokeOpacity={0.12} strokeWidth={0.5} className="text-gray-400 dark:text-gray-600" />
+      ))}
+      {/* 4 条轴线 */}
+      {angles.map((a, i) => (
+        <line key={i} x1={cx} y1={cy} x2={cx + radius * Math.cos(a)} y2={cy + radius * Math.sin(a)} stroke="currentColor" strokeOpacity={0.15} strokeWidth={0.5} className="text-gray-400 dark:text-gray-600" />
+      ))}
+      {/* 数据多边形（半透明 fill + 描边） */}
+      <polygon points={polyline} fill="hsl(var(--score-low))" fillOpacity={0.18} stroke="hsl(var(--score-low))" strokeWidth={1.2} />
+      {/* 各维度顶点圆点（按分数着色） */}
+      {points.map((p, i) => (
+        <circle key={i} cx={p.x} cy={p.y} r={2.5} fill={fillByScore(p.score)} />
+      ))}
+      {/* 维度文字（轴外侧） */}
+      {angles.map((a, i) => {
+        const tx = cx + labelRadius * Math.cos(a)
+        const ty = cy + labelRadius * Math.sin(a)
+        const score = scores[i].score
+        return (
+          <g key={i}>
+            <text x={tx} y={ty - 3} textAnchor="middle" className="fill-gray-500 dark:fill-gray-400" style={{ fontSize: 9 }}>{scores[i].label}</text>
+            <text x={tx} y={ty + 8} textAnchor="middle" fill={fillByScore(score)} style={{ fontSize: 10, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+              {score == null ? '—' : Number.isInteger(score) ? score.toFixed(1) : score.toString()}
+            </text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+/** 1280 视口降级：横向 4 个 ring 进度条 */
+function ScoreRings({ scores }: { scores: { label: string; score: number | null | undefined }[] }) {
+  const fillByScore = (s: number | null | undefined): string => {
+    if (s == null) return 'hsl(var(--muted-foreground))'
+    if (s >= 8) return 'hsl(var(--score-high))'
+    if (s >= 6) return 'hsl(var(--score-mid))'
+    if (s >= 4) return 'hsl(var(--score-low))'
+    return 'hsl(var(--muted-foreground))'
+  }
+  const ringSize = 44
+  const stroke = 4
+  const r = (ringSize - stroke) / 2
+  const c = 2 * Math.PI * r
+  return (
+    <div className="grid grid-cols-4 gap-2">
+      {scores.map(({ label, score }) => {
+        const pct = Math.max(0, Math.min(1, (score ?? 0) / 10))
+        const dash = c * pct
+        return (
+          <div key={label} className="flex flex-col items-center gap-1">
+            <div className="relative" style={{ width: ringSize, height: ringSize }}>
+              <svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`}>
+                <circle cx={ringSize / 2} cy={ringSize / 2} r={r} fill="none" stroke="currentColor" strokeOpacity={0.15} strokeWidth={stroke} className="text-gray-400 dark:text-gray-600" />
+                <circle
+                  cx={ringSize / 2}
+                  cy={ringSize / 2}
+                  r={r}
+                  fill="none"
+                  stroke={fillByScore(score)}
+                  strokeWidth={stroke}
+                  strokeLinecap="round"
+                  strokeDasharray={`${dash.toFixed(1)} ${c.toFixed(1)}`}
+                  transform={`rotate(-90 ${ringSize / 2} ${ringSize / 2})`}
+                />
+              </svg>
+              <span
+                className="absolute inset-0 flex items-center justify-center text-xs font-semibold tabular-nums"
+                style={{ color: fillByScore(score) }}
+              >
+                {score == null ? '—' : Number.isInteger(score) ? score.toFixed(1) : score}
+              </span>
+            </div>
+            <span className="text-[10px] text-gray-500 dark:text-gray-400">{label}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─────────────────────────────────────────
 // 行情卡片
 // ─────────────────────────────────────────
 
 function QuotePanel({ q, stock }: { q: StockQuotePanel; stock: StockInfo | null }) {
   const pc = q.pct_change
-  const color = priceColor(pc)
+  const priceTone = priceColor(pc)
   const preClose = resolvePreClose(q)
 
   const vm = stock?.value_metrics ?? null
@@ -210,102 +406,128 @@ function QuotePanel({ q, stock }: { q: StockQuotePanel; stock: StockInfo | null 
     .sort((a, b) => String(a.expected_date).localeCompare(String(b.expected_date)))[0]
   const breakUp = triggers?.price_triggers?.find(t => t.direction === 'break_up' && t.price != null)
   const breakDown = triggers?.price_triggers?.find(t => t.direction === 'break_down' && t.price != null)
-  const followupPriceDisplay = breakUp || breakDown
-    ? [
-        breakUp ? `▲ ${breakUp.price?.toFixed(2)}` : null,
-        breakDown ? `▼ ${breakDown.price?.toFixed(2)}` : null,
-      ].filter(Boolean).join(' / ')
-    : '-'
 
-  const items: { label: string; value: string; color?: string; title?: string }[] = [
-    { label: '最新价',   value: fmt(q.latest_price), color },
-    { label: '涨跌幅',   value: pc != null ? `${pc > 0 ? '+' : ''}${pc.toFixed(2)}%` : '-', color },
-    { label: '涨跌额',   value: fmt(q.change_amount), color },
-    { label: '今开',     value: fmt(q.open) },
-    { label: '最高',     value: fmt(q.high) },
-    { label: '最低',     value: fmt(q.low) },
-    { label: '昨收',     value: fmt(preClose) },
-    { label: '振幅',     value: fmt(q.amplitude, 2, '%') },
-    { label: '成交量',   value: fmtVol(q.volume) },
-    { label: '成交额',   value: fmtAmt(q.amount) },
-    { label: '换手率',   value: fmt(q.turnover_rate ?? q.turnover, 2, '%') },
-    { label: '量比',     value: fmt(q.volume_ratio) },
-    { label: '市盈率(静)', value: fmt(q.pe) },
-    { label: '市盈率(TTM)', value: fmt(q.pe_ttm) },
-    { label: '市净率',   value: fmt(q.pb) },
-    { label: '市销率(TTM)', value: fmt(q.ps_ttm) },
-    { label: '股息率',   value: fmt(q.dv_ttm ?? q.dv_ratio, 2, '%') },
+  // 涨跌徽章配色：红底白字（涨）/ 绿底白字（跌）/ 灰（平/无）
+  const badgeBg = pc == null ? 'bg-gray-200 dark:bg-gray-700' : pc > 0 ? 'bg-positive' : pc < 0 ? 'bg-negative' : 'bg-gray-200 dark:bg-gray-700'
+  const badgeText = pc == null || pc === 0 ? 'text-gray-700 dark:text-gray-200' : 'text-white'
+  const arrow = pc == null ? '' : pc > 0 ? '▲' : pc < 0 ? '▼' : '·'
+  const pctText = pc == null ? '-' : `${pc > 0 ? '+' : ''}${pc.toFixed(2)}%`
+  const changeText = q.change_amount == null ? '-' : `${q.change_amount > 0 ? '+' : ''}${q.change_amount.toFixed(2)}`
+
+  // 估值组（PE/PB/PS/股息率）
+  const valuationItems = [
+    { label: 'PE(TTM)', value: fmt(q.pe_ttm), title: '滚动市盈率（最近 4 个季度）' },
+    { label: 'PE',      value: fmt(q.pe),     title: '静态市盈率' },
+    { label: 'PB',      value: fmt(q.pb),     title: '市净率' },
+    { label: 'PS(TTM)', value: fmt(q.ps_ttm), title: '滚动市销率' },
+    { label: '股息率',  value: fmt(q.dv_ttm ?? q.dv_ratio, 2, '%'), title: '股息率 TTM' },
+  ]
+  // 规模组（市值/股本）
+  const scaleItems = [
     { label: '总市值',   value: fmtMv(q.total_mv) },
-    { label: '流通市值', value: fmtMv(q.circ_mv) },
+    { label: '流通',     value: fmtMv(q.circ_mv) },
     { label: '总股本',   value: fmtShare(q.total_share) },
     { label: '流通股本', value: fmtShare(q.float_share) },
-    {
-      label: 'ROC',
-      value: fmtPct(vm?.roc),
-      color: valueScaleColor(vm?.roc, 0.15, 0.30),
-      title: '资本收益率 ROC = EBIT / (净营运资本 + 净固定资产)',
-    },
-    {
-      label: '收益率',
-      value: fmtPct(vm?.earnings_yield),
-      color: valueScaleColor(vm?.earnings_yield, 0.10, 0.20),
-      title: '收益率 EY = EBIT / EV',
-    },
-    {
-      label: '安全边际',
-      value: fmtPct(vm?.intrinsic_margin, 0),
-      color: valueScaleColor(vm?.intrinsic_margin, 0.30, 1.00),
-      title: vm?.intrinsic_value != null
-        ? `格雷厄姆内在价值 ${vm.intrinsic_value.toFixed(2)} 元（g=${((vm.g_rate ?? 0) * 100).toFixed(1)}%）`
-        : '格雷厄姆内在价值数据不足',
-    },
-    {
-      label: '关注时间',
-      value: nearestTime?.expected_date ? `⏱ ${nearestTime.expected_date}` : '-',
-      title: nearestTime?.reason ?? '',
-    },
-    {
-      label: '关注价格',
-      value: followupPriceDisplay,
-      title: [breakUp?.price_basis, breakDown?.price_basis].filter(Boolean).join(' / '),
-    },
+  ]
+  // 价值类指标（ROC / EY / 安全边际，独立成组——色阶用 score-*）
+  const valueItems = [
+    { label: 'ROC',      value: fmtPct(vm?.roc),              color: valueScaleColor(vm?.roc, 0.15, 0.30),              title: '资本收益率 ROC = EBIT / (净营运资本 + 净固定资产)' },
+    { label: '收益率',   value: fmtPct(vm?.earnings_yield),    color: valueScaleColor(vm?.earnings_yield, 0.10, 0.20),    title: '收益率 EY = EBIT / EV' },
+    { label: '安全边际', value: fmtPct(vm?.intrinsic_margin, 0), color: valueScaleColor(vm?.intrinsic_margin, 0.30, 1.00),  title: vm?.intrinsic_value != null ? `格雷厄姆内在价值 ${vm.intrinsic_value.toFixed(2)} 元（g=${((vm.g_rate ?? 0) * 100).toFixed(1)}%）` : '格雷厄姆内在价值数据不足' },
   ]
 
-  // 四专家评分独立成行（游资 / 中线 / 价值 / CIO）
-  const scoreRow: { label: string; score?: number | null }[] = [
-    { label: '游资评分', score: stock?.latest_analysis_hot_money?.score },
-    { label: '中线评分', score: stock?.latest_analysis_midline?.score },
-    { label: '价值评分', score: stock?.latest_analysis_longterm?.score },
-    { label: 'CIO评分',  score: stock?.latest_analysis_cio?.score },
+  // 4 专家评分（雷达图数据）
+  const scoreData = [
+    { label: '游资', score: stock?.latest_analysis_hot_money?.score },
+    { label: '中线', score: stock?.latest_analysis_midline?.score },
+    { label: '价值', score: stock?.latest_analysis_longterm?.score },
+    { label: 'CIO',  score: stock?.latest_analysis_cio?.score },
   ]
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 gap-x-4 gap-y-3">
-        {items.map(({ label, value, color: c, title }) => (
-          <div key={label} title={title || undefined}>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
-            <p className={`text-sm font-semibold tabular-nums ${c ?? 'text-gray-900 dark:text-white'}`}>{value}</p>
+      {/* 顶部：左大字号最新价 + 涨跌徽章 + 右侧次要数值 */}
+      <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
+        {/* 价格区 */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-baseline gap-3">
+            <span className={`text-4xl font-semibold tabular-nums leading-none ${priceTone}`}>{fmt(q.latest_price)}</span>
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold tabular-nums ${badgeBg} ${badgeText}`}>
+              {arrow && <span className="text-[10px]">{arrow}</span>}
+              <span>{changeText}</span>
+              <span>({pctText})</span>
+            </span>
           </div>
-        ))}
+          {/* 第二行：今开/最高/最低/昨收 */}
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs tabular-nums">
+            <span><span className="text-gray-500 dark:text-gray-400">今开 </span><span className="font-semibold text-gray-900 dark:text-white">{fmt(q.open)}</span></span>
+            <span><span className="text-gray-500 dark:text-gray-400">最高 </span><span className="font-semibold text-gray-900 dark:text-white">{fmt(q.high)}</span></span>
+            <span><span className="text-gray-500 dark:text-gray-400">最低 </span><span className="font-semibold text-gray-900 dark:text-white">{fmt(q.low)}</span></span>
+            <span><span className="text-gray-500 dark:text-gray-400">昨收 </span><span className="font-semibold text-gray-900 dark:text-white">{fmt(preClose)}</span></span>
+          </div>
+        </div>
+        {/* 右侧次要数值（振幅/换手/量比/成交额） */}
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs tabular-nums">
+          <span><span className="text-gray-500 dark:text-gray-400">振幅 </span><span className="font-semibold text-gray-900 dark:text-white">{fmt(q.amplitude, 2, '%')}</span></span>
+          <span><span className="text-gray-500 dark:text-gray-400">换手 </span><span className="font-semibold text-gray-900 dark:text-white">{fmt(q.turnover_rate ?? q.turnover, 2, '%')}</span></span>
+          <span><span className="text-gray-500 dark:text-gray-400">量比 </span><span className="font-semibold text-gray-900 dark:text-white">{fmt(q.volume_ratio)}</span></span>
+          <span><span className="text-gray-500 dark:text-gray-400">成交 </span><span className="font-semibold text-gray-900 dark:text-white">{fmtAmt(q.amount)}</span></span>
+        </div>
+      </div>
+
+      {/* 估值 + 规模分组 chip 列表 */}
+      <div className="space-y-2 pt-3 border-t border-gray-100 dark:border-gray-800">
+        <ChipGroup title="估值" items={valuationItems} />
+        <ChipGroup title="规模" items={scaleItems} />
+        <ChipGroup title="价值" items={valueItems} />
         {q.daily_date && (
-          <div className="col-span-full mt-1">
-            <p
-              className="text-xs text-gray-400 dark:text-gray-600 tabular-nums"
-              title="daily_basic 表的快照日期（每日收盘后更新；PE/PB/换手率/股息率等估值类字段以此日为准）"
-            >
-              估值数据 · {fmtDailyDate(q.daily_date)}
-            </p>
-          </div>
+          <p
+            className="text-[11px] text-gray-400 dark:text-gray-600 tabular-nums pt-1"
+            title="daily_basic 表的快照日期（每日收盘后更新；PE/PB/换手率/股息率等估值类字段以此日为准）"
+          >
+            估值数据 · {fmtDailyDate(q.daily_date)}
+          </p>
         )}
       </div>
-      <div className="grid grid-cols-4 gap-x-4 gap-y-3 pt-3 border-t border-gray-100 dark:border-gray-800">
-        {scoreRow.map(({ label, score }) => (
-          <div key={label}>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
-            <p className={`text-sm font-semibold tabular-nums ${scoreColor(score)}`}>{fmtScore(score)}</p>
+
+      {/* 雷达图 + 复查触发（≥1440 雷达图，<1440 ring 进度条；§5 文档明确要求 1280 用 ring 降级） */}
+      <div className="flex flex-col min-[1440px]:flex-row items-start gap-4 pt-3 border-t border-gray-100 dark:border-gray-800">
+        <div className="hidden min-[1440px]:block">
+          <MiniRadarChart scores={scoreData} size={140} />
+        </div>
+        <div className="min-[1440px]:hidden w-full">
+          <ScoreRings scores={scoreData} />
+        </div>
+        <div className="flex-1 space-y-1.5 text-xs">
+          <div className="flex flex-wrap items-baseline gap-x-3">
+            <span className="text-gray-400 dark:text-gray-500 shrink-0">下次复查</span>
+            {breakUp && (
+              <span className="inline-flex items-baseline gap-1" title={breakUp.price_basis ?? '上破触发'}>
+                <span className="text-gray-500 dark:text-gray-400">上破</span>
+                <span className="font-semibold text-positive tabular-nums">{breakUp.price?.toFixed(2)}</span>
+              </span>
+            )}
+            {breakUp && breakDown && <span className="text-gray-300 dark:text-gray-700">/</span>}
+            {breakDown && (
+              <span className="inline-flex items-baseline gap-1" title={breakDown.price_basis ?? '下破触发'}>
+                <span className="text-gray-500 dark:text-gray-400">下破</span>
+                <span className="font-semibold text-negative tabular-nums">{breakDown.price?.toFixed(2)}</span>
+              </span>
+            )}
+            {!breakUp && !breakDown && <span className="text-gray-400 dark:text-gray-600">价格未设</span>}
           </div>
-        ))}
+          <div className="flex flex-wrap items-baseline gap-x-3">
+            <span className="text-gray-400 dark:text-gray-500 shrink-0">关注时间</span>
+            <span className="tabular-nums text-gray-900 dark:text-white" title={nearestTime?.reason ?? ''}>
+              {nearestTime?.expected_date ?? '未设'}
+            </span>
+            {stock?.latest_analysis_cio?.created_at && (
+              <span className="text-gray-400 dark:text-gray-600">
+                · 由 CIO {stock.latest_analysis_cio.created_at.slice(0, 10)} 设定
+              </span>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -599,10 +821,13 @@ function AnalysisContent() {
     <div className="space-y-6">
       {/* 页面标题 */}
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            {stockInfo?.name}（{stockInfo?.code}）
-          </h1>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              {stockInfo?.name}（{stockInfo?.code}）
+            </h1>
+            <StatusBadges basic={basicInfo} />
+          </div>
           {basicInfo?.fullname && basicInfo.fullname !== basicInfo?.name && (
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{basicInfo.fullname}</p>
           )}
