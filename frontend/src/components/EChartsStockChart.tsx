@@ -948,14 +948,28 @@ export default function EChartsStockChart({
     const colorBlue    = pick('#3b82f6', '#60a5fa')
     const colorPurple  = pick('#8b5cf6', '#a78bfa')
     const colorAmber   = pick('#f59e0b', '#fbbf24')
-    // MA 配色按"明度阶梯"递降，避开 BOLL（粉/青）和 K 线（红/绿）：
-    //   MA5 最快线（暖橙黄）→ MA10 橙色 → MA20 红色（细线区分 K 线红）→ MA60 紫
-    const colorMa5     = pick('#d97706', '#fbbf24')   // amber-600 / amber-300
-    const colorMa10    = pick('#ea580c', '#fb923c')   // orange-600 / orange-400
-    const colorMa20    = pick('#dc2626', '#f87171')   // red-600 / red-400（lineWidth=1.2 与 K 线红区分）
-    const colorMa60    = pick('#7c3aed', '#a78bfa')   // violet-600 / violet-400
-    const colorBollUp  = pick('#db2777', '#f472b6')
-    const colorBollMid = pick('#0891b2', '#22d3ee')
+    // MA 配色按"明度阶梯"递降，避开 BOLL（粉/青）和 K 线（红/绿）；
+    // 经色弱审查（/tmp/kline_color_audit/report.md）调整：
+    //   - 深色 MA20 旧值 #f87171 与 K 线红 #f87171 完全撞色（对比度 1.0），改为 #fca5a5（red-300）
+    //   - 浅色 MA20 旧值 #dc2626 与 K 线红 #ef4444 仅差 1.28（同色相），改为 amber-900 #78350f 走纯明度阶梯
+    //   - MA5/MA10/MA20 重建为同色相（amber/orange）+ 明度递降，色弱下也能区分
+    // 深色 MA5 yellow-200 与白色现价线明度极接近 → 降到 amber-400
+    const colorMa5     = pick('#fbbf24', '#facc15')   // amber-300 / yellow-400（最亮但不刺眼）
+    const colorMa10    = pick('#d97706', '#f97316')   // amber-600 / orange-500（中等）
+    const colorMa20    = pick('#78350f', '#c2410c')   // amber-900 / orange-700（最暗）
+    const colorMa60    = pick('#7c3aed', '#a78bfa')   // violet-600 / violet-400（紫色拉开）
+    // BOLL 上下轨：旧 #db2777/#f472b6 与 K 线红同为暖色调，色弱下混淆，下沉为低饱和粉灰让其"不抢戏"
+    const colorBollUp  = pick('#9d174d', '#f9a8d4')   // pink-900 / pink-300
+    const colorBollMid = pick('#0891b2', '#22d3ee')   // cyan-600 / cyan-400（保留）
+    // 现价线：旧浅色 #f59e0b 对比度 2.15（< AA Large），深色 #fbbf24 与 MA5 撞色
+    //   浅色加深至 amber-700；深色 MA 系列已锁 amber/orange，现价线必须跳出该色相 → 用 white 高亮
+    //   注：现价线是导航锚，必须最显眼且与所有 MA 区分
+    const colorPriceLine = pick('#b45309', '#ffffff') // amber-700 / 纯白
+    // 用户画线：浅色 #06b6d4 对比度 2.43（< AA Large）—— 加深；
+    // 深色与 BOLL 中轨 cyan-400 撞色 → 改为 sky-500 让明度差更大
+    const colorUserLine  = pick('#0e7490', '#0ea5e9') // cyan-700 / sky-500
+    // 筹码"接近现价"档：旧 #facc15 在浅色下对比度 1.53（接近不可见）；浅色加深，深色保持
+    const colorChipsYellow = pick('#ca8a04', '#facc15') // yellow-600 / yellow-400
 
     const fmtNum = (v: any, digits = 2): string => {
       if (v == null || v === '-' || (typeof v === 'number' && isNaN(v))) return '--'
@@ -1514,12 +1528,12 @@ export default function EChartsStockChart({
             {
               coord: [priceLineStart, lastBar.close],
               symbol: 'none',
-              lineStyle: { color: '#f59e0b', width: 1, type: 'dashed', opacity: 0.85 },
+              lineStyle: { color: colorPriceLine, width: 1, type: 'dashed', opacity: 0.85 },
               label: {
                 show: true,
                 position: 'insideEndTop',
                 formatter: `现价 ${lastBar.close.toFixed(2)}`,
-                color: '#f59e0b',
+                color: colorPriceLine,
                 fontSize: 10,
                 backgroundColor: 'transparent',
               },
@@ -1567,12 +1581,12 @@ export default function EChartsStockChart({
             {
               coord: [dates[0], line.price],
               symbol: 'none',
-              lineStyle: { color: '#06b6d4', width: 1, type: 'solid' as const, opacity: 0.9 },
+              lineStyle: { color: colorUserLine, width: 1, type: 'solid' as const, opacity: 0.9 },
               label: {
                 show: true,
                 position: 'insideEndTop' as const,
                 formatter: `${line.price.toFixed(2)}`,
-                color: '#06b6d4',
+                color: colorUserLine,
                 fontSize: 10,
                 backgroundColor: 'transparent',
               },
@@ -1719,7 +1733,7 @@ export default function EChartsStockChart({
               lineStyle: {
                 opacity: 0.6,
                 width: 1,
-                color: '#06b6d4'
+                color: colorUserLine
               },
               showSymbol: false
             },
@@ -1852,7 +1866,7 @@ export default function EChartsStockChart({
               lineStyle: {
                 opacity: 0.8,
                 width: 1,
-                color: '#f59e0b'
+                color: colorPriceLine
               },
               showSymbol: false
             },
@@ -1946,7 +1960,7 @@ export default function EChartsStockChart({
             if (latestClose != null) {
               if (d.price < latestClose * 0.99) color = '#22c55e'
               else if (d.price > latestClose * 1.01) color = '#ef4444'
-              else color = '#facc15'
+              else color = colorChipsYellow
             }
             return {
               value: d.percent,
@@ -1981,10 +1995,10 @@ export default function EChartsStockChart({
               markLine: {
                 silent: true,
                 symbol: 'none',
-                lineStyle: { color: '#f59e0b', width: 1.5, type: 'dashed' as const },
+                lineStyle: { color: colorPriceLine, width: 1.5, type: 'dashed' as const },
                 label: {
                   formatter: `现价 ${latestClose!.toFixed(2)}`,
-                  color: '#f59e0b',
+                  color: colorPriceLine,
                   fontSize: 10,
                   position: 'insideEndTop' as const
                 },
@@ -2056,7 +2070,7 @@ export default function EChartsStockChart({
         if (referencePrice != null) {
           if (d.price < referencePrice * 0.99) color = '#22c55e'
           else if (d.price > referencePrice * 1.01) color = '#ef4444'
-          else color = '#facc15'
+          else color = colorChipsYellow
         }
         return { value: d.percent, itemStyle: { color, opacity: 0.85 } }
       })
@@ -2115,12 +2129,12 @@ export default function EChartsStockChart({
                 {
                   coord: [priceLineStart, referencePrice],
                   symbol: 'none',
-                  lineStyle: { color: '#f59e0b', width: 1, type: 'dashed' as const, opacity: 0.85 },
+                  lineStyle: { color: colorPriceLine, width: 1, type: 'dashed' as const, opacity: 0.85 },
                   label: {
                     show: true,
                     position: 'insideEndTop' as const,
                     formatter: `现价 ${referencePrice.toFixed(2)}`,
-                    color: '#f59e0b',
+                    color: colorPriceLine,
                     fontSize: 10,
                     backgroundColor: 'transparent',
                   },
@@ -2169,12 +2183,12 @@ export default function EChartsStockChart({
                 {
                   coord: [dates[0], line.price],
                   symbol: 'none',
-                  lineStyle: { color: '#06b6d4', width: 1, type: 'solid' as const, opacity: 0.9 },
+                  lineStyle: { color: colorUserLine, width: 1, type: 'solid' as const, opacity: 0.9 },
                   label: {
                     show: true,
                     position: 'insideEndTop' as const,
                     formatter: `${line.price.toFixed(2)}`,
-                    color: '#06b6d4',
+                    color: colorUserLine,
                     fontSize: 10,
                     backgroundColor: 'transparent',
                   },
@@ -2265,12 +2279,12 @@ export default function EChartsStockChart({
           {
             coord: [priceLineStart, lastBar.close],
             symbol: 'none',
-            lineStyle: { color: '#f59e0b', width: 1, type: 'dashed' as const, opacity: 0.85 },
+            lineStyle: { color: colorPriceLine, width: 1, type: 'dashed' as const, opacity: 0.85 },
             label: {
               show: true,
               position: 'insideEndTop' as const,
               formatter: `现价 ${lastBar.close.toFixed(2)}`,
-              color: '#f59e0b',
+              color: colorPriceLine,
               fontSize: 10,
               backgroundColor: 'transparent',
             },
@@ -2294,8 +2308,8 @@ export default function EChartsStockChart({
         for (const line of userLinesRef.current) {
           segs.push([
             { coord: [dates[0], line.price], symbol: 'none',
-              lineStyle: { color: '#06b6d4', width: 1, type: 'solid' as const, opacity: 0.9 },
-              label: { show: true, position: 'insideEndTop' as const, formatter: `${line.price.toFixed(2)}`, color: '#06b6d4', fontSize: 10, backgroundColor: 'transparent' } },
+              lineStyle: { color: colorUserLine, width: 1, type: 'solid' as const, opacity: 0.9 },
+              label: { show: true, position: 'insideEndTop' as const, formatter: `${line.price.toFixed(2)}`, color: colorUserLine, fontSize: 10, backgroundColor: 'transparent' } },
             { coord: [dates[dates.length - 1], line.price], symbol: 'none' }
           ])
         }
