@@ -1959,7 +1959,7 @@ export default function EChartsStockChart({
             let color = '#60a5fa'
             if (latestClose != null) {
               if (d.price < latestClose * 0.99) color = '#22c55e'
-              else if (d.price > latestClose * 1.01) color = '#ef4444'
+              else if (d.price > latestClose * 1.01) color = '#fca5a5'
               else color = colorChipsYellow
             }
             return {
@@ -2069,7 +2069,7 @@ export default function EChartsStockChart({
         let color = '#60a5fa'
         if (referencePrice != null) {
           if (d.price < referencePrice * 0.99) color = '#22c55e'
-          else if (d.price > referencePrice * 1.01) color = '#ef4444'
+          else if (d.price > referencePrice * 1.01) color = '#fca5a5'
           else color = colorChipsYellow
         }
         return { value: d.percent, itemStyle: { color, opacity: 0.85 } }
