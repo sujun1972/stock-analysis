@@ -568,6 +568,7 @@ export default function EChartsStockChart({
     const sortedData: ChartData[] = period === 'D'
       ? sortedDaily
       : aggregateBars(sortedDaily, period)
+    const lastBar = sortedData.length > 0 ? sortedData[sortedData.length - 1] : null
 
     // 提取日期和数据（格式化日期为 YYYY-MM-DD）
     const dates = sortedData.map(d => {
@@ -1497,13 +1498,21 @@ export default function EChartsStockChart({
         // 主图: K线 + MA + BOLL
         // 现价水平虚线：贯穿主图绘图区，让用户瞬间看到当前价位于历史哪个位置（同花顺/东财惯例）
         // 用 [起点, 终点] 两点段显式声明跨主图整个 x 轴，避免 ECharts 把单 yAxis line 截断
-        // 涨跌停线（limitUp/limitDown/limitPctLabel）已在 sortedData 之后于外层算好
-        const lastBar = sortedData.length > 0 ? sortedData[sortedData.length - 1] : null
+        // 涨跌停线（limitUp/limitDown/limitPctLabel）和 lastBar 已在 sortedData 之后于外层算好
         const markLineSegments: any[] = []
+        // 现价线只画当前视图右端 30%（业界做法）：缩到 5 年前历史时贯穿整图分散注意力，截短后视觉聚焦
+        const computePriceLineStart = (): string => {
+          const zoomStart = currentDataZoomRef.current?.start ?? 70
+          const zoomEnd = currentDataZoomRef.current?.end ?? 100
+          const cutoffPct = zoomStart + (zoomEnd - zoomStart) * 0.7
+          const cutoffIdx = Math.max(0, Math.min(dates.length - 1, Math.floor((cutoffPct / 100) * dates.length)))
+          return dates[cutoffIdx] ?? dates[0]
+        }
         if (lastBar != null) {
+          const priceLineStart = computePriceLineStart()
           markLineSegments.push([
             {
-              coord: [dates[0], lastBar.close],
+              coord: [priceLineStart, lastBar.close],
               symbol: 'none',
               lineStyle: { color: '#f59e0b', width: 1, type: 'dashed', opacity: 0.85 },
               label: {
@@ -2095,10 +2104,16 @@ export default function EChartsStockChart({
           }
           // K 线主图也加一条同色水平线（当日收盘价），与筹码图现价虚线视觉对齐
           if (s.name === 'K线' && referencePrice != null) {
+            // 现价线起点取视图右端 70% 位置（与初始构造保持一致）
+            const zoomStart = currentDataZoomRef.current?.start ?? 70
+            const zoomEnd = currentDataZoomRef.current?.end ?? 100
+            const cutoffPct = zoomStart + (zoomEnd - zoomStart) * 0.7
+            const cutoffIdx = Math.max(0, Math.min(dates.length - 1, Math.floor((cutoffPct / 100) * dates.length)))
+            const priceLineStart = dates[cutoffIdx] ?? dates[0]
             const segs: any[] = [
               [
                 {
-                  coord: [dates[0], referencePrice],
+                  coord: [priceLineStart, referencePrice],
                   symbol: 'none',
                   lineStyle: { color: '#f59e0b', width: 1, type: 'dashed' as const, opacity: 0.85 },
                   label: {
@@ -2238,7 +2253,64 @@ export default function EChartsStockChart({
         })
       }
 
-      refreshChipsPanel()
+      // 现价线只画视图右端 30% — dataZoom 变化时起点要跟随
+      // hasChips 时 refreshChipsPanel 已重建 K 线 markLine；无 chips 时单独重建
+      if (!hasChips && lastBar != null) {
+        const zoomStart = currentDataZoomRef.current?.start ?? 70
+        const zoomEnd = currentDataZoomRef.current?.end ?? 100
+        const cutoffPct = zoomStart + (zoomEnd - zoomStart) * 0.7
+        const cutoffIdx = Math.max(0, Math.min(dates.length - 1, Math.floor((cutoffPct / 100) * dates.length)))
+        const priceLineStart = dates[cutoffIdx] ?? dates[0]
+        const segs: any[] = [[
+          {
+            coord: [priceLineStart, lastBar.close],
+            symbol: 'none',
+            lineStyle: { color: '#f59e0b', width: 1, type: 'dashed' as const, opacity: 0.85 },
+            label: {
+              show: true,
+              position: 'insideEndTop' as const,
+              formatter: `现价 ${lastBar.close.toFixed(2)}`,
+              color: '#f59e0b',
+              fontSize: 10,
+              backgroundColor: 'transparent',
+            },
+          },
+          { coord: [dates[dates.length - 1], lastBar.close], symbol: 'none' }
+        ]]
+        if (limitUp != null && limitDown != null) {
+          segs.push([
+            { coord: [dates[0], limitUp], symbol: 'none',
+              lineStyle: { color: '#ef4444', width: 1, type: 'dashed' as const, opacity: 0.45 },
+              label: { show: true, position: 'insideEndTop' as const, formatter: `涨停 ${limitUp.toFixed(2)} (+${limitPctLabel})`, color: '#ef4444', fontSize: 10, backgroundColor: 'transparent' } },
+            { coord: [dates[dates.length - 1], limitUp], symbol: 'none' }
+          ])
+          segs.push([
+            { coord: [dates[0], limitDown], symbol: 'none',
+              lineStyle: { color: '#22c55e', width: 1, type: 'dashed' as const, opacity: 0.45 },
+              label: { show: true, position: 'insideEndBottom' as const, formatter: `跌停 ${limitDown.toFixed(2)} (-${limitPctLabel})`, color: '#22c55e', fontSize: 10, backgroundColor: 'transparent' } },
+            { coord: [dates[dates.length - 1], limitDown], symbol: 'none' }
+          ])
+        }
+        for (const line of userLinesRef.current) {
+          segs.push([
+            { coord: [dates[0], line.price], symbol: 'none',
+              lineStyle: { color: '#06b6d4', width: 1, type: 'solid' as const, opacity: 0.9 },
+              label: { show: true, position: 'insideEndTop' as const, formatter: `${line.price.toFixed(2)}`, color: '#06b6d4', fontSize: 10, backgroundColor: 'transparent' } },
+            { coord: [dates[dates.length - 1], line.price], symbol: 'none' }
+          ])
+        }
+        const currentOpt = chart.getOption() as any
+        chart.setOption({
+          series: (currentOpt.series as any[]).map((s: any) =>
+            s.name === 'K线'
+              ? { ...s, markLine: { silent: true, symbol: 'none', data: segs } }
+              : s
+          )
+        })
+      } else {
+        refreshChipsPanel()
+      }
+
       loadMoreData()
     })
 
