@@ -11,6 +11,9 @@ import { HotMoneyViewDialog } from '@/components/stocks/HotMoneyViewDialog'
 import { MoneyflowCard } from '@/components/stocks/MoneyflowCard'
 import { BillboardCard } from '@/components/stocks/BillboardCard'
 import { FinancialBriefCard } from '@/components/stocks/FinancialBriefCard'
+import { AddToListDialog } from '@/app/stocks/components/AddToListDialog'
+import { useToast } from '@/hooks/use-toast'
+import { Bookmark, Share2 } from 'lucide-react'
 
 // 动态导入StockPriceCard组件（统一的图表组件）
 const StockPriceCard = dynamic(() => import('@/components/StockPriceCard'), {
@@ -571,6 +574,10 @@ function AnalysisContent() {
   const inflightChipsRangesRef = useRef<Array<{ start: string; end: string }>>([])  // 正在拉的区间
   const chipsMissDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)   // 防抖句柄
 
+  // ── §13 自选 / 分享 ──
+  const [addToListOpen, setAddToListOpen] = useState(false)
+  const { toast } = useToast()
+
   // ── CIO 一句话观点（§9 AI 摘要） ──
   // 仅登录态拉取最新一条 cio_directive，从 final_score.key_quote 提取一句话；失败/缺失静默不渲染
   const [cioKeyQuote, setCioKeyQuote] = useState<string | null>(null)
@@ -880,9 +887,40 @@ function AnalysisContent() {
           )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 pt-1">
+          {/* §13 分享：复制当前页 URL */}
           <button
+            type="button"
+            onClick={() => {
+              if (typeof navigator === 'undefined' || !navigator.clipboard) return
+              navigator.clipboard.writeText(window.location.href).then(
+                () => toast({ title: '链接已复制', description: window.location.href }),
+                () => toast({ title: '复制失败', description: '请手动复制地址栏链接', variant: 'destructive' })
+              )
+            }}
+            className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors focus-ring"
+            aria-label="复制当前股票分享链接"
+            title="复制当前页面链接"
+          >
+            <Share2 className="h-3.5 w-3.5" />
+            分享
+          </button>
+          {/* §13 自选：仅登录态可用，调起 AddToListDialog 选择列表 */}
+          {isAuthenticated && tsCode && (
+            <button
+              type="button"
+              onClick={() => setAddToListOpen(true)}
+              className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-info text-info hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors focus-ring"
+              aria-label="添加到自选列表"
+              title="添加到自选列表"
+            >
+              <Bookmark className="h-3.5 w-3.5" />
+              自选
+            </button>
+          )}
+          <button
+            type="button"
             onClick={openHotMoneyDialog}
-            className="text-xs px-3 py-1.5 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors"
+            className="text-xs px-3 py-1.5 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors focus-ring"
           >
             AI 分析
           </button>
@@ -907,6 +945,19 @@ function AnalysisContent() {
         cioPromptLoading={cioLoading}
         onSaved={() => { if (code) apiClient.getStock(code).then(setStockInfo).catch(() => {}) }}
       />
+
+      {/* §13 自选弹窗：复用 /stocks 页面同款组件 */}
+      {tsCode && (
+        <AddToListDialog
+          open={addToListOpen}
+          onClose={() => setAddToListOpen(false)}
+          selectedCodes={[tsCode]}
+          onSuccess={() => {
+            toast({ title: '已添加到自选', description: `${stockInfo?.name ?? tsCode} 已加入选定列表` })
+            setAddToListOpen(false)
+          }}
+        />
+      )}
 
       {/* 行情卡片 */}
       <Card>
