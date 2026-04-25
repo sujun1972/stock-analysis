@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import {
   formatVolume as formatVolumeUtil,
   formatAmount as formatAmountUtil,
@@ -18,7 +19,9 @@ import {
   saveIndicatorSettings,
   DEFAULT_INDICATORS,
   getLimitPct,
+  CHART_HEIGHT_PRESETS,
   type IndicatorSettings,
+  type ChartHeightMode,
 } from './chart-utils'
 
 /**
@@ -26,7 +29,7 @@ import {
  */
 function enforceSingleIndicator(settings: IndicatorSettings): IndicatorSettings {
   const result = { ...settings }
-  const order: Array<keyof IndicatorSettings> = ['macd', 'kdj', 'rsi']
+  const order: Array<'macd' | 'kdj' | 'rsi'> = ['macd', 'kdj', 'rsi']
   let picked = false
   for (const key of order) {
     if (result[key] && !picked) {
@@ -392,7 +395,8 @@ export default function EChartsStockChart({
   ].filter(Boolean).length
 
   // 图表布局配置常量（像素）—— 业界标准比例 ~70/15/15
-  const MAIN_CHART_HEIGHT = 480    // 主图（K线）高度
+  // 主图高度三档预设（紧凑/标准/宽松，适配 13/15/27 寸屏幕），用户在指标设置弹窗切换
+  const MAIN_CHART_HEIGHT = CHART_HEIGHT_PRESETS[visibleIndicators.chartHeightMode ?? 'standard']
   const VOLUME_PANEL_HEIGHT = 140  // 成交量副图高度（量价配合可读性，主图 ~29%）
   const SUB_PANEL_HEIGHT = 130     // 其他副图（MACD/KDJ/RSI）高度
   const PANEL_GAP = 8              // 副图间距——副图已隐顶/底刻度，留 8px 细缝区分面板即可
@@ -2457,6 +2461,36 @@ export default function EChartsStockChart({
             <p className="text-xs text-muted-foreground pt-2 border-t">
               MACD / KDJ / RSI 请在图表下方的 Tab 栏切换（业界标准：一次显示一个副图，避免纵向过长）
             </p>
+            {/* 主图高度三档预设：紧凑（13 寸笔记本）/ 标准 / 宽松（27 寸 4K）*/}
+            <div className="pt-3 border-t space-y-2">
+              <Label className="text-sm font-medium">主图高度</Label>
+              <RadioGroup
+                value={visibleIndicators.chartHeightMode ?? 'standard'}
+                onValueChange={(v) => setVisibleIndicators({
+                  ...visibleIndicators,
+                  chartHeightMode: v as ChartHeightMode,
+                })}
+                className="grid-cols-3 grid"
+              >
+                {([
+                  { v: 'compact', label: '紧凑', hint: '13 寸 / 320px' },
+                  { v: 'standard', label: '标准', hint: '默认 / 480px' },
+                  { v: 'relaxed', label: '宽松', hint: '4K / 640px' },
+                ] as const).map(opt => (
+                  <Label
+                    key={opt.v}
+                    htmlFor={`height-${opt.v}`}
+                    className="flex items-center gap-2 cursor-pointer rounded-md border px-2 py-1.5 hover:bg-muted/50 transition-colors duration-fast text-xs"
+                  >
+                    <RadioGroupItem id={`height-${opt.v}`} value={opt.v} />
+                    <span className="flex flex-col leading-tight">
+                      <span>{opt.label}</span>
+                      <span className="text-muted-foreground text-[10px] tabular-nums">{opt.hint}</span>
+                    </span>
+                  </Label>
+                ))}
+              </RadioGroup>
+            </div>
           </div>
           <div className="flex justify-end">
             <Button

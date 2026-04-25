@@ -82,6 +82,14 @@ export function getLimitPct(code: string, name?: string): number {
   return 0.10
 }
 
+export type ChartHeightMode = 'compact' | 'standard' | 'relaxed'
+
+export const CHART_HEIGHT_PRESETS: Record<ChartHeightMode, number> = {
+  compact: 320,    // 13 寸笔记本（屏高 ≤900）
+  standard: 480,   // 默认（兼顾大多数桌面）
+  relaxed: 640,    // 27 寸 4K
+}
+
 export interface IndicatorSettings {
   volume: boolean
   macd: boolean
@@ -89,6 +97,7 @@ export interface IndicatorSettings {
   rsi: boolean
   boll: boolean
   chips: boolean  // 是否在 K 线主图右侧嵌入筹码分布
+  chartHeightMode?: ChartHeightMode  // 主图高度三档预设
 }
 
 export const DEFAULT_INDICATORS: IndicatorSettings = {
@@ -98,6 +107,7 @@ export const DEFAULT_INDICATORS: IndicatorSettings = {
   rsi: false,
   boll: false,
   chips: true,  // 默认开启筹码分布（数据可用时）
+  chartHeightMode: 'standard',
 }
 
 /**
