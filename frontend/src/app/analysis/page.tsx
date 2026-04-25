@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
 import type { StockInfo, StockQuotePanel } from '@/types'
 import { HotMoneyViewDialog } from '@/components/stocks/HotMoneyViewDialog'
+import { MoneyflowCard } from '@/components/stocks/MoneyflowCard'
 
 // 动态导入StockPriceCard组件（统一的图表组件）
 const StockPriceCard = dynamic(() => import('@/components/StockPriceCard'), {
@@ -935,6 +936,9 @@ function AnalysisContent() {
         chipsFetchedRanges={fetchedChipsRanges}
         onChipsDateMiss={onChipsDateMiss}
       />
+
+      {/* 资金流向（4 档分布 + N 日主力净流入） */}
+      {tsCode && <MoneyflowCard tsCode={tsCode} />}
     </div>
   )
 }
