@@ -441,7 +441,27 @@ export default function EChartsStockChart({
       // 处理 ISO 格式（2026-03-13T00:00:00）或带时间的格式（2026-03-13 00:00:00）
       return dateStr.split('T')[0].split(' ')[0]
     })
-    const ohlcData = sortedData.map(d => [d.open, d.close, d.low, d.high])
+    // 涨跌停状态识别（A 股惯例：close 完全等于涨跌停价，精确到 2 位小数）
+    // 必须在 ohlcData 之前算（要把 itemStyle 注入数据点）
+    const limitPctForStatus = getLimitPct(stockCode, stockName)
+    const limitStatus: Array<'up' | 'down' | null> = sortedData.map((d, i) => {
+      if (i === 0) return null
+      const prev = sortedData[i - 1]
+      const upPrice = +(prev.close * (1 + limitPctForStatus)).toFixed(2)
+      const downPrice = +(prev.close * (1 - limitPctForStatus)).toFixed(2)
+      if (Math.abs(d.close - upPrice) < 0.005) return 'up'
+      if (Math.abs(d.close - downPrice) < 0.005) return 'down'
+      return null
+    })
+    const ohlcData = sortedData.map((d, i) => {
+      const status = limitStatus[i]
+      if (!status) return [d.open, d.close, d.low, d.high]
+      // 涨停：透明填充 + 红色加粗边框 + 红色发光阴影；跌停：绿色实心 + 加粗边框 + 绿色发光
+      const itemStyle = status === 'up'
+        ? { color: 'transparent', borderColor: '#ef4444', borderWidth: 2, shadowColor: '#ef4444', shadowBlur: 10 }
+        : { color: '#22c55e', borderColor: '#22c55e', borderWidth: 2, shadowColor: '#22c55e', shadowBlur: 10 }
+      return { value: [d.open, d.close, d.low, d.high], itemStyle }
+    })
     const volumeData = sortedData.map((d, idx) => ({
       value: d.volume,
       itemStyle: {
@@ -1420,10 +1440,21 @@ export default function EChartsStockChart({
                 ]))
               }
             } : {}),
-            // 回测模式：添加买卖信号markPoint
-            ...(backtestMode && (buyMarkPoints.length > 0 || sellMarkPoints.length > 0) ? {
+            // 涨跌停"封"/"跌"圆标 + 回测买卖信号合并到同一 markPoint.data，避免冲突
+            ...(((backtestMode && (buyMarkPoints.length > 0 || sellMarkPoints.length > 0)) || limitStatus.some(s => s !== null)) ? {
               markPoint: {
-                data: [...buyMarkPoints, ...sellMarkPoints],
+                data: [
+                  ...buyMarkPoints,
+                  ...sellMarkPoints,
+                  ...limitStatus.flatMap((s, i) => s ? [{
+                    coord: [dates[i], s === 'up' ? sortedData[i].high * 1.012 : sortedData[i].low * 0.988],
+                    value: s === 'up' ? '封' : '跌',
+                    symbol: 'circle' as const,
+                    symbolSize: 14,
+                    itemStyle: { color: s === 'up' ? '#ef4444' : '#22c55e', borderColor: '#fff', borderWidth: 1 },
+                    label: { show: true, color: '#fff', fontSize: 9, fontWeight: 'bold' as const }
+                  }] : [])
+                ],
                 animation: true,
                 animationDuration: 500
               }
