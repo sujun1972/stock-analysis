@@ -58,6 +58,30 @@ export const CHART_LAYOUT = {
   DATAZOOM_HEIGHT: 30,
 } as const
 
+/**
+ * 根据股票代码 + 名称识别涨跌停幅度（A 股板块差异）
+ * - 6xxxxx → 上交所主板（10%），688xxx → 科创板（20%）
+ * - 000/001/002/003 → 深交所主板/中小板（10%），300xxx → 创业板（20%）
+ * - 4xxxxx / 8xxxxx / 920xxx → 北交所（30%）
+ * - ST / *ST → 5%（在前述基础上覆盖）
+ */
+export function getLimitPct(code: string, name?: string): number {
+  if (name) {
+    const trimmed = name.trim()
+    if (trimmed.startsWith('ST') || trimmed.startsWith('*ST') || trimmed.startsWith('S*ST') || trimmed.includes('ST')) {
+      return 0.05
+    }
+  }
+  // 取代码前 3-6 位（兼容 600519 / 600519.SH）
+  const numericPart = code.split('.')[0]
+  if (numericPart.startsWith('688')) return 0.20
+  if (numericPart.startsWith('300') || numericPart.startsWith('301')) return 0.20
+  if (numericPart.startsWith('6')) return 0.10
+  if (numericPart.startsWith('4') || numericPart.startsWith('8') || numericPart.startsWith('920')) return 0.30
+  // 深主板/中小板：000 / 001 / 002 / 003
+  return 0.10
+}
+
 export interface IndicatorSettings {
   volume: boolean
   macd: boolean

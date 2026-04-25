@@ -17,6 +17,7 @@ import {
   loadIndicatorSettings,
   saveIndicatorSettings,
   DEFAULT_INDICATORS,
+  getLimitPct,
   type IndicatorSettings,
 } from './chart-utils'
 
@@ -89,6 +90,8 @@ interface ChipItem {
 interface EChartsStockChartProps {
   data: ChartData[]
   stockCode: string
+  // 股票名称（用于识别 ST/*ST 以确定涨跌停幅度，可选）
+  stockName?: string
   // 回测模式相关（可选）
   backtestMode?: boolean
   signalPoints?: SignalPoints
@@ -118,6 +121,7 @@ interface EChartsStockChartProps {
 export default function EChartsStockChart({
   data,
   stockCode,
+  stockName,
   backtestMode = false,
   signalPoints,
   equityCurve,
@@ -443,6 +447,13 @@ export default function EChartsStockChart({
         color: d.close >= d.open ? '#ef4444' : '#22c55e'
       }
     }))
+
+    // 涨跌停参考线数据（按代码 + 名称识别板块；hover 联动重建 markLine 时也复用）
+    const limitPct = getLimitPct(stockCode, stockName)
+    const limitRefBar = sortedData.length >= 2 ? sortedData[sortedData.length - 2] : null
+    const limitUp = limitRefBar != null ? +(limitRefBar.close * (1 + limitPct)).toFixed(2) : null
+    const limitDown = limitRefBar != null ? +(limitRefBar.close * (1 - limitPct)).toFixed(2) : null
+    const limitPctLabel = `${(limitPct * 100).toFixed(0)}%`
 
     // MA线数据
     const ma5Data = sortedData.map(d => d.MA5 ?? '-')
@@ -1294,26 +1305,66 @@ export default function EChartsStockChart({
         // 主图: K线 + MA + BOLL
         // 现价水平虚线：贯穿主图绘图区，让用户瞬间看到当前价位于历史哪个位置（同花顺/东财惯例）
         // 用 [起点, 终点] 两点段显式声明跨主图整个 x 轴，避免 ECharts 把单 yAxis line 截断
+        // 涨跌停线（limitUp/limitDown/limitPctLabel）已在 sortedData 之后于外层算好
         const lastBar = sortedData.length > 0 ? sortedData[sortedData.length - 1] : null
-        const currentPriceLine = lastBar != null
-          ? {
-              silent: true,
+        const markLineSegments: any[] = []
+        if (lastBar != null) {
+          markLineSegments.push([
+            {
+              coord: [dates[0], lastBar.close],
               symbol: 'none',
-              lineStyle: { color: '#f59e0b', width: 1, type: 'dashed' as const, opacity: 0.85 },
+              lineStyle: { color: '#f59e0b', width: 1, type: 'dashed', opacity: 0.85 },
               label: {
                 show: true,
-                position: 'insideEndTop' as const,
+                position: 'insideEndTop',
                 formatter: `现价 ${lastBar.close.toFixed(2)}`,
                 color: '#f59e0b',
                 fontSize: 10,
-                backgroundColor: 'transparent'
+                backgroundColor: 'transparent',
               },
-              data: [
-                [
-                  { coord: [dates[0], lastBar.close], symbol: 'none' },
-                  { coord: [dates[dates.length - 1], lastBar.close], symbol: 'none' }
-                ]
-              ]
+            },
+            { coord: [dates[dates.length - 1], lastBar.close], symbol: 'none' }
+          ])
+        }
+        if (limitUp != null && limitDown != null) {
+          markLineSegments.push([
+            {
+              coord: [dates[0], limitUp],
+              symbol: 'none',
+              lineStyle: { color: '#ef4444', width: 1, type: 'dashed', opacity: 0.45 },
+              label: {
+                show: true,
+                position: 'insideEndTop',
+                formatter: `涨停 ${limitUp.toFixed(2)} (+${limitPctLabel})`,
+                color: '#ef4444',
+                fontSize: 10,
+                backgroundColor: 'transparent',
+              },
+            },
+            { coord: [dates[dates.length - 1], limitUp], symbol: 'none' }
+          ])
+          markLineSegments.push([
+            {
+              coord: [dates[0], limitDown],
+              symbol: 'none',
+              lineStyle: { color: '#22c55e', width: 1, type: 'dashed', opacity: 0.45 },
+              label: {
+                show: true,
+                position: 'insideEndBottom',
+                formatter: `跌停 ${limitDown.toFixed(2)} (-${limitPctLabel})`,
+                color: '#22c55e',
+                fontSize: 10,
+                backgroundColor: 'transparent',
+              },
+            },
+            { coord: [dates[dates.length - 1], limitDown], symbol: 'none' }
+          ])
+        }
+        const currentPriceLine = markLineSegments.length > 0
+          ? {
+              silent: true,
+              symbol: 'none',
+              data: markLineSegments,
             }
           : null
 
@@ -1798,26 +1849,65 @@ export default function EChartsStockChart({
           }
           // K 线主图也加一条同色水平线（当日收盘价），与筹码图现价虚线视觉对齐
           if (s.name === 'K线' && referencePrice != null) {
+            const segs: any[] = [
+              [
+                {
+                  coord: [dates[0], referencePrice],
+                  symbol: 'none',
+                  lineStyle: { color: '#f59e0b', width: 1, type: 'dashed' as const, opacity: 0.85 },
+                  label: {
+                    show: true,
+                    position: 'insideEndTop' as const,
+                    formatter: `现价 ${referencePrice.toFixed(2)}`,
+                    color: '#f59e0b',
+                    fontSize: 10,
+                    backgroundColor: 'transparent',
+                  },
+                },
+                { coord: [dates[dates.length - 1], referencePrice], symbol: 'none' }
+              ]
+            ]
+            // 涨跌停线在 hover 联动时保留（板块/ST 自适应）
+            if (limitUp != null && limitDown != null) {
+              segs.push([
+                {
+                  coord: [dates[0], limitUp],
+                  symbol: 'none',
+                  lineStyle: { color: '#ef4444', width: 1, type: 'dashed' as const, opacity: 0.45 },
+                  label: {
+                    show: true,
+                    position: 'insideEndTop' as const,
+                    formatter: `涨停 ${limitUp.toFixed(2)} (+${limitPctLabel})`,
+                    color: '#ef4444',
+                    fontSize: 10,
+                    backgroundColor: 'transparent',
+                  },
+                },
+                { coord: [dates[dates.length - 1], limitUp], symbol: 'none' }
+              ])
+              segs.push([
+                {
+                  coord: [dates[0], limitDown],
+                  symbol: 'none',
+                  lineStyle: { color: '#22c55e', width: 1, type: 'dashed' as const, opacity: 0.45 },
+                  label: {
+                    show: true,
+                    position: 'insideEndBottom' as const,
+                    formatter: `跌停 ${limitDown.toFixed(2)} (-${limitPctLabel})`,
+                    color: '#22c55e',
+                    fontSize: 10,
+                    backgroundColor: 'transparent',
+                  },
+                },
+                { coord: [dates[dates.length - 1], limitDown], symbol: 'none' }
+              ])
+            }
             return {
               ...s,
               markLine: {
                 silent: true,
                 symbol: 'none',
-                lineStyle: { color: '#f59e0b', width: 1, type: 'dashed' as const, opacity: 0.85 },
-                label: {
-                  show: true,
-                  position: 'insideEndTop' as const,
-                  formatter: `现价 ${referencePrice.toFixed(2)}`,
-                  color: '#f59e0b',
-                  fontSize: 10,
-                  backgroundColor: 'transparent'
-                },
-                data: [
-                  [
-                    { coord: [dates[0], referencePrice], symbol: 'none' },
-                    { coord: [dates[dates.length - 1], referencePrice], symbol: 'none' }
-                  ]
-                ]
+                data: segs,
               }
             }
           }

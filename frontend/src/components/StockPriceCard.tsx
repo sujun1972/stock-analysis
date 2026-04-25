@@ -424,6 +424,7 @@ export default function StockPriceCard({
         <EChartsStockChart
           data={features}
           stockCode={stockCode}
+          stockName={stockName}
           backtestMode={backtestMode}
           signalPoints={signalPoints}
           equityCurve={equityCurve}
