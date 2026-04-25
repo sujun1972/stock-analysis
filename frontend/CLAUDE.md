@@ -434,9 +434,36 @@ useEffect(() => {
 
 `stocks/page.tsx` 每次加载列表时固定传入此参数，`score` 着色规则：≥8 红色，≥6 黄色，其余灰色。
 
+### 个股分析页 `/analysis` 的 AI 决策板块
+
+`/analysis` 页面有四张语义独立的卡片串联展示，**用户在主页就能看到完整决策视图，弹窗只承担"历史归档 + 编辑/复盘"高级视图角色**。新增"AI 类"功能时优先放主页卡，不要回头往弹窗塞。
+
+页面纵向流：
+1. **行情卡**（`QuotePanel`）— 最新价 / OHLC / 振幅 / 换手 / 成交 / 公司规模 chip / 4 维雷达图（点击节点滚到对应专家）/ CIO 一句话观点 + 复查触发器。
+2. **估值数据卡**（`ValuationCard`）— PE / PB / PS / 股息率（`daily_basic`）+ ROC / EY / 安全边际（`stock_value_metrics`）+ 快照日期。**公开数据，未登录可见**。
+3. **AI 决策摘要卡**（`ExpertSummaryCard`）— 4 列等宽：CIO / 游资 / 中线 / 价值；每列 = 评分 + rating + key_quote（`line-clamp-2`）+ ▲/▼ 因子计数；顶部"一键分析"按钮（与弹窗 Footer 同 API）。**仅登录态显示**。
+4. **CIO 综合决策卡**（`CioDecisionCard`，默认折叠）— 头部显示评分 + rating + 一句话；展开后：multi_dimension_scan 三栏 / cross_dimension_analysis / core_drivers + core_risks 双栏 / rating_and_action 高亮卡（按 action 关键词配色）/ followup_triggers。
+5. **三专家详情卡**（`ExpertDetailCard`，嵌入 Tab）— 游资 / 中线 / 价值；卡内：评分 / rating / key_quote / 正反因子双栏 / 完整 SECTION_CONFIGS。Tab 右上角"重新分析"（单专家）/ "历史"（唤起弹窗，自动锁到当前 Tab）。
+
+共享渲染组件全部在 [components/stocks/analysis/](src/components/stocks/analysis/)：
+
+- `text-utils.tsx` / `markdown.tsx` — `renderBold` / `highlightTags` / `MarkdownContent` / `markdownComponents`
+- `sections.tsx` — `ScoreBadge` / `ProsConsList` / `FieldValue` / `GenericSection` / `FollowupTriggersSection`
+- `StructuredAnalysisContent.tsx` — JSON 结构化渲染入口；支持 `hideFinalScore` / `hideTitleHeader` props（主页详情卡已自渲染头部和评分时用）
+- `section-configs.ts` — `SECTION_CONFIGS` / `PM_FIELD_LABELS` / `JSON_ANALYSIS_TYPES`
+- `expert-meta.ts` — 4 专家身份元数据（key / analysisType / templateKey / 中文名 / 副标题 / 图标 / colorVar / borderClass）+ `safeParseJSON` / `extractScore` / `extractKeyQuote` / `extractRating` / `extractBullBearCount` / `scoreToneClass`
+
+**弹窗与主页卡共用同一份 SECTION_CONFIGS 与渲染逻辑**——`HotMoneyViewDialog` 内部 `import { AnalysisContent } from '@/components/stocks/analysis'`，新增专家或调整 schema 时改一处即可两端生效。
+
+**专家身份色 token（`--expert-*`）**：CIO 紫 / 游资 橙 / 中线 蓝 / 价值 金，定义在 [globals.css](src/app/globals.css)，Tailwind 暴露为 `text-expert-cio` / `border-l-expert-hot-money` 等。**身份色仅用于"哪位专家说的"染色**（卡片左 border / 头部图标 / key_quote 背景）；评分高低仍走 `score-*`（紫金蓝），涨跌仍走 `positive` / `negative`，三套色阶不混用。
+
+**与现有派生数据的复用**：行情卡的 `cioKeyQuote` 直接从 `latestByExpert.cio` 用 `useMemo` 派生，不另发请求；4 专家最新数据由统一的 `useEffect` + `Promise.all` 拉取，`expertsRefreshKey` 自增触发重拉。
+
+**雷达图节点点击联动**：`MiniRadarChart` / `ScoreRings` 接受 `onNodeClick(label)`；主页据此 `scrollIntoView` 到对应卡（CIO → CioDecisionCard 并展开 / 其他 → ExpertDetailCard 并切 Tab）。
+
 ### AI 分析弹窗（`HotMoneyViewDialog`）
 
-共享组件位于 `frontend/src/components/stocks/HotMoneyViewDialog.tsx`，在股票列表页（`/stocks`）和分析页（`/analysis`）复用。通过"AI 分析"按钮触发。
+共享组件位于 [components/stocks/HotMoneyViewDialog.tsx](src/components/stocks/HotMoneyViewDialog.tsx)，在股票列表页（`/stocks`）和分析页（`/analysis`）复用。通过"AI 分析"按钮（`/stocks`）或"历史·AI"按钮（`/analysis`）触发。`/analysis` 调用时通过 `defaultTab` prop 锁定到指定专家 Tab（卡 ④ 右上"历史"按钮按当前 Tab 透传）。
 
 弹窗内含 **5 个 Tab**，各自独立管理历史记录和状态：
 
@@ -464,7 +491,7 @@ useEffect(() => {
 
 **JSON 格式分析类型（5 种）**：`hot_money_view`、`midline_industry_expert`、`longterm_value_watcher`、`cio_directive`、`macro_risk_expert` 均要求 AI 返回结构化 JSON。后端通过 `ai_output_parser.parse_ai_json()` + Pydantic 模型（`schemas/ai_analysis_result.py`）解析，失败降级为原始 JSON dict。评分提取优先级：`final_score.score` → `comprehensive_score` → `score`。
 
-**前端 `StructuredAnalysisContent` 渲染架构**（`HotMoneyViewDialog.tsx`）：
+**前端 `StructuredAnalysisContent` 渲染架构**（位于 [components/stocks/analysis/](src/components/stocks/analysis/)，弹窗与主页卡共用）：
 - 按 `analysisType` 查表 `SECTION_CONFIGS[type]`，每个专家声明自己的 section 列表（顶层 JSON key + 中文标题 + 子字段 key→label 映射）。扩展新专家时只需追加一个配置项。
 - `GenericSection` 组件统一渲染"标题 + 条目列表"；`FieldValue` 组件递归处理字符串 / 数组（`catalysts` 等） / 嵌套对象（`next_day_scenarios` 三档的 `{probability, trigger_condition}`）。
 - `final_score` 统一渲染：新 schema `bull_factors`/`bear_factors`/`key_quote`，向后兼容旧 `pros`/`cons`。
@@ -472,8 +499,9 @@ useEffect(() => {
 - 旧 schema 字段 `probability_metrics` / `dimensions` / `trading_strategy` 保留兜底渲染，仅当当前 analysisType 的 SECTION_CONFIGS 声明的 key 全部缺失时降级。
 - `PM_FIELD_LABELS` 映射表仅用于旧 schema `probability_metrics` 兜底（新 schema 不再用此字段）。
 - JSON 解析失败时降级为 `MarkdownContent`（react-markdown + GFM）。
+- `hideFinalScore` / `hideTitleHeader` props：主页 `ExpertDetailCard` 已在卡片头部独立渲染评分 + 标题，正文里隐藏。弹窗内调用时不传这两 props，保持原行为。
 
-**Markdown 渲染**：`HotMoneyViewDialog.tsx` 使用 `react-markdown` + `remark-gfm` 渲染非 JSON 分析文本（如数据收集结果），支持 GFM 表格、标题、列表、代码块等完整 Markdown 语法。`markdownComponents` 常量定义自定义样式，`p` 和 `li` 中额外处理【标签】高亮。
+**Markdown 渲染**：`MarkdownContent`（在 `components/stocks/analysis/markdown.tsx`）使用 `react-markdown` + `remark-gfm` 渲染非 JSON 分析文本（如数据收集结果），支持 GFM 表格、标题、列表、代码块等完整 Markdown 语法。`markdownComponents` 常量定义自定义样式，`p` 和 `li` 中额外处理【标签】高亮。
 
 **股票列表评分列 + CIO 列**：`/stocks` 页面表格按顺序显示 4 列 AI 评分 + CIO 报告日期 + CIO 复查触发器（价格 / 时间两列分开）：
 - 评分列：游资（`latest_analysis_hot_money.score`）、中线（`latest_analysis_midline.score`）、价值（`latest_analysis_longterm.score`）、**CIO评分**（`latest_analysis_cio.score`）

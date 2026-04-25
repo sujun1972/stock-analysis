@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useState, Suspense, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
@@ -11,6 +11,16 @@ import { HotMoneyViewDialog } from '@/components/stocks/HotMoneyViewDialog'
 import { MoneyflowCard } from '@/components/stocks/MoneyflowCard'
 import { BillboardCard } from '@/components/stocks/BillboardCard'
 import { FinancialBriefCard } from '@/components/stocks/FinancialBriefCard'
+import { ValuationCard } from '@/components/stocks/ValuationCard'
+import {
+  ExpertSummaryCard,
+  CioDecisionCard,
+  ExpertDetailCard,
+  EXPERTS,
+  EXPERT_BY_KEY,
+  type ExpertMeta,
+  type LatestAnalysisRecord,
+} from '@/components/stocks/analysis'
 import { AddToListDialog } from '@/app/stocks/components/AddToListDialog'
 import { useToast } from '@/hooks/use-toast'
 import { Bookmark, Share2 } from 'lucide-react'
@@ -77,48 +87,6 @@ function priceColor(pct?: number | null) {
   if (pct > 0) return 'text-positive'
   if (pct < 0) return 'text-negative'
   return 'text-gray-900 dark:text-white'
-}
-
-/**
- * 价值类指标色阶（ROC / EY / 安全边际）
- * 用 score-* 蓝-金-紫色阶，避免与行情红绿混淆。
- * 各指标语境不同，调用方传自己的 [mid, high] 阈值边界（小数形式：0.15 = 15%）。
- * 负值统一显示 muted（不再借用行情绿，避免与"跌"语义混淆）。
- */
-function valueScaleColor(v: number | null | undefined, mid: number, high: number) {
-  if (v == null || !isFinite(v)) return ''
-  if (v < 0) return 'text-muted-foreground'
-  if (v >= high) return 'text-score-high'
-  if (v >= mid) return 'text-score-mid'
-  return 'text-score-low'
-}
-
-/** 评分色阶（4 专家共用：≥8 紫、≥6 金、≥4 蓝、其余灰；与行情红绿独立） */
-function scoreColor(s?: number | null) {
-  if (s == null) return 'text-gray-400 dark:text-gray-500'
-  if (s >= 8) return 'text-score-high'
-  if (s >= 6) return 'text-score-mid'
-  if (s >= 4) return 'text-score-low'
-  return 'text-muted-foreground'
-}
-
-/** 百分比（小数 → %，用于 ROC / 收益率 / 安全边际） */
-function fmtPct(v?: number | null, decimals = 1) {
-  if (v == null || !isFinite(v)) return '-'
-  return (v * 100).toFixed(decimals) + '%'
-}
-
-/** 评分格式化：整数补一位小数，缺失显示 '-' */
-function fmtScore(s?: number | null) {
-  if (s == null) return '-'
-  return Number.isInteger(s) ? s.toFixed(1) : String(s)
-}
-
-/** 估值日期 "20260424" → "2026-04-24"；非 8 位返回原值，避免破坏未知格式 */
-function fmtDailyDate(s?: string | null): string {
-  if (!s) return '-'
-  if (/^\d{8}$/.test(s)) return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`
-  return s
 }
 
 /**
@@ -278,9 +246,12 @@ function ChipGroup({ title, items }: { title: string; items: { label: string; va
 function MiniRadarChart({
   scores,
   size = 120,
+  onNodeClick,
 }: {
   scores: { label: string; score: number | null | undefined }[]
   size?: number
+  /** 点击某个轴顶点（评分文字 / 圆点）的回调；用 label 区分 */
+  onNodeClick?: (label: string) => void
 }) {
   // 上下左右各预留 24px 给标签（"游资 2.5"等双行文字宽度），雷达本体放在中央
   // viewBox 比 size 大一圈：避免 4 个轴方向的标签溢出 SVG 边界
@@ -329,14 +300,28 @@ function MiniRadarChart({
       {points.map((p, i) => (
         <circle key={i} cx={p.x} cy={p.y} r={2.5} fill={fillByScore(p.score)} />
       ))}
-      {/* 维度文字（轴外侧） */}
+      {/* 维度文字（轴外侧）；可点击 → onNodeClick(label) */}
       {angles.map((a, i) => {
         const tx = cx + labelRadius * Math.cos(a)
         const ty = cy + labelRadius * Math.sin(a)
         const score = scores[i].score
+        const label = scores[i].label
+        const clickable = !!onNodeClick
         return (
-          <g key={i}>
-            <text x={tx} y={ty - 3} textAnchor="middle" className="fill-gray-500 dark:fill-gray-400" style={{ fontSize: 9 }}>{scores[i].label}</text>
+          <g
+            key={i}
+            onClick={clickable ? () => onNodeClick?.(label) : undefined}
+            style={clickable ? { cursor: 'pointer' } : undefined}
+            role={clickable ? 'button' : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNodeClick?.(label) } } : undefined}
+            aria-label={clickable ? `查看${label}专家详情` : undefined}
+          >
+            {/* 透明热区，扩大点击区域 */}
+            {clickable && (
+              <rect x={tx - 18} y={ty - 12} width={36} height={26} fill="transparent" />
+            )}
+            <text x={tx} y={ty - 3} textAnchor="middle" className="fill-gray-500 dark:fill-gray-400" style={{ fontSize: 9 }}>{label}</text>
             <text x={tx} y={ty + 8} textAnchor="middle" fill={fillByScore(score)} style={{ fontSize: 10, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
               {score == null ? '—' : Number.isInteger(score) ? score.toFixed(1) : score.toString()}
             </text>
@@ -347,8 +332,14 @@ function MiniRadarChart({
   )
 }
 
-/** 1280 视口降级：横向 4 个 ring 进度条 */
-function ScoreRings({ scores }: { scores: { label: string; score: number | null | undefined }[] }) {
+/** 1280 视口降级：横向 4 个 ring 进度条；带 onNodeClick 联动 */
+function ScoreRings({
+  scores,
+  onNodeClick,
+}: {
+  scores: { label: string; score: number | null | undefined }[]
+  onNodeClick?: (label: string) => void
+}) {
   const fillByScore = (s: number | null | undefined): string => {
     if (s == null) return 'hsl(var(--muted-foreground))'
     if (s >= 8) return 'hsl(var(--score-high))'
@@ -365,8 +356,16 @@ function ScoreRings({ scores }: { scores: { label: string; score: number | null 
       {scores.map(({ label, score }) => {
         const pct = Math.max(0, Math.min(1, (score ?? 0) / 10))
         const dash = c * pct
+        const clickable = !!onNodeClick
         return (
-          <div key={label} className="flex flex-col items-center gap-1">
+          <button
+            key={label}
+            type="button"
+            disabled={!clickable}
+            onClick={clickable ? () => onNodeClick?.(label) : undefined}
+            className={`flex flex-col items-center gap-1 ${clickable ? 'hover:opacity-80 focus-ring rounded' : ''}`}
+            aria-label={clickable ? `查看${label}专家详情` : label}
+          >
             <div className="relative" style={{ width: ringSize, height: ringSize }}>
               <svg width={ringSize} height={ringSize} viewBox={`0 0 ${ringSize} ${ringSize}`}>
                 <circle cx={ringSize / 2} cy={ringSize / 2} r={r} fill="none" stroke="currentColor" strokeOpacity={0.15} strokeWidth={stroke} className="text-gray-400 dark:text-gray-600" />
@@ -390,7 +389,7 @@ function ScoreRings({ scores }: { scores: { label: string; score: number | null 
               </span>
             </div>
             <span className="text-[10px] text-gray-500 dark:text-gray-400">{label}</span>
-          </div>
+          </button>
         )
       })}
     </div>
@@ -401,12 +400,11 @@ function ScoreRings({ scores }: { scores: { label: string; score: number | null 
 // 行情卡片
 // ─────────────────────────────────────────
 
-function QuotePanel({ q, stock, cioKeyQuote }: { q: StockQuotePanel; stock: StockInfo | null; cioKeyQuote?: string | null }) {
+function QuotePanel({ q, stock, cioKeyQuote, onScoreNodeClick }: { q: StockQuotePanel; stock: StockInfo | null; cioKeyQuote?: string | null; onScoreNodeClick?: (label: string) => void }) {
   const pc = q.pct_change
   const priceTone = priceColor(pc)
   const preClose = resolvePreClose(q)
 
-  const vm = stock?.value_metrics ?? null
   // CIO 复查触发器：time_triggers 取最近一个 expected_date；price_triggers 分上/下方向
   const triggers = stock?.latest_analysis_cio?.followup_triggers
   const nearestTime = triggers?.time_triggers
@@ -422,26 +420,12 @@ function QuotePanel({ q, stock, cioKeyQuote }: { q: StockQuotePanel; stock: Stoc
   const pctText = pc == null ? '-' : `${pc > 0 ? '+' : ''}${pc.toFixed(2)}%`
   const changeText = q.change_amount == null ? '-' : `${q.change_amount > 0 ? '+' : ''}${q.change_amount.toFixed(2)}`
 
-  // 估值组（PE/PB/PS/股息率）
-  const valuationItems = [
-    { label: 'PE(TTM)', value: fmt(q.pe_ttm), title: '滚动市盈率（最近 4 个季度）' },
-    { label: 'PE',      value: fmt(q.pe),     title: '静态市盈率' },
-    { label: 'PB',      value: fmt(q.pb),     title: '市净率' },
-    { label: 'PS(TTM)', value: fmt(q.ps_ttm), title: '滚动市销率' },
-    { label: '股息率',  value: fmt(q.dv_ttm ?? q.dv_ratio, 2, '%'), title: '股息率 TTM' },
-  ]
-  // 规模组（市值/股本）
+  // 规模组（市值/股本）— PE/PB/PS/股息率/ROC/EY/安全边际 已拆到 ValuationCard
   const scaleItems = [
     { label: '总市值',   value: fmtMv(q.total_mv) },
     { label: '流通',     value: fmtMv(q.circ_mv) },
     { label: '总股本',   value: fmtShare(q.total_share) },
     { label: '流通股本', value: fmtShare(q.float_share) },
-  ]
-  // 价值类指标（ROC / EY / 安全边际，独立成组——色阶用 score-*）
-  const valueItems = [
-    { label: 'ROC',      value: fmtPct(vm?.roc),              color: valueScaleColor(vm?.roc, 0.15, 0.30),              title: '资本收益率 ROC = EBIT / (净营运资本 + 净固定资产)' },
-    { label: '收益率',   value: fmtPct(vm?.earnings_yield),    color: valueScaleColor(vm?.earnings_yield, 0.10, 0.20),    title: '收益率 EY = EBIT / EV' },
-    { label: '安全边际', value: fmtPct(vm?.intrinsic_margin, 0), color: valueScaleColor(vm?.intrinsic_margin, 0.30, 1.00),  title: vm?.intrinsic_value != null ? `格雷厄姆内在价值 ${vm.intrinsic_value.toFixed(2)} 元（g=${((vm.g_rate ?? 0) * 100).toFixed(1)}%）` : '格雷厄姆内在价值数据不足' },
   ]
 
   // 4 专家评分（雷达图数据）
@@ -483,28 +467,18 @@ function QuotePanel({ q, stock, cioKeyQuote }: { q: StockQuotePanel; stock: Stoc
         </div>
       </div>
 
-      {/* 估值 + 规模分组 chip 列表 */}
+      {/* 规模 chip 列表（PE/PB/PS/股息率/ROC/EY/安全边际 已拆到 ValuationCard） */}
       <div className="space-y-2 pt-3 border-t border-gray-100 dark:border-gray-800">
-        <ChipGroup title="估值" items={valuationItems} />
         <ChipGroup title="规模" items={scaleItems} />
-        <ChipGroup title="价值" items={valueItems} />
-        {q.daily_date && (
-          <p
-            className="text-[11px] text-gray-400 dark:text-gray-600 tabular-nums pt-1"
-            title="daily_basic 表的快照日期（每日收盘后更新；PE/PB/换手率/股息率等估值类字段以此日为准）"
-          >
-            估值数据 · {fmtDailyDate(q.daily_date)}
-          </p>
-        )}
       </div>
 
       {/* 雷达图 + 复查触发（≥1440 雷达图，<1440 ring 进度条；§5 文档明确要求 1280 用 ring 降级） */}
       <div className="flex flex-col min-[1440px]:flex-row items-start gap-4 pt-3 border-t border-gray-100 dark:border-gray-800">
         <div className="hidden min-[1440px]:block">
-          <MiniRadarChart scores={scoreData} size={140} />
+          <MiniRadarChart scores={scoreData} size={140} onNodeClick={onScoreNodeClick} />
         </div>
         <div className="min-[1440px]:hidden w-full">
-          <ScoreRings scores={scoreData} />
+          <ScoreRings scores={scoreData} onNodeClick={onScoreNodeClick} />
         </div>
         <div className="flex-1 space-y-1.5 text-xs">
           <div className="flex flex-wrap items-baseline gap-x-3">
@@ -578,10 +552,25 @@ function AnalysisContent() {
   const [addToListOpen, setAddToListOpen] = useState(false)
   const { toast } = useToast()
 
-  // ── CIO 一句话观点（§9 AI 摘要） ──
-  // 仅登录态拉取最新一条 cio_directive，从 final_score.key_quote 提取一句话；失败/缺失静默不渲染
-  const [cioKeyQuote, setCioKeyQuote] = useState<string | null>(null)
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
+
+  // ── 4 专家最新分析（驱动主页 AI 决策摘要卡 / CIO 详情卡 / 三专家详情卡） ──
+  const [latestByExpert, setLatestByExpert] = useState<Record<ExpertMeta['key'], LatestAnalysisRecord | null>>({
+    cio: null,
+    hot_money: null,
+    midline: null,
+    longterm: null,
+  })
+  const [expertsLoading, setExpertsLoading] = useState(false)
+  const [expertsRefreshKey, setExpertsRefreshKey] = useState(0)
+  const [activeExpertTab, setActiveExpertTab] = useState<Exclude<ExpertMeta['key'], 'cio'>>('hot_money')
+  const [cioOpen, setCioOpen] = useState(false)
+  const [multiGenerating, setMultiGenerating] = useState(false)
+  const [multiMessage, setMultiMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [regeneratingKey, setRegeneratingKey] = useState<ExpertMeta['key'] | null>(null)
+  const [historyDefaultTab, setHistoryDefaultTab] = useState<string | undefined>(undefined)
+  const cioCardRef = useRef<HTMLDivElement | null>(null)
+  const detailCardRef = useRef<HTMLDivElement | null>(null)
 
   // ── AI 分析弹窗 ──
   const [hotMoneyOpen, setHotMoneyOpen] = useState(false)
@@ -645,34 +634,147 @@ function AnalysisContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [basicInfo?.ts_code, code])
 
-  // CIO 一句话观点（§9）：登录态拉最新一条 cio_directive，从 final_score.key_quote 提取
+  // ── 拉取 4 专家最新一条分析（驱动 AI 决策卡 / CIO 详情卡 / 三专家详情卡） ──
+  // refreshKey 自增 → 重新拉取（一键分析 / 单专家重新分析完成时触发）
   useEffect(() => {
     const tsCode = basicInfo?.ts_code || (code ? toTsCode(code) : null)
     if (!tsCode || !isAuthenticated) {
-      setCioKeyQuote(null)
+      setLatestByExpert({ cio: null, hot_money: null, midline: null, longterm: null })
       return
     }
     let cancelled = false
-    getLatestStockAnalysis(tsCode, 'cio_directive').then(res => {
+    setExpertsLoading(true)
+    Promise.all(
+      EXPERTS.map((e) =>
+        getLatestStockAnalysis(tsCode, e.analysisType)
+          .then((res) => ({ key: e.key, record: ((res as any)?.data ?? null) as LatestAnalysisRecord | null }))
+          .catch(() => ({ key: e.key, record: null as LatestAnalysisRecord | null })),
+      ),
+    ).then((results) => {
       if (cancelled) return
-      // 后端返回 ApiResponse<{ id, score, version, analysis_text, created_at }>
-      const text = (res as any)?.data?.analysis_text
-      if (!text || typeof text !== 'string') return
-      try {
-        // analysis_text 可能是裸 JSON 或带 ```json 围栏；ai_output_parser 已统一返回干净 JSON 字符串
-        const parsed = JSON.parse(text)
-        const quote = parsed?.final_score?.key_quote
-        if (typeof quote === 'string' && quote.trim()) {
-          setCioKeyQuote(quote.trim())
-        }
-      } catch {
-        // 解析失败静默
+      const next: Record<ExpertMeta['key'], LatestAnalysisRecord | null> = {
+        cio: null, hot_money: null, midline: null, longterm: null,
       }
-    }).catch(() => {
-      // 401/404 等静默
+      for (const r of results) next[r.key] = r.record
+      setLatestByExpert(next)
+    }).finally(() => {
+      if (!cancelled) setExpertsLoading(false)
     })
     return () => { cancelled = true }
-  }, [basicInfo?.ts_code, code, isAuthenticated])
+  }, [basicInfo?.ts_code, code, isAuthenticated, expertsRefreshKey])
+
+  // 行情卡里渲染的"CIO 一句话观点"从 latestByExpert.cio 派生，复用同一个网络请求
+  const cioKeyQuote = useMemo<string | null>(() => {
+    const text = latestByExpert.cio?.analysis_text
+    if (!text) return null
+    try {
+      const parsed = JSON.parse(text)
+      const q = parsed?.final_score?.key_quote
+      return typeof q === 'string' && q.trim() ? q.trim() : null
+    } catch {
+      return null
+    }
+  }, [latestByExpert.cio])
+
+  // 主页一键分析（与弹窗 Footer 同 API，但 refresh 主页 4 专家而非弹窗）
+  const handleMultiGenerate = useCallback(async () => {
+    const tsCode = basicInfo?.ts_code || (code ? toTsCode(code) : null)
+    const stockName = stockInfo?.name
+    if (!tsCode || !stockName || !code) return
+    setMultiGenerating(true)
+    setMultiMessage(null)
+    try {
+      const res = await apiClient.generateMultiAnalysis({
+        ts_code: tsCode,
+        stock_name: stockName,
+        stock_code: code,
+        analysis_types: ['hot_money_view', 'midline_industry_expert', 'longterm_value_watcher'],
+        include_cio: true,
+      })
+      if (res?.code === 200) {
+        const data = res.data
+        const count = data?.expert_count ?? 0
+        const errors = data?.errors?.length ?? 0
+        const time = data?.total_generation_time ?? 0
+        setMultiMessage({
+          type: errors ? 'error' : 'success',
+          text: `${count} 位专家完成（${time}s）${errors ? '，' + errors + ' 个失败' : ''}`,
+        })
+        setExpertsRefreshKey((k) => k + 1)
+      } else {
+        setMultiMessage({ type: 'error', text: res?.message || '一键分析失败' })
+      }
+    } catch (e: any) {
+      setMultiMessage({ type: 'error', text: e?.response?.data?.message || '一键分析失败' })
+    } finally {
+      setMultiGenerating(false)
+    }
+  }, [basicInfo?.ts_code, code, stockInfo?.name])
+
+  // 单专家重新分析（在 ExpertDetailCard 触发，用 stock-ai-analysis/generate 单调）
+  const handleRegenerateExpert = useCallback(async (expert: ExpertMeta) => {
+    const tsCode = basicInfo?.ts_code || (code ? toTsCode(code) : null)
+    const stockName = stockInfo?.name
+    if (!tsCode || !stockName || !code) return
+    setRegeneratingKey(expert.key)
+    setMultiMessage(null)
+    try {
+      const res = await apiClient.generateStockAnalysis({
+        ts_code: tsCode,
+        stock_name: stockName,
+        stock_code: code,
+        analysis_type: expert.analysisType,
+        template_key: expert.templateKey,
+      })
+      if (res?.code === 200 && res.data?.analysis_text) {
+        setMultiMessage({ type: 'success', text: `${expert.label}专家分析完成` })
+        setExpertsRefreshKey((k) => k + 1)
+      } else {
+        setMultiMessage({ type: 'error', text: res?.message || `${expert.label}分析失败` })
+      }
+    } catch (e: any) {
+      setMultiMessage({ type: 'error', text: e?.response?.data?.message || `${expert.label}分析失败` })
+    } finally {
+      setRegeneratingKey(null)
+    }
+  }, [basicInfo?.ts_code, code, stockInfo?.name])
+
+  // 雷达图节点点击 → 滚到对应专家详情；CIO 节点 → 展开 CIO 详情卡
+  const handleScoreNodeClick = useCallback((label: string) => {
+    if (label === 'CIO') {
+      setCioOpen(true)
+      requestAnimationFrame(() => {
+        cioCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+      return
+    }
+    const map: Record<string, Exclude<ExpertMeta['key'], 'cio'>> = {
+      游资: 'hot_money',
+      中线: 'midline',
+      价值: 'longterm',
+    }
+    const target = map[label]
+    if (!target) return
+    setActiveExpertTab(target)
+    requestAnimationFrame(() => {
+      detailCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [])
+
+  const handleExpertSummarySelect = useCallback((key: ExpertMeta['key']) => {
+    if (key === 'cio') {
+      setCioOpen(true)
+      requestAnimationFrame(() => {
+        cioCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+      return
+    }
+    setActiveExpertTab(key)
+    requestAnimationFrame(() => {
+      detailCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [])
+
 
   /**
    * 按需拉取某日期附近的筹码数据（K 线 hover 触发）
@@ -798,6 +900,15 @@ function AnalysisContent() {
     })
   }
 
+  // 主页"历史"按钮：把 defaultTab 锁定到指定专家，再触发与 openHotMoneyDialog 相同的拉取
+  const handleOpenHistory = useCallback((tab: ExpertMeta['key']) => {
+    // 弹窗用专家 key 作为 Tab value（hot_money / midline / longterm / cio）
+    setHistoryDefaultTab(tab)
+    openHotMoneyDialog()
+    // openHotMoneyDialog 不在 deps：内部全是 setState 与稳定的 apiClient/stockInfo 引用，闭包过期不影响行为
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stockInfo?.name, basicInfo?.ts_code, code])
+
   // 使用 useMemo 稳定 codes 数组引用，避免重复触发刷新
   const codes = useMemo(() => code ? [code] : undefined, [code])
 
@@ -919,20 +1030,22 @@ function AnalysisContent() {
           )}
           <button
             type="button"
-            onClick={openHotMoneyDialog}
+            onClick={() => { setHistoryDefaultTab(undefined); openHotMoneyDialog() }}
             className="text-xs px-3 py-1.5 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors focus-ring"
+            title="打开历史分析视图（含版本翻页 / 编辑 / 复盘 / 提示词）"
           >
-            AI 分析
+            历史·AI
           </button>
         </div>
       </div>
 
       <HotMoneyViewDialog
         open={hotMoneyOpen}
-        onClose={() => setHotMoneyOpen(false)}
+        onClose={() => { setHotMoneyOpen(false); setHistoryDefaultTab(undefined) }}
         stockName={stockInfo?.name ?? ''}
         stockCode={code ?? ''}
         tsCode={tsCode}
+        defaultTab={historyDefaultTab}
         promptContent={hotMoneyContent}
         promptLoading={hotMoneyLoading}
         dataCollectionPrompt={dataCollectionContent}
@@ -943,7 +1056,10 @@ function AnalysisContent() {
         longtermPromptLoading={longtermLoading}
         cioPrompt={cioContent}
         cioPromptLoading={cioLoading}
-        onSaved={() => { if (code) apiClient.getStock(code).then(setStockInfo).catch(() => {}) }}
+        onSaved={() => {
+          if (code) apiClient.getStock(code).then(setStockInfo).catch(() => {})
+          setExpertsRefreshKey((k) => k + 1)
+        }}
       />
 
       {/* §13 自选弹窗：复用 /stocks 页面同款组件 */}
@@ -969,12 +1085,58 @@ function AnalysisContent() {
         </CardHeader>
         <CardContent>
           {quotePanel ? (
-            <QuotePanel q={quotePanel} stock={stockInfo} cioKeyQuote={cioKeyQuote} />
+            <QuotePanel
+              q={quotePanel}
+              stock={stockInfo}
+              cioKeyQuote={cioKeyQuote}
+              onScoreNodeClick={isAuthenticated ? handleScoreNodeClick : undefined}
+            />
           ) : (
             <p className="text-sm text-gray-500 dark:text-gray-400">暂无行情数据</p>
           )}
         </CardContent>
       </Card>
+
+      {/* 估值数据卡（PE/PB/PS/股息率 + ROC/EY/安全边际，从行情卡拆出来；公开数据，未登录可见） */}
+      {quotePanel && <ValuationCard q={quotePanel} stock={stockInfo} />}
+
+      {/* AI 决策三联卡（仅登录态可见，4 专家数据需鉴权） */}
+      {isAuthenticated && (
+        <>
+          {/* 卡 ②：决策摘要 */}
+          <ExpertSummaryCard
+            latestByExpert={latestByExpert}
+            loading={expertsLoading}
+            onExpertSelect={handleExpertSummarySelect}
+            onMultiGenerate={handleMultiGenerate}
+            multiGenerating={multiGenerating}
+            multiMessage={multiMessage}
+          />
+
+          {/* 卡 ③：CIO 综合决策（默认折叠；雷达图点 CIO / 卡②点 CIO 时展开） */}
+          <div ref={cioCardRef}>
+            <CioDecisionCard
+              analysisText={latestByExpert.cio?.analysis_text ?? null}
+              defaultOpen={cioOpen}
+              key={`cio-${cioOpen}-${latestByExpert.cio?.id ?? 'none'}`}
+              id="cio-decision-card"
+            />
+          </div>
+
+          {/* 卡 ④：三专家详情（嵌入式 Tab） */}
+          <div ref={detailCardRef}>
+            <ExpertDetailCard
+              latestByExpert={latestByExpert}
+              activeExpert={activeExpertTab}
+              onActiveExpertChange={setActiveExpertTab}
+              onOpenHistory={handleOpenHistory}
+              onRegenerate={handleRegenerateExpert}
+              regeneratingKey={regeneratingKey}
+              id="expert-detail-card"
+            />
+          </div>
+        </>
+      )}
 
       {/* 基本信息卡片 */}
       <Card>

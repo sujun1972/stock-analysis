@@ -96,6 +96,13 @@ const config: Config = {
           mid: "hsl(var(--score-mid))",
           high: "hsl(var(--score-high))",
         },
+        // 4 专家身份色（决策卡左 border / 顶部色条 / 头像点）
+        expert: {
+          cio: "hsl(var(--expert-cio))",
+          "hot-money": "hsl(var(--expert-hot-money))",
+          midline: "hsl(var(--expert-midline))",
+          longterm: "hsl(var(--expert-longterm))",
+        },
       },
       transitionDuration: {
         fast: "var(--duration-fast)",

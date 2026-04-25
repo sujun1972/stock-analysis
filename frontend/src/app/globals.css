@@ -41,6 +41,14 @@
     --score-mid: 38 92% 45%;      /* 中分金（6-8） */
     --score-high: 271 76% 53%;    /* 高分紫（≥8） */
 
+    /* 4 专家身份色 —— 用于 /analysis 主页 AI 决策卡的左 border / 顶部色条 / 图标。
+       与评分色阶（score-*）独立：评分按数值大小渲染，身份色按"哪位专家说的"渲染。
+       不与 K 线红绿涨跌冲突（CIO=紫 / 游资=橙 / 中线=蓝 / 价值=金）。 */
+    --expert-cio: 262 83% 58%;        /* CIO 紫 */
+    --expert-hot-money: 25 95% 53%;   /* 游资 橙 */
+    --expert-midline: 217 91% 60%;    /* 中线 蓝 */
+    --expert-longterm: 45 93% 47%;    /* 价值 金 */
+
     /* 过渡时长分档 —— 用 var(--duration-fast) 等，避免随手写 0.2s */
     --duration-fast: 120ms;
     --duration-normal: 200ms;
@@ -80,6 +88,12 @@
     --score-low: 217 91% 70%;
     --score-mid: 48 96% 65%;
     --score-high: 271 91% 76%;
+
+    /* 4 专家身份色 在深色模式下整体提亮（明度 ≥70%）以保 WCAG AA */
+    --expert-cio: 262 70% 70%;
+    --expert-hot-money: 25 90% 65%;
+    --expert-midline: 217 80% 70%;
+    --expert-longterm: 45 85% 60%;
   }
 }
 
