@@ -252,7 +252,29 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 - 短代码自动补全：纯数字 `000001` → `000001.SZ`
 - 同步后清除 Redis 缓存：`cache.delete_pattern(f"daily_data:*{ts_code}*")`
 
-**主题联动（`useEChartsTheme`）**：所有 ECharts 实例组件（`EChartsStockChart` / `MinuteChart` / `BacktestKLineChart` / `EquityCurveChart` / `ai-lab/*` / `analysis` 筹码图）统一使用 [useEChartsTheme](src/hooks/useEChartsTheme.ts) 跟随 `next-themes` 的深浅主题。约定：
+**主图 y 轴 / 筹码图对齐**（关键约束）：
+- 主图 y 轴永远 `min/max` 锁定到 dataZoom 视图内 `[low*0.97, high*1.03]`，不依赖 ECharts 的 `scale` 自动算法（避免视图内出现大片空白 + 筹码图无法垂直对齐）
+- dataZoom 缩放事件中必须同步更新主图 yAxis 的 min/max（否则缩放后 y 范围与 K 线脱节）
+- 筹码图 yAxis 用 `category` 类型，但不直接用真实档位价格做 data —— 而是按主图 [loBound, hiBound] 等距生成 N 档骨架（N=`MAIN_CHART_HEIGHT/5`，每档 ≥5px），把真实数据档累加到最近骨架档。这样筹码 category 范围 = 主图 value 范围，同价格在两图 y 像素位置完全对齐
+
+**筹码分布嵌入主图右侧**（同花顺/东财/通达信标准布局）：
+- 主图 grid `right: '26%'`（hasChips 时）/ `'8%'`（不带），副图 grid right 必须与主图同步，否则跨面板垂直十字线 x 错位
+- 筹码 grid `left: '75%', right: '6%'`，与主图同 `top` 同 `height`
+- 筹码 xAxis 是独立 `value` 类型（占比%），不能挂到 `axisPointer.link`/`tooltip.link` 的 xAxisIndex `'all'`，必须显式列出常规面板索引
+- 筹码 series 用一维 `value: percent`（与 category yAxis 配对）；染色按"价格 < refPrice×0.99=绿（盈利）/> ×1.01=红（亏损）/±1%=黄（接近现价）"
+
+**hover 联动按日期切换筹码图**：
+- 监听 `chart.on('updateAxisPointer')`，从 `evt.axesInfo` 找 `axisDim==='x'` 的 value 解出 dateKey
+- 用三态判断：`bucket && bucket.length > 0`（有数据切换）/ `bucket && bucket.length === 0` 或 `dateKey ∈ fetchedRanges`（已确认无数据，badge 显示"无数据"，清空筹码图但不发请求）/ 都不是（badge 显示"加载中"+ 触发 `onChipsDateMiss`）
+- 父组件按需拉取的窗口策略：以 date 为中心 ±45 天，防抖 300ms，区间覆盖检查避免重复请求；拉取完成后若 date 仍不在新数据中，**显式 `setChipsHistory.set(date, [])`** 写入空数组哨兵 → 子组件下次再 hover 同一天直接走"无数据"分支
+- `fetchedChipsRanges` 必须是 React state（不是 ref）通过 prop 传给子组件，否则子组件感知不到"已确认无数据"
+- 数据到达后子组件 effect 重跑时检查 `hoverDateRef.current`（鼠标停留位置），若新数据命中则自动 `refreshChipsPanel`，避免"鼠标没动 → 图不更新"死局
+
+**indicator 单选 + 设置弹窗**：
+- MACD/KDJ/RSI 在底部 Tab 单选切换（`enforceSingleIndicator()` 强制三者互斥），设置弹窗只放成交量 / BOLL / 筹码分布开关
+- `localStorage` 用 `{ ...DEFAULT_INDICATORS, ...JSON.parse(saved) }` 兜底新增字段（如 `chips`），保证旧用户数据兼容
+
+**主题联动（`useEChartsTheme`）**：所有 ECharts 实例组件（`EChartsStockChart` / `MinuteChart` / `BacktestKLineChart` / `EquityCurveChart` / `ai-lab/*`）统一使用 [useEChartsTheme](src/hooks/useEChartsTheme.ts) 跟随 `next-themes` 的深浅主题。约定：
 
 1. 从 hook 取 `{ theme, echartsTheme, palette }`。`theme` 是稳定字符串 `'light' | 'dark'`；`palette` 是单例 frozen 对象（不会因父组件重渲染触发引用变化）。
 2. 用 **独立 useEffect + `[theme]` 依赖**先 `dispose()` 旧 instance 并置 `null`，下一轮渲染时主 effect 会以新主题重新 `echarts.init(el, echartsTheme)`——ECharts 不支持热切主题，只能重建。

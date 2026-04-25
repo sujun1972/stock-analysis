@@ -37,6 +37,7 @@ class ApiClient {
   getStockQuotePanel = stocksApi.getStockQuotePanel
   getStockBasicInfo = stocksApi.getStockBasicInfo
   getChipsDistribution = stocksApi.getChipsDistribution
+  getChipsDistributionHistory = stocksApi.getChipsDistributionHistory
   getStockCodes = stocksApi.getStockCodes
   updateStockList = stocksApi.updateStockList
 

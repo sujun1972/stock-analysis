@@ -5,9 +5,7 @@ import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
 import type { StockInfo, StockQuotePanel } from '@/types'
-import * as echarts from 'echarts'
 import { HotMoneyViewDialog } from '@/components/stocks/HotMoneyViewDialog'
-import { useEChartsTheme } from '@/hooks/useEChartsTheme'
 
 // 动态导入StockPriceCard组件（统一的图表组件）
 const StockPriceCard = dynamic(() => import('@/components/StockPriceCard'), {
@@ -222,175 +220,6 @@ function QuotePanel({ q, stock }: { q: StockQuotePanel; stock: StockInfo | null 
   )
 }
 
-// ─────────────────────────────────────────
-// 筹码分布图
-// ─────────────────────────────────────────
-
-interface ChipItem { price: number; percent: number; trade_date?: string }
-
-function ChipsDistributionCard({ tsCode, latestPrice }: { tsCode: string; latestPrice?: number | null }) {
-  const chartRef = useRef<HTMLDivElement>(null)
-  const chartInstance = useRef<echarts.ECharts | null>(null)
-  const { theme, echartsTheme } = useEChartsTheme()
-  const [dataDate, setDataDate] = useState<string | null>(null)
-  // null = 加载中，[] = 已加载但无数据，有元素 = 正常数据
-  const [chips, setChips] = useState<ChipItem[] | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  // 主题切换：dispose 旧 instance，让下一轮 effect 以新主题重新 init
-  useEffect(() => {
-    if (chartInstance.current) {
-      chartInstance.current.dispose()
-      chartInstance.current = null
-    }
-  }, [theme])
-
-  // 获取筹码数据（后端会自动同步缺失/过期数据）
-  useEffect(() => {
-    if (!tsCode) return
-    let cancelled = false
-    setLoading(true)
-    setChips(null)
-    apiClient.getChipsDistribution(tsCode).then((items) => {
-      if (cancelled) return
-      setLoading(false)
-      if (items && items.length > 0 && items[0].trade_date) {
-        setDataDate(items[0].trade_date)
-      }
-      setChips(items ?? [])
-    })
-    return () => { cancelled = true }
-  }, [tsCode])
-
-  // chips state 变化后渲染图表；此时 React 已将容器高度写入 DOM，
-  // 再用 requestAnimationFrame 延一帧确保浏览器完成布局，ECharts 可读到正确尺寸
-  useEffect(() => {
-    if (!chips || chips.length === 0 || !chartRef.current) return
-
-    if (!chartInstance.current) {
-      chartInstance.current = echarts.init(chartRef.current, echartsTheme)
-    }
-    const chart = chartInstance.current
-
-    const sorted = [...chips].sort((a, b) => a.price - b.price)
-    const prices = sorted.map(d => d.price)
-    const percents = sorted.map(d => d.percent)
-
-    // 按盈亏分区着色：绿色=盈利，红色=亏损，黄色=当前价附近（±1%）
-    const barColors = prices.map(p => {
-      if (latestPrice == null) return '#60a5fa'
-      if (p < latestPrice * 0.99) return '#22c55e'
-      if (p > latestPrice * 1.01) return '#ef4444'
-      return '#facc15'
-    })
-
-    // 当前价标注线（定位到最接近的价格档位）
-    const markLineData = latestPrice != null ? (() => {
-      const closestIdx = prices.reduce((best, p, i) =>
-        Math.abs(p - latestPrice) < Math.abs(prices[best] - latestPrice) ? i : best, 0)
-      return [{
-        yAxis: closestIdx,
-        lineStyle: { color: '#f59e0b', width: 1.5, type: 'dashed' as const },
-        label: { show: true, formatter: `现价 ${latestPrice.toFixed(2)}`, color: '#f59e0b', fontSize: 10 },
-      }]
-    })() : []
-
-    requestAnimationFrame(() => {
-      chart.setOption({
-        backgroundColor: 'transparent',
-        grid: { top: 8, bottom: 40, left: 60, right: 16 },
-        tooltip: {
-          trigger: 'axis',
-          axisPointer: { type: 'shadow' },
-          formatter: (params: { dataIndex: number }[]) => {
-            const idx = params[0].dataIndex
-            return `价格：${prices[idx].toFixed(2)}<br/>占比：${percents[idx].toFixed(2)}%`
-          },
-        },
-        xAxis: {
-          type: 'value',
-          name: '占比(%)',
-          nameLocation: 'end',
-          nameTextStyle: { color: '#9ca3af', fontSize: 11 },
-          axisLabel: { color: '#9ca3af', fontSize: 11, formatter: (v: number) => v + '%' },
-          axisLine: { lineStyle: { color: '#374151' } },
-          splitLine: { lineStyle: { color: '#1f2937', type: 'dashed' } },
-        },
-        yAxis: {
-          type: 'category',
-          data: prices.map(p => p.toFixed(2)),
-          axisLabel: { color: '#9ca3af', fontSize: 10 },
-          axisLine: { lineStyle: { color: '#374151' } },
-          splitLine: { show: false },
-        },
-        series: [{
-          type: 'bar',
-          data: percents.map((v, i) => ({ value: v, itemStyle: { color: barColors[i] } })),
-          barMaxWidth: 12,
-          emphasis: { itemStyle: { opacity: 0.8 } },
-          markLine: { silent: true, symbol: 'none', data: markLineData },
-        }],
-      })
-      chart.resize()
-    })
-  }, [chips, latestPrice, theme, echartsTheme])
-
-  // 响应窗口大小变化；组件卸载时销毁图表实例
-  useEffect(() => {
-    const handleResize = () => chartInstance.current?.resize()
-    window.addEventListener('resize', handleResize)
-    return () => {
-      window.removeEventListener('resize', handleResize)
-      chartInstance.current?.dispose()
-      chartInstance.current = null
-    }
-  }, [])
-
-  const isEmpty = !loading && chips !== null && chips.length === 0
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center justify-between">
-          <span>筹码分布</span>
-          {dataDate && (
-            <span className="text-xs font-normal text-gray-400">
-              数据日期：{dataDate.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')}
-            </span>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {loading && (
-          <div className="flex items-center justify-center h-48 text-sm text-gray-500 dark:text-gray-400">
-            加载筹码数据中...
-          </div>
-        )}
-        {isEmpty && (
-          <div className="flex items-center justify-center h-48 text-sm text-gray-500 dark:text-gray-400">
-            暂无筹码分布数据
-          </div>
-        )}
-        {/*
-          容器始终存在于 DOM，通过 height 切换显隐而非条件渲染，
-          避免 ECharts 初始化时读到 clientHeight=0 的问题
-        */}
-        <div
-          ref={chartRef}
-          style={{ height: !loading && !isEmpty ? 420 : 0, overflow: 'hidden' }}
-          className="w-full"
-        />
-        {!loading && !isEmpty && (
-          <div className="mt-2 flex gap-4 text-xs text-gray-500 dark:text-gray-400">
-            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-green-500" />盈利筹码</span>
-            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-red-500" />亏损筹码</span>
-            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-yellow-400" />当前价附近</span>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
 
 // ─────────────────────────────────────────
 // 主页面
@@ -405,6 +234,15 @@ function AnalysisContent() {
   const [quotePanel, setQuotePanel] = useState<StockQuotePanel | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // 筹码分布数据（嵌入到 K 线主图右侧）
+  const [chipsData, setChipsData] = useState<{ price: number; percent: number }[]>([])
+  // 筹码历史（Map<YYYY-MM-DD, ChipItem[]>）：K 线 hover 按日期切换
+  const [chipsHistory, setChipsHistory] = useState<Map<string, { price: number; percent: number }[]>>(new Map())
+  // 按需拉取缓存管理
+  // fetchedRanges 改用 state，让子组件通过 prop 拿到最新值，区分"加载中"/"已确认无数据"
+  const [fetchedChipsRanges, setFetchedChipsRanges] = useState<Array<{ start: string; end: string }>>([])
+  const inflightChipsRangesRef = useRef<Array<{ start: string; end: string }>>([])  // 正在拉的区间
+  const chipsMissDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)   // 防抖句柄
 
   // ── AI 分析弹窗 ──
   const [hotMoneyOpen, setHotMoneyOpen] = useState(false)
@@ -427,6 +265,95 @@ function AnalysisContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code])
+
+  // 加载筹码分布（单日快照 + 近 6 个月历史，用于 K 线 hover 联动）
+  // 历史数据按交易日分组到 Map，前端用 dataIndex 找对应日期即可 O(1) 切换
+  useEffect(() => {
+    const tsCode = basicInfo?.ts_code || (code ? toTsCode(code) : null)
+    if (!tsCode) return
+    let cancelled = false
+
+    // 最新一日快照（兜底，首屏立即显示）
+    apiClient.getChipsDistribution(tsCode).then(items => {
+      if (cancelled) return
+      setChipsData(items ?? [])
+    }).catch(() => {
+      if (!cancelled) setChipsData([])
+    })
+
+    // 近 6 个月筹码历史（约 120 个交易日 × 100 档位 ≈ 12000 行，单请求 < 500ms）
+    const today = new Date()
+    const start = new Date(today)
+    start.setMonth(start.getMonth() - 6)
+    const fmt = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const startStr = fmt(start)
+    const endStr = fmt(today)
+
+    // 切换股票时重置缓存
+    setFetchedChipsRanges([])
+    inflightChipsRangesRef.current = []
+
+    apiClient.getChipsDistributionHistory(tsCode, startStr, endStr).then(history => {
+      if (cancelled) return
+      setChipsHistory(history)
+      setFetchedChipsRanges([{ start: startStr, end: endStr }])
+    }).catch(() => {
+      if (!cancelled) setChipsHistory(new Map())
+    })
+
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [basicInfo?.ts_code, code])
+
+  /**
+   * 按需拉取某日期附近的筹码数据（K 线 hover 触发）
+   * - 防抖 300ms：鼠标快速划过时避免狂发请求
+   * - 区间覆盖检查：date 已在 fetched 或 inflight 区间内则跳过
+   * - 窗口策略：以 date 为中心 ±45 天，单次拉回一片，摊薄网络开销
+   */
+  const onChipsDateMiss = (date: string) => {
+    if (chipsMissDebounceRef.current) clearTimeout(chipsMissDebounceRef.current)
+    chipsMissDebounceRef.current = setTimeout(() => {
+      const tsCode = basicInfo?.ts_code || (code ? toTsCode(code) : null)
+      if (!tsCode) return
+
+      // 检查 date 是否已在已拉/正在拉的任何区间内
+      const inRange = (ranges: Array<{ start: string; end: string }>) =>
+        ranges.some(r => date >= r.start && date <= r.end)
+      if (inRange(fetchedChipsRanges) || inRange(inflightChipsRangesRef.current)) {
+        return
+      }
+
+      // 以 date 为中心取 ±45 天窗口
+      const centerDate = new Date(date + 'T00:00:00')
+      const winStart = new Date(centerDate); winStart.setDate(winStart.getDate() - 45)
+      const winEnd = new Date(centerDate); winEnd.setDate(winEnd.getDate() + 45)
+      const fmt = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      const reqStart = fmt(winStart)
+      const reqEnd = fmt(winEnd)
+
+      inflightChipsRangesRef.current.push({ start: reqStart, end: reqEnd })
+      apiClient.getChipsDistributionHistory(tsCode, reqStart, reqEnd).then(newHistory => {
+        // 合并到 chipsHistory（不覆盖已有键）；触发 date 所在天若仍无数据，写入空数组作为"已确认无数据"标记
+        // 这样子组件再 hover 该日时 historyMap.has(date)=true、bucket=[]，badge 显示"无数据"而非"加载中"
+        setChipsHistory(prev => {
+          const merged = new Map(prev)
+          newHistory.forEach((v, k) => {
+            if (!merged.has(k)) merged.set(k, v)
+          })
+          if (!merged.has(date)) merged.set(date, [])
+          return merged
+        })
+        setFetchedChipsRanges(prev => [...prev, { start: reqStart, end: reqEnd }])
+      }).finally(() => {
+        inflightChipsRangesRef.current = inflightChipsRangesRef.current.filter(
+          r => !(r.start === reqStart && r.end === reqEnd)
+        )
+      })
+    }, 300)
+  }
 
   const toTsCode = (c: string) => {
     if (c.includes('.')) return c.toUpperCase()
@@ -677,20 +604,16 @@ function AnalysisContent() {
         </CardContent>
       </Card>
 
-      {/* 筹码分布 */}
-      {(basicInfo?.ts_code || stockInfo?.code) && (
-        <ChipsDistributionCard
-          tsCode={basicInfo?.ts_code || stockInfo!.code}
-          latestPrice={quotePanel?.latest_price}
-        />
-      )}
-
-      {/* 图表区域 */}
+      {/* 图表区域（筹码分布已嵌入 K 线主图右侧，鼠标 hover K 线切换到对应日期） */}
       <StockPriceCard
         stockCode={code}
         stockName={stockInfo?.name}
         defaultChartType="daily"
         showHeader={true}
+        chipsData={chipsData}
+        chipsHistory={chipsHistory}
+        chipsFetchedRanges={fetchedChipsRanges}
+        onChipsDateMiss={onChipsDateMiss}
       />
     </div>
   )

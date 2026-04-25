@@ -54,6 +54,7 @@ export interface IndicatorSettings {
   kdj: boolean
   rsi: boolean
   boll: boolean
+  chips: boolean  // 是否在 K 线主图右侧嵌入筹码分布
 }
 
 export const DEFAULT_INDICATORS: IndicatorSettings = {
@@ -62,6 +63,7 @@ export const DEFAULT_INDICATORS: IndicatorSettings = {
   kdj: false,
   rsi: false,
   boll: false,
+  chips: true,  // 默认开启筹码分布（数据可用时）
 }
 
 /**
@@ -72,7 +74,8 @@ export function loadIndicatorSettings(): IndicatorSettings {
     const saved = localStorage.getItem('chart_visible_indicators')
     if (saved) {
       try {
-        return JSON.parse(saved)
+        // 旧版本可能没有 chips 字段，合并默认值兜底
+        return { ...DEFAULT_INDICATORS, ...JSON.parse(saved) }
       } catch {
         // ignore
       }

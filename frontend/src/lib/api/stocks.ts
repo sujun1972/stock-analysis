@@ -102,6 +102,55 @@ export async function getChipsDistribution(tsCode: string): Promise<{ price: num
   }
 }
 
+/**
+ * 批量获取指定日期范围的筹码分布历史
+ * 返回按 trade_date 分组的 Map<YYYY-MM-DD, ChipItem[]>
+ * 用于 K 线图 hover 联动：鼠标滑过某个交易日，瞬间切换到该日的筹码分布
+ *
+ * @param tsCode 股票代码（如 000001.SZ）
+ * @param startDate 起始日期 YYYY-MM-DD
+ * @param endDate 结束日期 YYYY-MM-DD
+ */
+export async function getChipsDistributionHistory(
+  tsCode: string,
+  startDate: string,
+  endDate: string
+): Promise<Map<string, { price: number; percent: number }[]>> {
+  const result = new Map<string, { price: number; percent: number }[]>()
+  try {
+    const response = await axiosInstance.get('/api/cyq-chips', {
+      params: {
+        ts_code: tsCode,
+        start_date: startDate,
+        end_date: endDate,
+        page: 1,
+        page_size: 50000,  // 后端上限，单只股票 60 交易日约 6000 行
+        sort_by: 'trade_date',
+        sort_order: 'asc',
+      },
+    })
+    const payload = response.data
+    if (payload.code !== 200 || !payload.data?.items) return result
+
+    for (const item of payload.data.items as Array<{ trade_date: string; price: number; percent: number }>) {
+      // 后端 trade_date 为 YYYYMMDD；归一化为 YYYY-MM-DD 便于前端按 K 线日期直接匹配
+      const raw = String(item.trade_date)
+      const key = raw.length === 8
+        ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`
+        : raw
+      const bucket = result.get(key)
+      if (bucket) {
+        bucket.push({ price: Number(item.price), percent: Number(item.percent) })
+      } else {
+        result.set(key, [{ price: Number(item.price), percent: Number(item.percent) }])
+      }
+    }
+  } catch {
+    // 失败时返回空 Map，调用方退化为"只显示最新一日筹码"
+  }
+  return result
+}
+
 export async function getStockCodes(params?: {
   market?: string
   exchange?: string

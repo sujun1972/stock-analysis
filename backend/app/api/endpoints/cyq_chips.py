@@ -40,7 +40,8 @@ async def get_cyq_chips(
     start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
     page: int = Query(1, description="页码", ge=1),
-    page_size: int = Query(100, description="每页记录数", ge=1, le=500),
+    # page_size 上限放宽到 50000，支持前端一次拉取单只股票数月筹码历史（约 100 档 × 60 交易日 = 6000 行）
+    page_size: int = Query(100, description="每页记录数", ge=1, le=50000),
     sort_by: Optional[str] = Query(None, description="排序字段"),
     sort_order: Optional[str] = Query(None, description="排序方向：asc/desc")
 ):

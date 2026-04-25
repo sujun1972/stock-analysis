@@ -83,6 +83,14 @@ interface StockPriceCardProps {
   backtestKlineData?: FeatureData[]  // 回测模式下的K线数据（优先使用，与信号精确匹配）
   signalPoints?: SignalPoints
   equityCurve?: EquityCurvePoint[]
+  // 筹码分布数据（可选，传入后嵌入到 K 线主图右侧；非回测模式下使用）
+  chipsData?: { price: number; percent: number }[]
+  // 筹码分布历史（Map<YYYY-MM-DD, ChipItem[]>）：K 线 hover 可按日期切换
+  chipsHistory?: Map<string, { price: number; percent: number }[]>
+  // K 线 hover 到某日但 chipsHistory 无数据时触发（父组件可按需拉取）
+  onChipsDateMiss?: (date: string) => void
+  // 已向后端确认过的筹码日期区间，子组件用来区分"加载中"/"已确认无数据"
+  chipsFetchedRanges?: Array<{ start: string; end: string }>
 }
 
 /**
@@ -145,6 +153,10 @@ export default function StockPriceCard({
   backtestKlineData,
   signalPoints,
   equityCurve,
+  chipsData,
+  chipsHistory,
+  onChipsDateMiss,
+  chipsFetchedRanges,
 }: StockPriceCardProps) {
   // 图表类型（日线/分时）
   const [chartType, setChartType] = useState<'daily' | 'minute'>(defaultChartType)
@@ -219,6 +231,10 @@ export default function StockPriceCard({
     (d.RSI24 !== null && d.RSI24 !== undefined)
   )
   const hasBOLL = features.some(d => d.BOLL_UPPER !== null && d.BOLL_UPPER !== undefined)
+  // 筹码数据是否可用（不看用户开关）：弹窗 disabled 状态判断用
+  const hasChipsData =
+    (chipsHistory instanceof Map && chipsHistory.size > 0) ||
+    (Array.isArray(chipsData) && chipsData.length > 0)
 
   // 加载日线数据
   const loadDailyData = async () => {
@@ -412,6 +428,12 @@ export default function StockPriceCard({
           signalPoints={signalPoints}
           equityCurve={equityCurve}
           externalVisibleIndicators={visibleIndicators}
+          // 底部 Tab 切换技术指标时同步回父组件，触发 localStorage 持久化（见上方 useEffect）
+          onIndicatorsChange={(next: IndicatorSettings) => setVisibleIndicators(next)}
+          chipsData={chipsData}
+          chipsHistory={chipsHistory}
+          chipsFetchedRanges={chipsFetchedRanges}
+          onChipsDateMiss={onChipsDateMiss}
           hideSettingsButton={true}  // 隐藏内部的设置按钮
         />
       )
@@ -526,49 +548,7 @@ export default function StockPriceCard({
                   <span className="ml-3 text-gray-900 dark:text-white">成交量 (Volume)</span>
                 </label>
 
-                {/* MACD */}
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={visibleIndicators.macd}
-                    onChange={(e) => setVisibleIndicators({ ...visibleIndicators, macd: e.target.checked })}
-                    disabled={!hasMACD}
-                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 disabled:opacity-50"
-                  />
-                  <span className={`ml-3 ${hasMACD ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-600'}`}>
-                    MACD {!hasMACD && '(无数据)'}
-                  </span>
-                </label>
-
-                {/* KDJ */}
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={visibleIndicators.kdj}
-                    onChange={(e) => setVisibleIndicators({ ...visibleIndicators, kdj: e.target.checked })}
-                    disabled={!hasKDJ}
-                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 disabled:opacity-50"
-                  />
-                  <span className={`ml-3 ${hasKDJ ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-600'}`}>
-                    KDJ {!hasKDJ && '(无数据)'}
-                  </span>
-                </label>
-
-                {/* RSI */}
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={visibleIndicators.rsi}
-                    onChange={(e) => setVisibleIndicators({ ...visibleIndicators, rsi: e.target.checked })}
-                    disabled={!hasRSI}
-                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 disabled:opacity-50"
-                  />
-                  <span className={`ml-3 ${hasRSI ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-600'}`}>
-                    RSI {!hasRSI && '(无数据)'}
-                  </span>
-                </label>
-
-                {/* BOLL */}
+                {/* BOLL（叠加在主图） */}
                 <label className="flex items-center cursor-pointer">
                   <input
                     type="checkbox"
@@ -581,6 +561,24 @@ export default function StockPriceCard({
                     布林带 (BOLL) {!hasBOLL && '(无数据)'}
                   </span>
                 </label>
+
+                {/* 筹码分布（嵌入主图右侧） */}
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={visibleIndicators.chips}
+                    onChange={(e) => setVisibleIndicators({ ...visibleIndicators, chips: e.target.checked })}
+                    disabled={!hasChipsData}
+                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 disabled:opacity-50"
+                  />
+                  <span className={`ml-3 ${hasChipsData ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-600'}`}>
+                    筹码分布 {!hasChipsData && '(无数据)'}
+                  </span>
+                </label>
+
+                <p className="text-xs text-gray-500 dark:text-gray-400 pt-2 border-t border-gray-200 dark:border-gray-700">
+                  MACD / KDJ / RSI 请在图表下方的 Tab 栏切换（业界标准：一次显示一个副图，避免纵向过长）
+                </p>
               </div>
 
               <div className="mt-6 flex justify-end">
