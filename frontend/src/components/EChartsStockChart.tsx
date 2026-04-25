@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import {
   formatVolume as formatVolumeUtil,
+  formatAmount as formatAmountUtil,
   removeDateTimePart as removeDateTimePartUtil,
   formatDateWithWeekday as formatDateWithWeekdayUtil,
   loadIndicatorSettings,
@@ -43,6 +44,7 @@ interface ChartData {
   low: number
   close: number
   volume: number
+  amount?: number | null
   MA5?: number | null
   MA20?: number | null
   MA60?: number | null
@@ -229,6 +231,7 @@ export default function EChartsStockChart({
   const hasEquityData = backtestMode && equityCurve && equityCurve.length > 0
 
   const formatVolume = formatVolumeUtil
+  const formatAmount = formatAmountUtil
   const removeDateTimePart = removeDateTimePartUtil
   const formatDateWithWeekday = formatDateWithWeekdayUtil
 
@@ -812,7 +815,35 @@ export default function EChartsStockChart({
       if (idx < 0 || idx >= sortedData.length) return ''
       const d = sortedData[idx]
       const tag = d.close >= d.open ? 'red' : 'green'
-      return `{title|成交量}{${tag}|${formatVolume(d.volume)}}`
+      // 量比 = 当日 volume / 前 5 日成交量均值（业界标准：通达信/同花顺）
+      let ratioStr = '--'
+      let ratioTag: 'red' | 'green' | 'neutral' = 'neutral'
+      if (idx >= 5) {
+        let sum = 0
+        let cnt = 0
+        for (let i = idx - 5; i < idx; i++) {
+          const v = sortedData[i]?.volume
+          if (typeof v === 'number' && !isNaN(v)) { sum += v; cnt++ }
+        }
+        if (cnt > 0) {
+          const avg = sum / cnt
+          if (avg > 0) {
+            const ratio = d.volume / avg
+            ratioStr = ratio.toFixed(2)
+            if (ratio >= 1.5) ratioTag = 'red'
+            else if (ratio <= 0.7) ratioTag = 'green'
+            else ratioTag = 'neutral'
+          }
+        }
+      }
+      const segs: string[] = [
+        `{title|成交量}{${tag}|${formatVolume(d.volume)}}`,
+      ]
+      if (d.amount != null) {
+        segs.push(`{label|额}{${tag}|${formatAmount(d.amount)}}`)
+      }
+      segs.push(`{label|量比}{${ratioTag}|${ratioStr}}`)
+      return segs.join('')
     }
 
     const buildMacdLegendText = (idx: number): string => {

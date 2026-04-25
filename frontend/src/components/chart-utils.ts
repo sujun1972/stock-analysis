@@ -15,6 +15,16 @@ export function formatVolume(value: number): string {
 }
 
 /**
+ * 格式化成交额（原始单位：元）：转换为亿元/万元
+ */
+export function formatAmount(value: number | null | undefined): string {
+  if (value == null || isNaN(value)) return '--'
+  if (value >= 100000000) return (value / 100000000).toFixed(2) + '亿'
+  if (value >= 10000) return (value / 10000).toFixed(2) + '万'
+  return value.toFixed(0)
+}
+
+/**
  * 去除日期字符串中的时间部分
  */
 export function removeDateTimePart(dateStr: string): string {
