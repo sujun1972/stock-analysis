@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import * as echarts from 'echarts'
+import { RefreshCw } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { useEChartsTheme } from '@/hooks/useEChartsTheme'
 import {
@@ -420,6 +421,13 @@ export default function EChartsStockChart({
       }
     }
   }, [stockCode])
+
+  const handleReset = useCallback(() => {
+    const chart = chartInstanceRef.current
+    if (!chart) return
+    currentDataZoomRef.current = { start: 70, end: 100 }
+    chart.dispatchAction({ type: 'dataZoom', start: 70, end: 100 })
+  }, [])
 
   useEffect(() => {
     if (!chartRef.current || allData.length === 0) return
@@ -2101,24 +2109,10 @@ export default function EChartsStockChart({
       )}
 
       {/* 图表（min-w-0 防止 flex 父级被图表内部宽度撑开） */}
-      {/* 相对定位容器，让筹码日期 badge 与复位按钮浮在右上 */}
+      {/* 相对定位容器，让筹码日期 badge 浮在右上 */}
       <div className="relative min-w-0 max-w-full">
         <div ref={chartRef} className="min-w-0 max-w-full" style={{ width: '100%', height: `${chartHeight}px` }} />
 
-        {/* 复位按钮：把 dataZoom 和缩放重置到默认 70-100 视图 */}
-        <button
-          type="button"
-          onClick={() => {
-            const chart = chartInstanceRef.current
-            if (!chart) return
-            currentDataZoomRef.current = { start: 70, end: 100 }
-            chart.dispatchAction({ type: 'dataZoom', start: 70, end: 100 })
-          }}
-          className="absolute top-1 right-20 px-2 py-0.5 text-[10px] rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-fast focus-ring"
-          title="重置缩放视图"
-        >
-          ⟲ 复位
-        </button>
         {/* 仅在筹码"加载中"或"无数据"状态显示 badge——常规情况下日期已由主图浮层呈现 */}
         {activeChipsDateLabel && /(加载中|无数据)/.test(activeChipsDateLabel) && (
           <div
@@ -2165,6 +2159,15 @@ export default function EChartsStockChart({
 
         {/* 快速时间窗（业界标准：1M / 3M / 6M / 1Y / All） */}
         <div className="flex items-center gap-0.5 shrink-0">
+          <button
+            type="button"
+            onClick={handleReset}
+            className="p-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-fast focus-ring mr-1"
+            title="重置缩放视图"
+            aria-label="重置缩放视图"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
           {([
             { key: '1M', label: '1月', days: 22 },
             { key: '3M', label: '3月', days: 66 },
