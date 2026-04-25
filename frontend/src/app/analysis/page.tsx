@@ -10,6 +10,7 @@ import type { StockInfo, StockQuotePanel } from '@/types'
 import { HotMoneyViewDialog } from '@/components/stocks/HotMoneyViewDialog'
 import { MoneyflowCard } from '@/components/stocks/MoneyflowCard'
 import { BillboardCard } from '@/components/stocks/BillboardCard'
+import { FinancialBriefCard } from '@/components/stocks/FinancialBriefCard'
 
 // 动态导入StockPriceCard组件（统一的图表组件）
 const StockPriceCard = dynamic(() => import('@/components/StockPriceCard'), {
@@ -969,6 +970,9 @@ function AnalysisContent() {
           </div>
         </CardContent>
       </Card>
+
+      {/* 财报简报折叠卡（默认收起，标题行显示最新一期摘要） */}
+      {tsCode && <FinancialBriefCard tsCode={tsCode} />}
 
       {/* 图表区域（筹码分布已嵌入 K 线主图右侧，鼠标 hover K 线切换到对应日期） */}
       <StockPriceCard
