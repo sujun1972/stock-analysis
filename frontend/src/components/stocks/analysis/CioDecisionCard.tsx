@@ -7,7 +7,7 @@ import { GenericSection, FollowupTriggersSection } from './sections'
 import { safeParseJSON, scoreToneClass, extractScore, extractKeyQuote } from './expert-meta'
 import { useAnalysisHistory } from './useAnalysisHistory'
 import {
-  HistoryPager,
+  TradeDateVersionPager,
   RecordActionToolbar,
   DeleteConfirmDialog,
   EditAnalysisDialog,
@@ -171,14 +171,15 @@ export function CioDecisionCard({
         </button>
 
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 shrink-0 ml-auto">
-          <HistoryPager
-            total={history.records.length}
-            totalInDb={history.total}
-            index={history.index}
-            current={current}
+          <TradeDateVersionPager
+            groups={history.groups}
+            selectedTradeDate={history.selectedTradeDate}
+            onSelectTradeDate={history.setSelectedTradeDate}
+            versions={history.versions}
+            versionIndex={history.versionIndex}
+            onPrevVersion={history.goOlderVersion}
+            onNextVersion={history.goNewerVersion}
             loading={history.loading}
-            onPrev={history.goOlder}
-            onNext={history.goNewer}
           />
           <RecordActionToolbar
             onView={() => setShowSource(true)}

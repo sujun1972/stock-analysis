@@ -39,9 +39,16 @@ export { CioDecisionCard, type CioDecisionCardProps } from './CioDecisionCard'
 export { ExpertDetailCard, type ExpertDetailCardProps } from './ExpertDetailCard'
 export { useAnalysisHistory, type UseAnalysisHistoryResult } from './useAnalysisHistory'
 export {
-  HistoryPager,
+  TradeDateVersionPager,
   RecordActionToolbar,
   DeleteConfirmDialog,
   EditAnalysisDialog,
   ViewSourceDialog,
 } from './RecordActions'
+export {
+  groupRecordsByTradeDate,
+  normalizeTradeDate,
+  parseTradeDateToDate,
+  formatDateToTradeDate,
+  type TradeDateGroup,
+} from './trade-date-utils'

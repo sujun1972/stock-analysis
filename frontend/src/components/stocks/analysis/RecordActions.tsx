@@ -13,8 +13,9 @@ import {
   Check,
   Save,
   X,
-  Clock,
+  CalendarDays,
 } from 'lucide-react'
+import { zhCN } from 'date-fns/locale'
 import {
   Dialog,
   DialogContent,
@@ -24,84 +25,169 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { StockAnalysisRecord } from '@/types'
+import {
+  formatDateToTradeDate,
+  parseTradeDateToDate,
+  type TradeDateGroup,
+} from './trade-date-utils'
 
-// ── HistoryPager ─────────────────────────────────────────────────────────────
+// ── TradeDateVersionPager ────────────────────────────────────────────────────
+// AI 分析的逻辑标的是"交易日"，同日内可能有多个版本（重新生成 / 改提示词 / 切模型）。
+// 这个组件提供两层翻页：日历 popover 选交易日 + 同日版本箭头切换。
+// 没有交易日（groups 为空）时整个组件隐藏；只有 1 个交易日 1 个版本时也隐去翻页箭头。
 
-export interface HistoryPagerProps {
-  /** Total records cached in memory (we cap at 50 from the API today). */
-  total: number
-  /** Position within the cached array (0-based). */
-  index: number
-  /** Underlying total in the database — shown when > total fetched. */
-  totalInDb?: number
-  current: StockAnalysisRecord | null
+export interface TradeDateVersionPagerProps {
+  /** 后端历史按交易日分组（DESC，每组 displayVersion 1..N）。 */
+  groups: TradeDateGroup[]
+  selectedTradeDate: string | null
+  onSelectTradeDate: (d: string) => void
+  /** 当前选中日的版本数组（含 displayVersion / displayTotal）。 */
+  versions: TradeDateGroup['versions']
+  versionIndex: number
+  onPrevVersion: () => void
+  onNextVersion: () => void
   loading?: boolean
-  onPrev: () => void
-  onNext: () => void
 }
 
-// Records are sorted DESC (latest first), so navigating to a newer version
-// decrements index. Left chevron = older (idx+1), right chevron = newer (idx-1).
-export function HistoryPager({
-  total,
-  index,
-  totalInDb,
-  current,
+export function TradeDateVersionPager({
+  groups,
+  selectedTradeDate,
+  onSelectTradeDate,
+  versions,
+  versionIndex,
+  onPrevVersion,
+  onNextVersion,
   loading,
-  onPrev,
-  onNext,
-}: HistoryPagerProps) {
-  const hasMultiple = total > 1
-  const dbExtra = typeof totalInDb === 'number' && totalInDb > total ? totalInDb - total : 0
-  const olderDisabled = !hasMultiple || index >= total - 1 || !!loading
-  const newerDisabled = !hasMultiple || index <= 0 || !!loading
+}: TradeDateVersionPagerProps) {
+  const [calOpen, setCalOpen] = useState(false)
 
-  const dateLabel = useMemo(() => {
-    if (!current?.created_at) return ''
-    return current.created_at.replace('T', ' ').slice(0, 16)
-  }, [current])
+  // O(1) 命中查询：日历用 modifier 高亮"有分析"的天，禁用其他天
+  const dateSet = useMemo(() => new Set(groups.map((g) => g.tradeDate)), [groups])
+  const analyzedDates = useMemo(
+    () =>
+      groups
+        .map((g) => parseTradeDateToDate(g.tradeDate))
+        .filter((d): d is Date => d !== undefined),
+    [groups],
+  )
+  const selectedDate = useMemo(
+    () => parseTradeDateToDate(selectedTradeDate),
+    [selectedTradeDate],
+  )
+
+  // 同日版本翻页：右箭头 = 更新版本（versionIndex+1），versions 已按 ASC 排好
+  const hasMultipleVersions = versions.length > 1
+  const olderDisabled = !hasMultipleVersions || versionIndex <= 0 || !!loading
+  const newerDisabled = !hasMultipleVersions || versionIndex >= versions.length - 1 || !!loading
+  const current = versions[versionIndex]
+
+  // 日历控件没有任何数据时不渲染整个 pager（卡片显示"尚未生成"）
+  if (groups.length === 0) {
+    return (
+      <div className="inline-flex items-center gap-1.5 text-xs">
+        <span className="inline-flex items-center gap-1.5 rounded border border-border/70 bg-muted/40 px-2 py-1 font-mono tabular-nums text-muted-foreground">
+          <CalendarDays className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+          <span>{loading ? '加载中…' : '无记录'}</span>
+        </span>
+      </div>
+    )
+  }
 
   return (
-    <div className="inline-flex items-center gap-1.5 text-xs">
-      {/* Version + date pill — date hides on <sm so the pill stays compact on
-          mobile (390px viewport) without losing the version anchor. */}
-      <div
-        className="inline-flex items-center gap-1.5 rounded border border-border/70 bg-muted/40 px-2 py-1 font-mono tabular-nums text-muted-foreground"
-        title={dateLabel ? `生成于 ${dateLabel}` : undefined}
-      >
-        <Clock className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
-        <span className="text-foreground/80">v{current?.version ?? '—'}</span>
-        <span className="hidden sm:inline opacity-50">·</span>
-        <span className="hidden sm:inline">{dateLabel || '—'}</span>
-      </div>
-      {hasMultiple && (
-        <div className="inline-flex items-center gap-0.5">
+    <div className="inline-flex flex-wrap items-center gap-1.5 text-xs">
+      {/* 交易日选择器 — 点击 pill 弹日历 */}
+      <Popover open={calOpen} onOpenChange={setCalOpen}>
+        <PopoverTrigger asChild>
           <button
             type="button"
-            onClick={onPrev}
+            className="inline-flex items-center gap-1.5 rounded border border-border/70 bg-muted/40 hover:bg-surface-hover px-2 py-1 font-mono tabular-nums text-muted-foreground hover:text-foreground transition-colors duration-fast focus-ring"
+            title="点击选择交易日（日历仅高亮有分析记录的日子）"
+            aria-label="选择交易日"
+          >
+            <CalendarDays className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+            <span className="text-foreground/80">{selectedTradeDate ?? '—'}</span>
+            {hasMultipleVersions && (
+              <span className="hidden sm:inline opacity-60">· {versions.length} 版</span>
+            )}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="end">
+          <Calendar
+            mode="single"
+            selected={selectedDate}
+            defaultMonth={selectedDate ?? analyzedDates[0]}
+            onSelect={(d) => {
+              if (!d) return
+              const td = formatDateToTradeDate(d)
+              if (dateSet.has(td)) {
+                onSelectTradeDate(td)
+                setCalOpen(false)
+              }
+            }}
+            // 仅允许选"有分析"的交易日；其他日期 disabled
+            disabled={(date) => !dateSet.has(formatDateToTradeDate(date))}
+            modifiers={{ analyzed: analyzedDates }}
+            // 高亮：用绿色小圆点风格区分"有分析"的天
+            modifiersClassNames={{
+              analyzed:
+                'relative font-semibold after:content-[""] after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:h-1 after:w-1 after:rounded-full after:bg-emerald-500',
+            }}
+            locale={zhCN}
+            initialFocus
+          />
+          <div className="px-3 py-2 border-t border-border/60 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
+              有分析记录的交易日
+            </span>
+            <span className="ml-2 opacity-70">共 {groups.length} 个交易日</span>
+          </div>
+        </PopoverContent>
+      </Popover>
+
+      {/* 同日版本翻页 — 多版本时才显示 */}
+      {hasMultipleVersions && (
+        <div
+          className="inline-flex items-center gap-0.5 rounded border border-border/70 bg-muted/40 px-1 py-0.5"
+          title="同一交易日内的版本切换"
+        >
+          <button
+            type="button"
+            onClick={onPrevVersion}
             disabled={olderDisabled}
-            className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors duration-fast hover:bg-surface-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 focus-ring"
-            aria-label="更早版本"
-            title="更早版本（→ 索引 +1）"
+            className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors duration-fast hover:bg-surface-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 focus-ring"
+            aria-label="同日更早版本"
+            title="同日更早版本"
           >
             <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
           </button>
-          <span className="min-w-[40px] sm:min-w-[44px] text-center font-mono tabular-nums text-muted-foreground">
-            {index + 1}/{total}
-            {dbExtra > 0 && <span className="opacity-60">+{dbExtra}</span>}
+          <span className="min-w-[42px] text-center font-mono tabular-nums text-muted-foreground">
+            v{current?.displayVersion ?? '—'}/{current?.displayTotal ?? versions.length}
           </span>
           <button
             type="button"
-            onClick={onNext}
+            onClick={onNextVersion}
             disabled={newerDisabled}
-            className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors duration-fast hover:bg-surface-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 focus-ring"
-            aria-label="更新版本"
-            title="更新版本（→ 索引 -1）"
+            className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors duration-fast hover:bg-surface-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 focus-ring"
+            aria-label="同日更新版本"
+            title="同日更新版本"
           >
             <ChevronRight className="h-3.5 w-3.5" aria-hidden />
           </button>
         </div>
+      )}
+
+      {/* 单版本时显式标 v1，让用户看到"今天有 1 条记录"而不是空的 */}
+      {!hasMultipleVersions && current && (
+        <span
+          className="hidden sm:inline-flex items-center rounded border border-border/70 bg-muted/40 px-1.5 py-1 font-mono tabular-nums text-muted-foreground"
+          title={`生成于 ${current.created_at.replace('T', ' ').slice(0, 16)}`}
+        >
+          v1/1
+        </span>
       )}
     </div>
   )

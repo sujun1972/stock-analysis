@@ -45,18 +45,22 @@ function Calendar({
         // day_selected -> selected
         // day_today -> today
         root: "rdp-root",
-        months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
+        // months 容器加 relative 让 nav 的 absolute 定位以它为锚（v9 中 nav 与 month_caption
+        // 是兄弟节点，不再嵌套在 caption 内）
+        months: "relative flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
         month: "space-y-4",
-        month_caption: "flex justify-center pt-1 relative items-center",
+        month_caption: "flex justify-center pt-1 items-center",
         caption_label: "text-sm font-medium",
-        nav: "space-x-1 flex items-center",
+        // nav 浮于 month_caption 同高度的左右两端；不再让单个按钮各自 absolute，
+        // 否则按钮会被定位到整个 calendar 的边缘从而压住第一/最后一列日期格子
+        nav: "absolute top-1 inset-x-1 flex items-center justify-between pointer-events-none z-10",
         button_previous: cn(
           buttonVariants({ variant: "outline" }),
-          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 absolute left-1"
+          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 pointer-events-auto"
         ),
         button_next: cn(
           buttonVariants({ variant: "outline" }),
-          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 absolute right-1"
+          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 pointer-events-auto"
         ),
         month_grid: "w-full border-collapse space-y-1",
         weekdays: "flex",

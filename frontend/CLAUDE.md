@@ -468,12 +468,14 @@ useEffect(() => {
 
 `/analysis` 页面有四张语义独立的卡片串联展示。**所有运行时操作（历史翻页 / 编辑 / 删除 / 查看源代码 / 触发复盘）都内嵌在卡片头部工具栏，弹窗只剩"提示词模板查看"一个职责。** 新增"AI 类"功能时优先放主页卡，不要回头往弹窗塞。
 
+**核心数据模型：AI 分析的逻辑标的是"交易日"**。同 `(ts_code, analysis_type)` 在同一交易日下可能有多个版本（重新生成 / 改提示词 / 切模型），不同交易日各自独立编号。后端 `stock_ai_analysis` 表的 `version` 列在 `(ts_code, analysis_type)` 范围内全局递增（跨日跳号），**不要直接展示给用户**——前端用 `groupRecordsByTradeDate` 分组后按同日 `created_at` ASC 重新编号 `displayVersion 1..N`。卡片头部用 `<TradeDateVersionPager>` 表达两层导航：日历选交易日 + 同日内 `< vX/N >` 翻版本。后端表已支持该模型（`trade_date` 字段、`/api/stock-ai-analysis/list?trade_date=` 端点），无需后端改动；新增专家类型沿用 `useAnalysisHistory` 即可天然继承日历翻页能力。
+
 页面纵向流：
 1. **行情卡**（`QuotePanel`）— 最新价 / OHLC / 振幅 / 换手 / 成交 / 公司规模 chip / 4 维雷达图（点击节点滚到对应专家）/ CIO 一句话观点 + 复查触发器。
 2. **估值数据卡**（`ValuationCard`）— PE / PB / PS / 股息率（`daily_basic`）+ ROC / EY / 安全边际（`stock_value_metrics`）+ 快照日期。**公开数据，未登录可见**。
 3. **AI 决策摘要卡**（`ExpertSummaryCard`）— 4 列等宽：CIO / 游资 / 中线 / 价值；每列 = 评分 + rating + key_quote（`line-clamp-2`）+ ▲/▼ 因子计数；顶部"一键分析"按钮。**仅登录态显示**。
-4. **CIO 综合决策卡**（`CioDecisionCard`，默认折叠）— 头部 collapse 按钮 + `HistoryPager` + `RecordActionToolbar`（源代码 / 编辑 / 删除）；展开后：multi_dimension_scan 三栏 / cross_dimension_analysis / core_drivers + core_risks 双栏 / rating_and_action 高亮卡（按 action 关键词配色）/ followup_triggers。
-5. **三专家详情卡**（`ExpertDetailCard`，嵌入 Tab）— 游资 / 中线 / 价值；每个 Tab 内部含 `原报告 N | 复盘 M` 子段控件 + `HistoryPager` + `RecordActionToolbar`（源代码 / 编辑 / 复盘 / 删除）。Tab 右上角保留"重新分析"（单专家）/ "提示词"（弹窗仅模板预览）。
+4. **CIO 综合决策卡**（`CioDecisionCard`，默认折叠）— 头部 collapse 按钮 + `TradeDateVersionPager` + `RecordActionToolbar`（源代码 / 编辑 / 删除）；展开后：multi_dimension_scan 三栏 / cross_dimension_analysis / core_drivers + core_risks 双栏 / rating_and_action 高亮卡（按 action 关键词配色）/ followup_triggers。
+5. **三专家详情卡**（`ExpertDetailCard`，嵌入 Tab）— 游资 / 中线 / 价值；每个 Tab 内部含 `原报告 N | 复盘 M` 子段控件 + `TradeDateVersionPager` + `RecordActionToolbar`（源代码 / 编辑 / 复盘 / 删除）。Tab 右上角保留"重新分析"（单专家）/ "提示词"（弹窗仅模板预览）。
 
 **主页 → 卡内组件统一通过 `tsCode` 驱动自身历史拉取**（不再依赖父级 `latestByExpert` prop 注入；保留 `latestByExpert` 仅供 `ExpertSummaryCard` / 行情卡 `cioKeyQuote` 派生）。父页传 `refreshKey` 触发外部刷新，卡内通过 `onChange` 回调反向通知父页 bump `expertsRefreshKey` 以同步雷达图 / 摘要卡。
 
@@ -484,8 +486,9 @@ useEffect(() => {
 - `StructuredAnalysisContent.tsx` — JSON 结构化渲染入口；支持 `hideFinalScore` / `hideTitleHeader` props（主页详情卡已自渲染头部和评分时用）
 - `section-configs.ts` — `SECTION_CONFIGS` / `PM_FIELD_LABELS` / `JSON_ANALYSIS_TYPES`
 - `expert-meta.ts` — 4 专家身份元数据（key / analysisType / templateKey / 中文名 / 副标题 / 图标 / colorVar / borderClass）+ `safeParseJSON` / `extractScore` / `extractKeyQuote` / `extractRating` / `extractBullBearCount` / `scoreToneClass`
-- `useAnalysisHistory.ts` — 历史翻页 hook：返回 `{records, total, index, current, setIndex, goNewer/goOlder, refresh, remove, update, loading}`，内部按 `(tsCode, analysisType)` 拉 `/api/stock-ai-analysis/history?limit=50`，`update` / `remove` 直连 PUT/DELETE 端点。`refreshKey` 自增触发外部重拉，`enabled=false` 时跳过（`ExpertDetailCard` 的非激活 Tab 用此节流）。**编辑后会按 `lastViewedIdRef` 重新锚定光标到原记录位置，避免版本顺序变动时光标跳到顶部**。
-- `RecordActions.tsx` — 4 个内嵌操作组件：`HistoryPager`（◀ N/M ▶ 翻页 + 终端样式版本/日期 pill；日期在 <sm 自动隐藏）、`RecordActionToolbar`（源代码 / 编辑 / 复盘 / 删除 4 图标按钮，按 tone 配色）、`DeleteConfirmDialog`（红色头部 + 不可恢复提示 + 版本/评分/时间核对块）、`EditAnalysisDialog`（评分输入 + monospace textarea；JSON 自动展开编辑 / 保存时自动单行压缩）、`ViewSourceDialog`（带元数据 pills 的 pretty JSON 视图 + 复制按钮）。**新增分析维度时只需在新组件里挂 `useAnalysisHistory` + 这 5 个工具，不必再为复盘 / 编辑 / 删除写一份 state**。
+- `trade-date-utils.ts` — 历史记录的"交易日 + 同日多版本"分组工具（`groupRecordsByTradeDate` / `normalizeTradeDate` / `parseTradeDateToDate` / `formatDateToTradeDate`）
+- `useAnalysisHistory.ts` — 历史翻页 hook：返回 `{records, total, groups, selectedTradeDate, setSelectedTradeDate, versions, versionIndex, goNewerVersion, goOlderVersion, current, refresh, remove, update, loading}`，内部按 `(tsCode, analysisType)` 拉 `/api/stock-ai-analysis/history?limit=50` 后用 `groupRecordsByTradeDate` 分组。`refreshKey` 自增触发外部重拉，`enabled=false` 时跳过（`ExpertDetailCard` 的非激活 Tab 用此节流）。**锚定 effect 只依赖 `groups`，不依赖 `selectedTradeDate / versionIndex`**——否则用户手动切日期/版本会触发回锚循环（`Maximum update depth exceeded`）；用户选择通过 functional updater 读最新状态。**编辑后按 `lastViewedIdRef` 锚回原记录所在交易日 + 版本**。
+- `RecordActions.tsx` — 4 个内嵌操作组件：`TradeDateVersionPager`（日期 pill 弹 [Calendar](src/components/ui/calendar.tsx) Popover 选交易日 + 同日多版本时显示 `< vX/N >` 翻页）、`RecordActionToolbar`（源代码 / 编辑 / 复盘 / 删除 4 图标按钮，按 tone 配色）、`DeleteConfirmDialog`、`EditAnalysisDialog`、`ViewSourceDialog`。**新增分析维度时只需在新组件里挂 `useAnalysisHistory` + 这几个工具，不必再为复盘 / 编辑 / 删除写一份 state**。
 - `ExpertSummaryCard.tsx` / `CioDecisionCard.tsx` / `ExpertDetailCard.tsx` — 三张主页卡
 
 **弹窗（`HotMoneyViewDialog`）与主页卡共用同一份 SECTION_CONFIGS 与渲染逻辑**——`HotMoneyViewDialog` 内部 `import { AnalysisContent } from '@/components/stocks/analysis'`，新增专家或调整 schema 时改一处即可两端生效。

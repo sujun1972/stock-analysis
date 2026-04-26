@@ -20,7 +20,7 @@ import {
 } from './expert-meta'
 import { useAnalysisHistory } from './useAnalysisHistory'
 import {
-  HistoryPager,
+  TradeDateVersionPager,
   RecordActionToolbar,
   DeleteConfirmDialog,
   EditAnalysisDialog,
@@ -419,14 +419,15 @@ function SubTabBar({
       </div>
 
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-        <HistoryPager
-          total={active.records.length}
-          totalInDb={active.total}
-          index={active.index}
-          current={active.current}
+        <TradeDateVersionPager
+          groups={active.groups}
+          selectedTradeDate={active.selectedTradeDate}
+          onSelectTradeDate={active.setSelectedTradeDate}
+          versions={active.versions}
+          versionIndex={active.versionIndex}
+          onPrevVersion={active.goOlderVersion}
+          onNextVersion={active.goNewerVersion}
           loading={active.loading}
-          onPrev={active.goOlder}
-          onNext={active.goNewer}
         />
         {active.current && (
           <RecordActionToolbar

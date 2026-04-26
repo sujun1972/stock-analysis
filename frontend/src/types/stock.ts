@@ -279,8 +279,13 @@ export interface StockAnalysisRecord {
   prompt_text: string | null
   ai_provider: string | null
   ai_model: string | null
+  /** 同 (ts_code, analysis_type) 全局递增的 DB 版本号；UI 上以"同交易日内的序号"为准。 */
   version: number
   created_at: string
+  /** 分析对应的交易日，YYYYMMDD（来自 stock_data_collection 锚定）。旧数据可能为 null。 */
+  trade_date: string | null
+  /** 复盘类记录指向的原报告 ID，仅 *_review 类型有值。 */
+  original_analysis_id: number | null
 }
 
 // 分页响应类型（匹配后端 v2.0 格式）
