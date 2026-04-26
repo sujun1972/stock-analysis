@@ -4,35 +4,72 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    /* ─────────────────────────────────────────────────────────────────
+       金融级专业色板 v2（2026 重构）
+       设计哲学：黑底数据自己发光（dark）/ 米底数据浮于纸面（light）。
+       涨跌色控制饱和度避免刺眼，灰阶 4 档建立深度，强调色仅 1 个不滥用。
+       参考：Bloomberg Terminal / Refinitiv Eikon / 富途桌面端
+       ────────────────────────────────────────────────────────────── */
+
+    /* ─── Surface 4 档（建立"页面 → 卡片 → 浮层 → hover"深度） ─── */
+    --bg-base:        220 18% 97%;   /* #F7F8FA 极浅冷灰，长盯不刺眼 */
+    --bg-surface:     0 0% 100%;     /* #FFFFFF 卡片，相对 base 浮 1 档 */
+    --bg-overlay:     240 9% 99%;    /* #FCFCFD 浮层（dropdown/popover） */
+    --bg-hover:       218 22% 95%;   /* #EEF1F6 行/按钮 hover 反馈 */
+
+    /* ─── Border 2 档 ─── */
+    --border-subtle:  220 17% 92%;   /* #E5E8EE 卡片描边 / 表格边 */
+    --border-strong:  218 17% 83%;   /* #CBD2DC 输入框 / 焦点环 */
+
+    /* ─── Text 3 档 ─── */
+    --text-primary:   222 47% 11%;   /* #0F172A 深石板色，对 base 16:1 */
+    --text-secondary: 215 19% 35%;   /* #475569 标签 / 单位字 */
+    --text-tertiary:  215 16% 65%;   /* #94A3B8 弱信息 / disabled */
+
+    /* ─── A 股语义色（业务命名 bull/bear，避开 success/danger 歧义） ─── */
+    --bull:           359 73% 55%;   /* 多头红 #E0383B：饱和 73%/亮度 55%，比 #FF0000 哑 30% */
+    --bull-soft:      357 77% 95%;   /* #FCE9EA 极淡红，chip 背景 */
+    --bull-hover:     359 73% 47%;   /* hover 加深 */
+    --bear:           155 76% 38%;   /* 空头绿 #16A971：偏蓝调 (155° 而非 120°)，色弱友好 */
+    --bear-soft:      148 50% 92%;   /* #E1F4EB 极淡绿 */
+    --bear-hover:     155 76% 32%;
+
+    /* ─── 强调 / 状态 ─── */
+    --accent-color:   218 87% 55%;   /* 主蓝 #2A6FF0 链接/CTA/排序激活 */
+    --accent-hover:   218 75% 47%;
+    --warn:           21 75% 55%;    /* 警示橙 #E0773A PE 异常/风险 */
+    --gold:           38 67% 54%;    /* premium 金 #D9A23E（不与 warn 混用） */
+
+    /* ─── 旧 shadcn token 桥接到新 token（保后向兼容；新代码请用 ↑） ─── */
+    --background: var(--bg-base);
+    --foreground: var(--text-primary);
+    --card: var(--bg-surface);
+    --card-foreground: var(--text-primary);
+    --popover: var(--bg-overlay);
+    --popover-foreground: var(--text-primary);
+    --primary: var(--accent-color);
+    --primary-foreground: 0 0% 100%;
+    --secondary: var(--bg-hover);
+    --secondary-foreground: var(--text-primary);
+    --muted: var(--bg-hover);
+    --muted-foreground: var(--text-secondary);
+    --accent: var(--bg-hover);
+    --accent-foreground: var(--text-primary);
+    --destructive: var(--bull);
+    --destructive-foreground: 0 0% 100%;
+    --border: var(--border-subtle);
+    --input: var(--border-strong);
+    --ring: var(--accent-color);
     --radius: 0.5rem;
 
-    /* 语义色 token（A 股红涨绿跌 + 中性/提示）—— 在"情感色"上唯一来源，禁止再手写 text-red-600 表达"上涨"之意 */
-    --positive: 0 84% 47%;        /* 上涨红（WCAG on white ≥4.5:1） */
-    --positive-soft: 0 84% 96%;
-    --negative: 142 71% 35%;      /* 下跌绿 */
-    --negative-soft: 142 71% 95%;
-    --warning: 38 92% 45%;        /* 关注黄 */
-    --warning-soft: 48 96% 92%;
-    --info: 221 83% 53%;          /* 信息蓝（= primary 近似值） */
+    /* ─── 语义色 token（A 股红涨绿跌）—— 桥接到新 bull/bear ─── */
+    --positive: var(--bull);
+    --positive-soft: var(--bull-soft);
+    --negative: var(--bear);
+    --negative-soft: var(--bear-soft);
+    --warning: var(--warn);
+    --warning-soft: 35 85% 95%;
+    --info: var(--accent-color);
 
     /* 评分/价值指标色阶 —— 单色相紫罗兰 (270°) 亮度递进。
        为什么不用蓝/灰：① 主色 primary 是 221° 蓝 (链接/CTA 色)，评分用蓝会与 CTA
@@ -59,34 +96,64 @@
   }
 
   .dark {
-    --background: 0 0% 4%;
-    --foreground: 0 0% 93%;
-    --card: 0 0% 5%;
-    --card-foreground: 0 0% 93%;
-    --popover: 0 0% 5%;
-    --popover-foreground: 0 0% 93%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    /* ─── Surface 4 档（海军灰深底，比纯黑更耐看） ─── */
+    --bg-base:        222 49% 8%;    /* #0B1220 海军灰，长盯不烧眼 */
+    --bg-surface:     222 47% 11%;   /* #0F1729 卡片 */
+    --bg-overlay:     223 36% 14%;   /* #172033 浮层 */
+    --bg-hover:       220 35% 16%;   /* #1A2436 hover */
 
-    /* 深色模式下所有"情感色"一次性升阶：on gray-900 背景需要更亮才达 WCAG AA 4.5:1 */
-    --positive: 0 91% 71%;        /* red-300 级别，on #111 ≈ 6.1:1 */
-    --positive-soft: 0 63% 18%;
-    --negative: 142 71% 58%;      /* green-400 级别，on #111 ≈ 5.6:1 */
-    --negative-soft: 142 71% 15%;
-    --warning: 48 96% 70%;        /* yellow-300 on dark 更明显 */
-    --warning-soft: 43 74% 17%;
-    --info: 217 91% 70%;
+    /* ─── Border ─── */
+    --border-subtle:  217 33% 17%;
+    --border-strong:  215 25% 27%;
+
+    /* ─── Text ─── */
+    --text-primary:   217 24% 92%;   /* 象牙白主文本，对 base 13:1 */
+    --text-secondary: 215 20% 65%;
+    --text-tertiary:  215 19% 47%;
+
+    /* ─── A 股语义色（深底提亮版） ─── */
+    --bull:           358 100% 68%;  /* #FF5B5F 对 base 6.2:1 */
+    --bull-soft:      355 50% 16%;   /* 深底红 chip */
+    --bull-hover:     358 100% 60%;
+    --bear:           150 65% 54%;   /* #3DD68C 对 base 7.1:1 */
+    --bear-soft:      155 47% 11%;
+    --bear-hover:     150 65% 47%;
+
+    /* ─── 强调 / 状态 ─── */
+    --accent-color:   218 81% 65%;   /* #5B8DEF 深底友好饱和度 */
+    --accent-hover:   218 81% 58%;
+    --warn:           25 100% 67%;
+    --gold:           42 90% 58%;
+
+    /* ─── 旧 shadcn token 桥接 ─── */
+    --background: var(--bg-base);
+    --foreground: var(--text-primary);
+    --card: var(--bg-surface);
+    --card-foreground: var(--text-primary);
+    --popover: var(--bg-overlay);
+    --popover-foreground: var(--text-primary);
+    --primary: var(--accent-color);
+    --primary-foreground: 0 0% 100%;
+    --secondary: var(--bg-hover);
+    --secondary-foreground: var(--text-primary);
+    --muted: var(--bg-hover);
+    --muted-foreground: var(--text-secondary);
+    --accent: var(--bg-hover);
+    --accent-foreground: var(--text-primary);
+    --destructive: var(--bull);
+    --destructive-foreground: 0 0% 100%;
+    --border: var(--border-subtle);
+    --input: var(--border-strong);
+    --ring: var(--accent-color);
+
+    /* ─── 语义色 桥接 ─── */
+    --positive: var(--bull);
+    --positive-soft: var(--bull-soft);
+    --negative: var(--bear);
+    --negative-soft: var(--bear-soft);
+    --warning: var(--warn);
+    --warning-soft: 28 50% 16%;
+    --info: var(--accent-color);
     /* 评分色阶在深色模式下整体提亮，保持 单色相紫罗兰 浅→中→深 的递进 */
     --score-low: 270 30% 30%;     /* 低分 暗紫底（深色模式做 outline）*/
     --score-mid: 270 60% 65%;     /* 中分 中紫 */
