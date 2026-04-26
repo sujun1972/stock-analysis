@@ -17,9 +17,11 @@
     --bg-overlay:     240 9% 99%;    /* #FCFCFD 浮层（dropdown/popover） */
     --bg-hover:       218 22% 95%;   /* #EEF1F6 行/按钮 hover 反馈 */
 
-    /* ─── Border 2 档 ─── */
-    --border-subtle:  220 17% 92%;   /* #E5E8EE 卡片描边 / 表格边 */
+    /* ─── Border 2 档 + 表格行 divider 1 档 ─── */
+    --border-subtle:  220 17% 92%;   /* #E5E8EE 卡片描边 */
     --border-strong:  218 17% 83%;   /* #CBD2DC 输入框 / 焦点环 */
+    --divider:        220 14% 95%;   /* #EDF0F4 表格行间极淡分隔线 (~1.1:1 vs white)
+                                        现代金融终端只保留弱横线、彻底去除纵线 */
 
     /* ─── Text 3 档 ─── */
     --text-primary:   222 47% 11%;   /* #0F172A 深石板色，对 base 16:1 */
@@ -102,9 +104,10 @@
     --bg-overlay:     223 36% 14%;   /* #172033 浮层 */
     --bg-hover:       220 35% 16%;   /* #1A2436 hover */
 
-    /* ─── Border ─── */
+    /* ─── Border + divider ─── */
     --border-subtle:  217 33% 17%;
     --border-strong:  215 25% 27%;
+    --divider:        220 25% 14%;   /* #1B2434 深底极淡横线 (~1.5:1 vs base) */
 
     /* ─── Text ─── */
     --text-primary:   217 24% 92%;   /* 象牙白主文本，对 base 13:1 */

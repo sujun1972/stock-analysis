@@ -112,14 +112,14 @@ export const StockCard = React.memo(function StockCard({
         </div>
       </div>
 
-      {/* 量价 + 估值行：成交额 / 换手 / 市值 / PE — 决策核心数据，桌面有移动也必须有 */}
-      <div className="mt-2.5 flex items-center justify-between gap-1 text-[11px] text-gray-600 dark:text-gray-400 tabular-nums">
-        <span className="text-gray-900 dark:text-gray-100 font-medium">{fmtAmount(stock.amount)}</span>
-        <span className="text-gray-300 dark:text-gray-700" aria-hidden>·</span>
+      {/* 量价 + 估值行：辅助信息统一中灰，与桌面表格同步 */}
+      <div className="mt-2.5 flex items-center justify-between gap-1 text-[11px] text-muted-foreground tabular-nums">
+        <span>{fmtAmount(stock.amount)}</span>
+        <span className="text-muted-foreground/40" aria-hidden>·</span>
         <span>换 {stock.turnover_rate != null ? `${stock.turnover_rate.toFixed(2)}%` : '—'}</span>
-        <span className="text-gray-300 dark:text-gray-700" aria-hidden>·</span>
+        <span className="text-muted-foreground/40" aria-hidden>·</span>
         <span>{fmtMarketCap(stock.total_mv)}</span>
-        <span className="text-gray-300 dark:text-gray-700" aria-hidden>·</span>
+        <span className="text-muted-foreground/40" aria-hidden>·</span>
         {(() => {
           const { text, tone } = fmtPE(stock.pe_ttm)
           return <span className={tone === 'warn' ? 'text-warning' : ''}>PE {text}</span>
@@ -130,9 +130,9 @@ export const StockCard = React.memo(function StockCard({
       {(stock.value_metrics?.roc != null || stock.value_metrics?.earnings_yield != null || stock.value_metrics?.intrinsic_margin != null) && (
         <div className="mt-1 flex items-center justify-between gap-1 text-[11px] tabular-nums">
           <PctMetric label="ROC" value={stock.value_metrics?.roc} />
-          <span className="text-gray-300 dark:text-gray-700" aria-hidden>·</span>
+          <span className="text-muted-foreground/40" aria-hidden>·</span>
           <PctMetric label="EY" value={stock.value_metrics?.earnings_yield} />
-          <span className="text-gray-300 dark:text-gray-700" aria-hidden>·</span>
+          <span className="text-muted-foreground/40" aria-hidden>·</span>
           {(() => {
             // 安全边际单独：需要"+"前缀和整数小数位（与 PctMetric 默认 1 位不同）
             const m = stock.value_metrics?.intrinsic_margin

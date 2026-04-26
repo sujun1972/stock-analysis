@@ -119,6 +119,8 @@ const config: Config = {
         gold: {
           DEFAULT: "hsl(var(--gold))",
         },
+        // 表格行间极淡分隔线（比 border-subtle 更弱，现代金融终端风格）
+        divider: "hsl(var(--divider))",
         // 评分/价值指标色阶 单色相紫罗兰（4-6 浅 → 6-8 中 → ≥8 深），独立于行情红绿
         score: {
           low: "hsl(var(--score-low))",

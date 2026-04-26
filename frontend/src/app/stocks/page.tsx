@@ -974,7 +974,7 @@ function StocksPageContent() {
 
             {/* 桌面端表格视图 */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="min-w-full divide-y divide-border">
+              <table className="min-w-full divide-y divide-divider">
                 <thead className="bg-surface-base">
                   <tr>
                     {isAuthenticated && (
@@ -1060,7 +1060,7 @@ function StocksPageContent() {
                     )}
                   </tr>
                 </thead>
-                <tbody className="bg-card divide-y divide-border">
+                <tbody className="bg-card divide-y divide-divider">
                   {displayedStocks.map((stock) => (
                     <StockTableRow
                       key={stock.code}

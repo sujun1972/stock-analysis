@@ -179,18 +179,20 @@ export const StockTableRow = React.memo(function StockTableRow({
           ) : '-'}
         </td>
       )}
+      {/* 辅助列（成交额/换手/市值/PE）—— 活跃度+估值，非方向指标。
+          统一用 text-muted-foreground 降权重，让眼睛聚焦在涨跌染色的"价/幅"上 */}
       {isVisible('amount') && (
-        <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100">
+        <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium tabular-nums text-muted-foreground">
           {fmtAmount(stock.amount)}
         </td>
       )}
       {isVisible('turnover_rate') && (
-        <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium tabular-nums text-gray-700 dark:text-gray-300">
+        <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium tabular-nums text-muted-foreground">
           {stock.turnover_rate != null ? `${stock.turnover_rate.toFixed(2)}%` : '—'}
         </td>
       )}
       {isVisible('total_mv') && (
-        <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium tabular-nums text-gray-700 dark:text-gray-300">
+        <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium tabular-nums text-muted-foreground">
           {fmtMarketCap(stock.total_mv)}
         </td>
       )}
@@ -201,8 +203,8 @@ export const StockTableRow = React.memo(function StockTableRow({
             const cls = tone === 'warn'
               ? 'text-warning'
               : tone === 'muted'
-              ? 'text-gray-300 dark:text-gray-600'
-              : 'text-gray-900 dark:text-gray-100'
+              ? 'text-muted-foreground/50'
+              : 'text-muted-foreground'
             return <span className={cls}>{text}</span>
           })()}
         </td>
