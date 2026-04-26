@@ -6,6 +6,9 @@ import { useSearchParams } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
 import { getLatestStockAnalysis } from '@/lib/api/stocks'
 import { useAuthStore } from '@/stores/auth-store'
+import { useStockListStore } from '@/stores/stock-list-store'
+import { useLocalWatchlistStore } from '@/stores/local-watchlist-store'
+import { useLoginWatchlistSync, type LoginWatchlistSyncResult } from '@/hooks/useLoginWatchlistSync'
 import type { StockInfo, StockQuotePanel } from '@/types'
 import { MoneyflowCard } from '@/components/stocks/MoneyflowCard'
 import { BillboardCard } from '@/components/stocks/BillboardCard'
@@ -23,7 +26,7 @@ import {
 import { AddToListDialog } from '@/app/stocks/components/AddToListDialog'
 import { useToast } from '@/hooks/use-toast'
 import { useMultiAnalysisTask } from '@/hooks/useMultiAnalysisTask'
-import { Bookmark, Share2 } from 'lucide-react'
+import { Bookmark, BookmarkCheck, Share2 } from 'lucide-react'
 
 // 动态导入StockPriceCard组件（统一的图表组件）
 const StockPriceCard = dynamic(() => import('@/components/StockPriceCard'), {
@@ -302,6 +305,79 @@ function QuotePanel({ q }: { q: StockQuotePanel }) {
 }
 
 
+/**
+ * 自选按钮：登录态点击调起 AddToListDialog；未登录态以 localStorage 自选股为状态源做双向 toggle。
+ *
+ * 未登录单按钮 toggle 而非弹窗的设计原因：本地自选股是单一隐式列表（无新建/重命名/选择列表），
+ * 弹窗里没有可选项，开关交互比"加入→无脑成功 toast"更直观，已加入态也提供了一键移除入口。
+ */
+function WatchlistButton({
+  tsCode,
+  stockName,
+  isAuthenticated,
+  onOpenDialog,
+}: {
+  tsCode: string
+  stockName?: string | null
+  isAuthenticated: boolean
+  onOpenDialog: () => void
+}) {
+  const localCodes = useLocalWatchlistStore((s) => s.codes)
+  const localAdd = useLocalWatchlistStore((s) => s.add)
+  const localRemove = useLocalWatchlistStore((s) => s.remove)
+  const { toast } = useToast()
+
+  if (isAuthenticated) {
+    return (
+      <button
+        type="button"
+        onClick={onOpenDialog}
+        className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-primary/30 text-primary hover:bg-primary/10 transition-colors duration-fast focus-ring"
+        aria-label="添加到自选列表"
+        title="添加到自选列表"
+      >
+        <Bookmark className="h-3.5 w-3.5" />
+        自选
+      </button>
+    )
+  }
+
+  const inLocal = localCodes.includes(tsCode)
+  const label = stockName ?? tsCode
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (inLocal) {
+          const { removed } = localRemove([tsCode])
+          if (removed > 0) {
+            toast({ title: '已从本地自选股移除', description: label })
+          }
+          return
+        }
+        const { added, overflow } = localAdd([tsCode])
+        if (added > 0) {
+          toast({ title: '已加入本地自选股', description: `${label}（登录后自动同步）` })
+        } else if (overflow > 0) {
+          toast({ title: '本地自选股已满', description: '请删除部分股票或登录后再加入', variant: 'destructive' })
+        }
+      }}
+      className={
+        inLocal
+          ? 'inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-primary bg-primary/10 text-primary hover:bg-primary/20 transition-colors duration-fast focus-ring'
+          : 'inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-primary/30 text-primary hover:bg-primary/10 transition-colors duration-fast focus-ring'
+      }
+      aria-label={inLocal ? '从本地自选股移除' : '加入本地自选股'}
+      title={inLocal ? '已加入本地自选股，点击移除' : '加入本地自选股（登录后自动同步）'}
+      aria-pressed={inLocal}
+    >
+      {inLocal ? <BookmarkCheck className="h-3.5 w-3.5" /> : <Bookmark className="h-3.5 w-3.5" />}
+      {inLocal ? '已加入·移除' : '加入自选股'}
+    </button>
+  )
+}
+
 // ─────────────────────────────────────────
 // 主页面
 // ─────────────────────────────────────────
@@ -331,6 +407,7 @@ function AnalysisContent() {
   const { toast } = useToast()
 
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
+  const fetchLists = useStockListStore(s => s.fetchLists)
 
   // ── 4 专家最新分析（驱动主页 AI 决策摘要卡 / CIO 详情卡 / 三专家详情卡） ──
   const [latestByExpert, setLatestByExpert] = useState<Record<ExpertMeta['key'], LatestAnalysisRecord | null>>({
@@ -395,6 +472,27 @@ function AnalysisContent() {
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [basicInfo?.ts_code, code])
+
+  // ── 登录时拉取自选列表元数据（用户从 / 直跳 /analysis 时也确保 AddToListDialog 下拉非空）──
+  useEffect(() => {
+    if (isAuthenticated) fetchLists()
+  }, [isAuthenticated, fetchLists])
+
+  // 登录瞬间合并本地自选股 → 后端"自选股"列表
+  useLoginWatchlistSync(isAuthenticated, useCallback((result: LoginWatchlistSyncResult) => {
+    if (result.type === 'success') {
+      toast({
+        title: '本地自选股已同步',
+        description: `合并到云端列表"${result.listName}"：新增 ${result.added}，已存在 ${result.skipped}`,
+      })
+    } else {
+      toast({
+        title: '本地自选股同步失败',
+        description: result.message,
+        variant: 'destructive',
+      })
+    }
+  }, [toast]))
 
   // ── 拉取 4 专家最新一条分析（驱动 AI 决策卡 / CIO 详情卡 / 三专家详情卡） ──
   // refreshKey 自增 → 重新拉取（一键分析 / 单专家重新分析完成时触发）
@@ -666,30 +764,29 @@ function AnalysisContent() {
             <Share2 className="h-3.5 w-3.5" />
             分享
           </button>
-          {/* §13 自选：仅登录态可用，调起 AddToListDialog 选择列表 */}
-          {isAuthenticated && tsCode && (
-            <button
-              type="button"
-              onClick={() => setAddToListOpen(true)}
-              className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-primary/30 text-primary hover:bg-primary/10 transition-colors duration-fast focus-ring"
-              aria-label="添加到自选列表"
-              title="添加到自选列表"
-            >
-              <Bookmark className="h-3.5 w-3.5" />
-              自选
-            </button>
+          {/* §13 自选：登录态调起 AddToListDialog 选择后端列表；未登录态由 WatchlistButton 走本地双向 toggle */}
+          {tsCode && (
+            <WatchlistButton
+              tsCode={tsCode}
+              stockName={stockInfo?.name}
+              isAuthenticated={isAuthenticated}
+              onOpenDialog={() => setAddToListOpen(true)}
+            />
           )}
         </div>
       </div>
 
-      {/* §13 自选弹窗：复用 /stocks 页面同款组件 */}
-      {tsCode && (
+      {/* §13 自选弹窗：仅登录态渲染（未登录走 WatchlistButton 内的本地 toggle） */}
+      {tsCode && isAuthenticated && (
         <AddToListDialog
           open={addToListOpen}
           onClose={() => setAddToListOpen(false)}
           selectedCodes={[tsCode]}
-          onSuccess={() => {
-            toast({ title: '已添加到自选', description: `${stockInfo?.name ?? tsCode} 已加入选定列表` })
+          onSuccess={(summary) => {
+            toast({
+              title: '已添加到自选',
+              description: `${stockInfo?.name ?? tsCode}${summary ? `（${summary}）` : ''}`,
+            })
             setAddToListOpen(false)
           }}
         />

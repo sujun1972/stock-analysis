@@ -108,7 +108,7 @@ function FollowupTimeCell({ triggers }: { triggers: CioFollowupTriggers | null }
 
 interface StockTableRowProps {
   stock: StockInfo
-  isAuthenticated: boolean
+  selectable: boolean
   isSelected: boolean
   isVisible: (id: StockColumnId) => boolean
   onToggleSelect: (tsCode: string) => void
@@ -116,7 +116,7 @@ interface StockTableRowProps {
 
 export const StockTableRow = React.memo(function StockTableRow({
   stock,
-  isAuthenticated,
+  selectable,
   isSelected,
   isVisible,
   onToggleSelect,
@@ -126,10 +126,10 @@ export const StockTableRow = React.memo(function StockTableRow({
   return (
     <tr
       className={`transition-colors duration-fast ${isSelected ? 'bg-primary/[0.08]' : 'hover:bg-surface-hover'}`}
-      onClick={isAuthenticated ? () => onToggleSelect(tsCode) : undefined}
-      style={isAuthenticated ? { cursor: 'pointer' } : undefined}
+      onClick={selectable ? () => onToggleSelect(tsCode) : undefined}
+      style={selectable ? { cursor: 'pointer' } : undefined}
     >
-      {isAuthenticated && (
+      {selectable && (
         <td className="px-4 py-4 w-10" onClick={(e) => e.stopPropagation()}>
           <Checkbox
             checked={isSelected}

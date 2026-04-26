@@ -6,6 +6,12 @@ import { apiClient } from '@/lib/api-client'
 import { useStockStore } from '@/stores/stock-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useStockListStore } from '@/stores/stock-list-store'
+import {
+  useLocalWatchlistStore,
+  LOCAL_WATCHLIST_LIST_ID,
+  LOCAL_WATCHLIST_NAME,
+} from '@/stores/local-watchlist-store'
+import { useLoginWatchlistSync, type LoginWatchlistSyncResult } from '@/hooks/useLoginWatchlistSync'
 import { Card, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -172,10 +178,20 @@ function StocksPageContent() {
   const { stocks, setStocks, setLoading, isLoading, error, setError } = useStockStore()
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const { lists, fetchLists, deleteList, removeStocks } = useStockListStore()
+  const localWatchlistCodes = useLocalWatchlistStore((s) => s.codes)
+  const localWatchlistRemove = useLocalWatchlistStore((s) => s.remove)
   // 首次加载用骨架屏，后续 loading（排序/翻页/筛选）退化为轻量 spinner 避免 CLS
   const [isFirstLoad, setIsFirstLoad] = useState(true)
 
-  const activeListId = searchParams.get('list') ? Number(searchParams.get('list')) : null
+  // activeListId 兼容三态：null=不筛选 / 'local'=未登录用户的本地自选股 / number=后端列表 ID
+  const rawListParam = searchParams.get('list')
+  const activeListId: number | typeof LOCAL_WATCHLIST_LIST_ID | null =
+    rawListParam === LOCAL_WATCHLIST_LIST_ID
+      ? LOCAL_WATCHLIST_LIST_ID
+      : rawListParam
+        ? Number(rawListParam)
+        : null
+  const isLocalActive = activeListId === LOCAL_WATCHLIST_LIST_ID
 
   // ── 筛选 / 分页状态 ──
   const [marketFilter, setMarketFilter] = useState<string>(() => searchParams.get('market') ?? 'all')
@@ -271,6 +287,18 @@ function StocksPageContent() {
     if (isAuthenticated) fetchLists()
   }, [isAuthenticated, fetchLists])
 
+  // 登录瞬间合并本地自选股 → 后端"自选股"列表，并把 URL 上的 list=local 切到该后端列表
+  useLoginWatchlistSync(isAuthenticated, useCallback((result: LoginWatchlistSyncResult) => {
+    if (result.type === 'success') {
+      toast.success(`已将本地自选股 ${result.total} 只同步到云端列表"${result.listName}"（新增 ${result.added}，已存在 ${result.skipped}）`)
+      if (rawListParam === LOCAL_WATCHLIST_LIST_ID) {
+        updateURL({ list: result.listId, page: null })
+      }
+    } else {
+      toast.error(`本地自选股同步失败：${result.message}`)
+    }
+  }, [rawListParam, updateURL]))
+
   // ── 股票列表加载 ──
   // silent=true 的静默刷新只更新当前已显示行的数据（按 ts_code 定向拉取 + 原位合并），
   // 不改变行的集合和顺序，也不改变 totalStocks，避免翻页/排序状态被异步刷新打乱
@@ -301,6 +329,24 @@ function StocksPageContent() {
         return
       }
 
+      // 本地自选股（未登录态）走 ts_codes 直查；空集合直接清空，不发请求
+      if (isLocalActive) {
+        if (localWatchlistCodes.length === 0) {
+          setStocks([])
+          setTotalStocks(0)
+          return
+        }
+        const response = await apiClient.getStockList({
+          ts_codes: localWatchlistCodes.join(','),
+          limit: localWatchlistCodes.length,
+          list_status: 'L',
+          include_analysis: true,
+        })
+        setStocks(response.items || [])
+        setTotalStocks(response.total ?? response.items?.length ?? 0)
+        return
+      }
+
       const params: Record<string, string | number | boolean> = {
         skip: (currentPage - 1) * pageSize,
         limit: pageSize,
@@ -314,7 +360,7 @@ function StocksPageContent() {
       if (industryFilter !== 'all') params.industry = industryFilter
       if (conceptFilter !== 'all') params.concept_code = conceptFilter
       if (stockSelectionStrategyId) params.stock_selection_strategy_id = Number(stockSelectionStrategyId)
-      if (activeListId !== null) params.user_stock_list_id = activeListId
+      if (activeListId !== null && typeof activeListId === 'number') params.user_stock_list_id = activeListId
 
       const response = await apiClient.getStockList(params)
       setStocks(response.items || [])
@@ -329,7 +375,7 @@ function StocksPageContent() {
         setIsFirstLoad(false)
       }
     }
-  }, [currentPage, marketFilter, industryFilter, conceptFilter, pageSize, sortKeys, stockSelectionStrategyId, activeListId, setStocks, setLoading, setError])
+  }, [currentPage, marketFilter, industryFilter, conceptFilter, pageSize, sortKeys, stockSelectionStrategyId, activeListId, isLocalActive, localWatchlistCodes, setStocks, setLoading, setError])
 
   const loadStocks = useCallback(() => fetchStocks(false), [fetchStocks])
 
@@ -431,6 +477,12 @@ function StocksPageContent() {
   const handleSelectAllFiltered = useCallback(async () => {
     setSelectingAll(true)
     try {
+      // 本地自选股：直接选所有本地代码，不发请求
+      if (isLocalActive) {
+        setSelectedCodes(new Set(localWatchlistCodes))
+        toast.success(`已选中全部 ${localWatchlistCodes.length} 只股票`)
+        return
+      }
       // limit 需覆盖全市场股票数 + 余量；后端 /codes/filtered 硬上限 10000
       const params: Parameters<typeof apiClient.getStockCodes>[0] = { list_status: 'L', limit: 10000 }
       if (marketFilter === 'SSE') { params.market = '主板'; params.exchange = 'SSE' }
@@ -439,7 +491,7 @@ function StocksPageContent() {
       if (industryFilter !== 'all') params.industry = industryFilter
       if (conceptFilter !== 'all') params.concept_code = conceptFilter
       if (stockSelectionStrategyId) params.stock_selection_strategy_id = Number(stockSelectionStrategyId)
-      if (activeListId !== null) params.user_stock_list_id = activeListId
+      if (activeListId !== null && typeof activeListId === 'number') params.user_stock_list_id = activeListId
 
       const result = await apiClient.getStockCodes(params)
       setSelectedCodes((prev) => {
@@ -458,7 +510,7 @@ function StocksPageContent() {
     } finally {
       setSelectingAll(false)
     }
-  }, [marketFilter, industryFilter, conceptFilter, stockSelectionStrategyId, activeListId])
+  }, [marketFilter, industryFilter, conceptFilter, stockSelectionStrategyId, activeListId, isLocalActive, localWatchlistCodes])
 
   const toggleStock = useCallback((tsCode: string) => {
     setSelectedCodes((prev) => {
@@ -470,16 +522,22 @@ function StocksPageContent() {
   }, [])
 
   const handleRemoveFromList = useCallback(async () => {
-    if (!activeListId || selectedCodes.size === 0) return
+    if (activeListId === null || selectedCodes.size === 0) return
     try {
-      const result = await removeStocks(activeListId, Array.from(selectedCodes))
+      if (isLocalActive) {
+        const { removed } = localWatchlistRemove(Array.from(selectedCodes))
+        setSelectedCodes(new Set())
+        toast.success(`已从自选股移除 ${removed} 只股票`)
+        return
+      }
+      const result = await removeStocks(activeListId as number, Array.from(selectedCodes))
       setSelectedCodes(new Set())
       toast.success(`已从列表移除 ${result.removed} 只股票`)
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } } }
       toast.error(e?.response?.data?.detail || '移除失败')
     }
-  }, [activeListId, selectedCodes, removeStocks])
+  }, [activeListId, isLocalActive, localWatchlistRemove, selectedCodes, removeStocks])
 
   const handleDeleteList = useCallback(async (listId: number) => {
     if (!confirm('确定要删除这个列表吗？列表中的股票记录也会一并删除。')) return
@@ -538,15 +596,17 @@ function StocksPageContent() {
       })
     }
     if (activeListId !== null) {
-      const list = lists.find((l) => l.id === activeListId)
+      const label = isLocalActive
+        ? `列表: ${LOCAL_WATCHLIST_NAME}`
+        : `列表: ${lists.find((l) => l.id === activeListId)?.name ?? activeListId}`
       chips.push({
         key: 'list',
-        label: `列表: ${list?.name ?? activeListId}`,
+        label,
         onClear: () => { setCurrentPage(1); setSelectedCodes(new Set()); updateURL({ list: null, page: null }) },
       })
     }
     return chips
-  }, [marketFilter, industryFilter, conceptFilter, stockSelectionStrategyId, activeListId, industries, stockSelectionStrategies, lists, updateURL])
+  }, [marketFilter, industryFilter, conceptFilter, stockSelectionStrategyId, activeListId, isLocalActive, industries, stockSelectionStrategies, lists, updateURL])
 
   // 清除全部筛选：合并 5 个维度的 URL patch 为一次 router.replace，避免多次跳转
   const handleClearAllFilters = useCallback(() => {
@@ -655,52 +715,59 @@ function StocksPageContent() {
         </Select>
       </div>
 
-      {isAuthenticated && (
-        <div className="space-y-2">
-          <Label htmlFor="list-filter">自选列表</Label>
-          <Select
-            value={activeListId !== null ? String(activeListId) : 'all'}
-            onValueChange={(v) => {
-              setCurrentPage(1)
-              setSelectedCodes(new Set())
-              updateURL({ list: v === 'all' ? null : Number(v), page: null })
-            }}
-          >
-            <SelectTrigger id="list-filter"><SelectValue placeholder="选择列表..." /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部股票</SelectItem>
-              {lists.map((list) => (
-                <div key={list.id} className="flex items-center group">
-                  <SelectItem value={String(list.id)} className="flex-1">
-                    {list.name}<span className="ml-1 text-xs text-gray-500 dark:text-gray-400">({list.stock_count})</span>
-                  </SelectItem>
-                  <span className="flex items-center gap-1 pr-2 opacity-0 group-hover:opacity-100">
-                    <button
-                      type="button"
-                      title="重命名"
-                      aria-label={`重命名列表 ${list.name}`}
-                      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setRenameTarget(list); setRenameDialogOpen(true) }}
-                      className="p-0.5 hover:text-primary rounded focus-ring"
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </button>
-                    <button
-                      type="button"
-                      title="删除"
-                      aria-label={`删除列表 ${list.name}`}
-                      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteList(list.id) }}
-                      className="p-0.5 hover:text-destructive rounded focus-ring-red"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </span>
-                </div>
-              ))}
-              {lists.length === 0 && <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">暂无列表</div>}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+      <div className="space-y-2">
+        <Label htmlFor="list-filter">自选列表</Label>
+        <Select
+          value={activeListId !== null ? String(activeListId) : 'all'}
+          onValueChange={(v) => {
+            setCurrentPage(1)
+            setSelectedCodes(new Set())
+            updateURL({ list: v === 'all' ? null : v, page: null })
+          }}
+        >
+          <SelectTrigger id="list-filter"><SelectValue placeholder="选择列表..." /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部股票</SelectItem>
+            {!isAuthenticated ? (
+              <SelectItem value={LOCAL_WATCHLIST_LIST_ID}>
+                {LOCAL_WATCHLIST_NAME}
+                <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">({localWatchlistCodes.length})</span>
+              </SelectItem>
+            ) : (
+              <>
+                {lists.map((list) => (
+                  <div key={list.id} className="flex items-center group">
+                    <SelectItem value={String(list.id)} className="flex-1">
+                      {list.name}<span className="ml-1 text-xs text-gray-500 dark:text-gray-400">({list.stock_count})</span>
+                    </SelectItem>
+                    <span className="flex items-center gap-1 pr-2 opacity-0 group-hover:opacity-100">
+                      <button
+                        type="button"
+                        title="重命名"
+                        aria-label={`重命名列表 ${list.name}`}
+                        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setRenameTarget(list); setRenameDialogOpen(true) }}
+                        className="p-0.5 hover:text-primary rounded focus-ring"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        title="删除"
+                        aria-label={`删除列表 ${list.name}`}
+                        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteList(list.id) }}
+                        className="p-0.5 hover:text-destructive rounded focus-ring-red"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </span>
+                  </div>
+                ))}
+                {lists.length === 0 && <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">暂无列表</div>}
+              </>
+            )}
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   )
 
@@ -720,8 +787,9 @@ function StocksPageContent() {
 
       {/* 批量操作浮动栏
          上部「建议行」仿 Gmail / Linear：根据已选/本页/总数三者关系推荐下一步（全选筛选结果 / 全选本页 / 清除）
-         下部操作行：取消、添加到列表、批量 AI 分析等主动作 */}
-      {isAuthenticated && selectedCodes.size > 0 && (
+         下部操作行：取消、添加到列表、批量 AI 分析等主动作。
+         未登录时也显示：未登录的"添加到列表"会写入 localStorage 自选股；批量 AI 分析需登录后才显示 */}
+      {selectedCodes.size > 0 && (
         <div
           className="fixed z-40 flex flex-col gap-2 bg-card border border-border shadow-xl
                      bottom-0 left-0 right-0 rounded-none px-3 py-2
@@ -807,15 +875,19 @@ function StocksPageContent() {
             </Button>
             {activeListId !== null && (
               <Button size="sm" variant="destructive" onClick={handleRemoveFromList} className="flex-shrink-0">
-                <Trash2 className="h-4 w-4 md:mr-1" /><span className="hidden sm:inline">从列表移除</span>
+                <Trash2 className="h-4 w-4 md:mr-1" />
+                <span className="hidden sm:inline">{isLocalActive ? '从自选股移除' : '从列表移除'}</span>
               </Button>
             )}
             <Button size="sm" onClick={() => setAddDialogOpen(true)} className="flex-shrink-0">
-              <BookmarkPlus className="h-4 w-4 md:mr-1" /><span className="hidden sm:inline">添加到列表</span>
+              <BookmarkPlus className="h-4 w-4 md:mr-1" />
+              <span className="hidden sm:inline">{isAuthenticated ? '添加到列表' : '加入自选股'}</span>
             </Button>
-            <Button size="sm" variant="secondary" onClick={() => setBatchAnalysisOpen(true)} className="flex-shrink-0">
-              <Sparkles className="h-4 w-4 md:mr-1" /><span className="hidden sm:inline">批量 AI 分析</span>
-            </Button>
+            {isAuthenticated && (
+              <Button size="sm" variant="secondary" onClick={() => setBatchAnalysisOpen(true)} className="flex-shrink-0">
+                <Sparkles className="h-4 w-4 md:mr-1" /><span className="hidden sm:inline">批量 AI 分析</span>
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -941,7 +1013,7 @@ function StocksPageContent() {
           {isLoading && isFirstLoad ? (
             <>
               <StockCardSkeleton count={5} />
-              <StockTableSkeleton rows={Math.min(pageSize, 10)} showCheckbox={isAuthenticated} />
+              <StockTableSkeleton rows={Math.min(pageSize, 10)} showCheckbox={true} />
             </>
           ) : isLoading ? (
             <div className="flex items-center justify-center py-6 text-sm text-gray-500 dark:text-gray-400 gap-2">
@@ -965,7 +1037,7 @@ function StocksPageContent() {
                 <StockCard
                   key={stock.code}
                   stock={stock}
-                  isAuthenticated={isAuthenticated}
+                  selectable={true}
                   isSelected={selectedCodes.has(toTsCode(stock.code))}
                   onToggleSelect={toggleStock}
                 />
@@ -977,15 +1049,13 @@ function StocksPageContent() {
               <table className="min-w-full divide-y divide-divider">
                 <thead className="bg-surface-base">
                   <tr>
-                    {isAuthenticated && (
-                      <th className="px-4 py-3 w-10">
-                        <Checkbox
-                          checked={someCurrentPageSelected ? 'indeterminate' : allCurrentPageSelected}
-                          onCheckedChange={toggleSelectAll}
-                          aria-label={allCurrentPageSelected ? '取消全选本页' : '全选本页'}
-                        />
-                      </th>
-                    )}
+                    <th className="px-4 py-3 w-10">
+                      <Checkbox
+                        checked={someCurrentPageSelected ? 'indeterminate' : allCurrentPageSelected}
+                        onCheckedChange={toggleSelectAll}
+                        aria-label={allCurrentPageSelected ? '取消全选本页' : '全选本页'}
+                      />
+                    </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">股票</th>
                     {isVisible('latest_price') && (
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">最新价</th>
@@ -1065,7 +1135,7 @@ function StocksPageContent() {
                     <StockTableRow
                       key={stock.code}
                       stock={stock}
-                      isAuthenticated={isAuthenticated}
+                      selectable={true}
                       isSelected={selectedCodes.has(toTsCode(stock.code))}
                       isVisible={isVisible}
                       onToggleSelect={toggleStock}
@@ -1146,10 +1216,16 @@ function StocksPageContent() {
         open={addDialogOpen}
         onClose={() => setAddDialogOpen(false)}
         selectedCodes={Array.from(selectedCodes)}
-        onSuccess={() => {
-          toast.success(`已将 ${selectedCodes.size} 只股票添加到列表`)
+        onSuccess={(summary) => {
+          if (isAuthenticated) {
+            toast.success(`已添加到列表${summary ? `（${summary}）` : ''}`)
+            fetchLists()
+          } else {
+            toast.success(`已加入本地自选股${summary ? `（${summary}）` : ''}`)
+            // 若当前正激活本地自选股，刷新列表以反映新成分股
+            if (isLocalActive) loadStocks()
+          }
           setSelectedCodes(new Set())
-          fetchLists()
         }}
       />
       <RenameListDialog

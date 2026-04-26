@@ -133,7 +133,12 @@ toast({ title: '失败', description: err.message, variant: 'destructive' })
 
 ---
 
-已登录用户可在 `/stocks` 页面管理自选股列表。未登录用户不可见任何列表相关 UI。
+用户可在 `/stocks` 页面管理自选股列表，`/analysis` 页面单股加入自选。**双轨架构**：
+- **已登录**：多列表（最多 20 个），数据存后端 `user_stock_lists` / `user_stock_list_items`
+- **未登录**：单一隐式列表"自选股"（最多 500 只），数据存 localStorage（`useLocalWatchlistStore`，key `local-watchlist:v1`）
+- **登录瞬间自动合并**：`useLoginWatchlistSync` hook 检测 `isAuthenticated` 由 false→true 转变（`prevAuthRef` 锁基线 + `mergedRef` 防重入），把本地代码合并到后端"自选股"列表（缺则创建），清空 localStorage；失败回滚标志位允许重试。两个页面 `/stocks` 和 `/analysis` 都挂这个 hook，新增需要"自选股"的页面也照挂
+
+`/stocks` 页用 `?list=local`（字面量）标记本地视图，与 `?list=<number>`（后端列表 ID）共享 URL state；`activeListId` 是联合类型 `number | 'local' | null`，在 fetchStocks 中 `isLocalActive=true` 走 `ts_codes=` 直查路径绕过分页。`AddToListDialog` 内部按 `isAuthenticated` 双分支：登录态写后端 + 显示 added/skipped 摘要，未登录态写 localStorage（带上限提示）。
 
 ### 数据库表
 
@@ -163,7 +168,10 @@ DELETE /api/user-stock-lists/{id}/items   批量移除股票（body: {ts_codes:[
 
 ### 前端文件
 
-- Zustand Store：`frontend/src/stores/stock-list-store.ts`（无持久化，服务端存储）
+- Zustand Store：
+  - `frontend/src/stores/stock-list-store.ts` — 后端列表元数据（无持久化，登录态拉取）
+  - `frontend/src/stores/local-watchlist-store.ts` — 未登录本地自选股（localStorage 持久化）
+- 共享 hook：`frontend/src/hooks/useLoginWatchlistSync.ts` — 登录瞬间合并；调用方传 `onResult` 回调自渲 toast
 - 主页面：`frontend/src/app/stocks/page.tsx`
 - 提取组件：`frontend/src/app/stocks/components/`（`AddToListDialog`、`RenameListDialog`、`StockTableRow`）
 - API 方法：`frontend/src/lib/api/stocks.ts`（`getUserStockLists`, `createStockList`, `renameStockList`, `deleteStockList`, `getStockListItems`, `addStocksToList`, `removeStocksFromList`）

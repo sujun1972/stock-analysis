@@ -43,14 +43,14 @@ function cioFollowupSummary(triggers: CioFollowupTriggers | null): string | null
 
 interface StockCardProps {
   stock: StockInfo
-  isAuthenticated: boolean
+  selectable: boolean
   isSelected: boolean
   onToggleSelect: (tsCode: string) => void
 }
 
 export const StockCard = React.memo(function StockCard({
   stock,
-  isAuthenticated,
+  selectable,
   isSelected,
   onToggleSelect,
 }: StockCardProps) {
@@ -77,12 +77,12 @@ export const StockCard = React.memo(function StockCard({
           ? 'border-primary bg-primary/[0.08] ring-1 ring-primary/30'
           : 'border-border'
       }`}
-      onClick={isAuthenticated ? () => onToggleSelect(tsCode) : undefined}
-      style={isAuthenticated ? { cursor: 'pointer' } : undefined}
+      onClick={selectable ? () => onToggleSelect(tsCode) : undefined}
+      style={selectable ? { cursor: 'pointer' } : undefined}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2 min-w-0 flex-1">
-          {isAuthenticated && (
+          {selectable && (
             <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
               <Checkbox
                 checked={isSelected}
