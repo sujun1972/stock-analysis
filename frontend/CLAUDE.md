@@ -515,9 +515,15 @@ useEffect(() => {
 
 每个 Tab 功能：通过"AI 分析"按钮一键生成并自动保存、查看/翻页历史分析记录、编辑/删除已有记录（仅记录创建者）、折叠展示提示词（复制按钮在提示词区域内）。弹窗内无手动输入/保存区域，所有分析均通过后端 AI 生成。
 
-**一键分析按钮**：弹窗底部 Footer 的「一键分析」按钮调用 `POST /api/stock-ai-analysis/generate-multi`，并行生成游资/中线/价值 3 个专家 + CIO 综合决策。完成后通过 `refreshKey` 机制触发所有 Tab 自动刷新历史。各 Tab 内的单独"AI 分析"按钮仍保留，可单独重新生成某个专家。
+**AI 分析任务（异步 + 轮询）**：批量与单只一键共用 Celery 任务 `tasks.batch_ai_analysis`（后端用 `task_type` 区分，前端协议完全一致），三处入口：
 
-**批量 AI 分析（异步 + 轮询）**：`/stocks` 页面选中多只股票后，浮动操作栏中的「批量 AI 分析」按钮（`BatchAnalysisDialog`）调用 `POST /api/stock-ai-analysis/batch` 提交 Celery 任务，拿到 `celery_task_id` 后每 3 秒 `GET /api/stock-ai-analysis/batch/{id}` 轮询进度。关闭弹窗不中断任务。`stocks/page.tsx` 另一层常驻轮询 `GET /api/stock-ai-analysis/batch/active/ts-codes`，登录用户每 3 秒拉一次"分析中"ts_code 集合，`StockTableRow` 的 `isAnalyzing=true` 时把"AI 分析"按钮替换为旋转图标（刷新页面后仍能恢复展示）。股票从"分析中"列表移除时自动 `fetchStocks(true)` 拉最新评分。
+- `/stocks` 浮动操作栏「批量 AI 分析」（`BatchAnalysisDialog`）：调 `POST /api/stock-ai-analysis/batch` 提交一组 ts_codes，拿 `celery_task_id` 后 3s 轮询 `GET /batch/{id}`。关闭弹窗不中断任务。
+- `/analysis` 主页 + `HotMoneyViewDialog` Footer 的「一键分析」按钮：调 `POST /api/stock-ai-analysis/generate-multi`（单只 + concurrency=1），同样异步返回 `celery_task_id`，3s 轮询 `GET /batch/{id}`。提交前先调 `GET /active/by-ts-code/{ts_code}` 查活跃任务，命中则续轮询不重复提交。
+- `/stocks` 另一层常驻轮询 `GET /batch/active/ts-codes` 拿"分析中"ts_code 集合（**覆盖批量 + 单只一键两类 task_type**）；`StockTableRow` 的 `isAnalyzing=true` 时把"AI 分析"按钮换为旋转图标，刷新页面后仍能恢复。股票从"分析中"列表移除时自动 `fetchStocks(true)` 拉最新评分。
+
+**`useMultiAnalysisTask` hook**（[hooks/useMultiAnalysisTask.ts](src/hooks/useMultiAnalysisTask.ts)）封装"提交 → 轮询 → 探活 → 终态收尾"完整生命周期，被 `/analysis` 主页（`enableProbe=true` mount 后每 3s 探活）和 `HotMoneyViewDialog`（`enableProbe=false`，仅响应主动点击）共用。终态后必须**再补拉一次** `GET /batch/{id}` 兜底 metadata.items 抢跑（见 backend/CLAUDE.md 同名陷阱）。新增"基于活跃 Celery 任务做 UI 状态恢复"的入口时优先复用此 hook。
+
+**禁止把"分析中"状态做成短轮询闪烁**：探活 effect 不要把 `taskId` 列入 `useEffect` deps（每次 setTaskId 都触发 effect 重建 → cleanup 误清状态导致按钮文字闪烁）；用 ref 读最新 taskId。同理切股票/失能时清状态的 effect 不能"挂载即清"，必须用 `lastTsCodeRef` 比较"上一次实际生效的 tsCode"，仅在真切到不同值时清 —— 否则 `loadStockInfo` 完成那一拍 `basicInfo?.ts_code` 从 undefined 变为有值，会把刚由探活设上的状态误清。`useMultiAnalysisTask` 已封装这两条约束，参考它实现类似 hook。
 
 打开弹窗时，全部 5 个提示词通过 `Promise.all` 并发加载，互不阻塞。新增 Tab 后必须同步更新父页面（`/stocks/page.tsx`、`/analysis/page.tsx`）的 state 和 `HotMoneyViewDialog` props。
 

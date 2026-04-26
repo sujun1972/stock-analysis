@@ -80,6 +80,7 @@ class ApiClient {
   submitBatchAnalysis = stocksApi.submitBatchAnalysis
   getBatchAnalysisProgress = stocksApi.getBatchAnalysisProgress
   getActiveBatchTsCodes = stocksApi.getActiveBatchTsCodes
+  getActiveTaskByTsCode = stocksApi.getActiveTaskByTsCode
   collectStockData = stocksApi.collectStockData
   getPromptTemplateByKey = stocksApi.getPromptTemplateByKey
 

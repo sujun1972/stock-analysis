@@ -75,7 +75,18 @@ export function BatchAnalysisDialog({
         setProgress(res.data)
         const terminal = res.data.status === 'success' || res.data.status === 'failure'
         if (terminal) {
-          if (!onSuccessCalledRef.current) {
+          // task_success 信号写 status 与任务体最后一次 _flush_progress 是两条独立 SQL,
+          // 信号若先到, 这一轮的 metadata.items / 分桶计数可能还停在上一帧。
+          // 终态后再补拉一次, 兜底拿最终明细 + 计数, 避免弹窗卡在 N-1/N。
+          try {
+            const finalRes = await apiClient.getBatchAnalysisProgress(id)
+            if (!pollCancelledRef.current && finalRes?.code === 200 && finalRes.data) {
+              setProgress(finalRes.data)
+            }
+          } catch {
+            // 兜底失败不影响主流程, 已显示的 progress 仍然可用
+          }
+          if (!pollCancelledRef.current && !onSuccessCalledRef.current) {
             onSuccessCalledRef.current = true
             onSuccess()
           }

@@ -651,49 +651,60 @@ async def generate_review(
 async def generate_multi_analysis(
     body: GenerateMultiRequest,
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
 ):
-    """并行调用多个 AI 专家分析同一只股票，数据收集只做一次。
+    """提交单只股票的多专家 AI 分析任务（异步）。
 
-    核心逻辑委托给 batch_ai_analysis_service.run_multi_expert_for_stock，
-    该函数同时为 batch_ai_analysis Celery 任务服务。
+    与批量分析共用 tasks.batch_ai_analysis Celery 任务，ts_codes=[一只] / concurrency=1，
+    在 celery_task_history 中以 task_type=single_ai_analysis 区分批量/单只。
+    返回 celery_task_id 供前端 3 秒轮询；刷新页面后通过 /batch/active/ts-codes 恢复"分析中"。
     """
-    from app.services.batch_ai_analysis_service import run_multi_expert_for_stock
+    from app.services.task_history_helper import TaskHistoryHelper
+    from app.tasks.batch_ai_analysis_tasks import batch_ai_analysis_task, SINGLE_TASK_TYPE
 
-    # 校验 analysis_types
     invalid_types = [t for t in body.analysis_types if t not in _JSON_ANALYSIS_TYPES and t != "stock_data_collection"]
     if invalid_types:
         return ApiResponse.bad_request(
             message=f"不支持的分析类型: {invalid_types}，允许值: {list(_JSON_ANALYSIS_TYPES)}"
         ).to_dict()
 
-    try:
-        data = await run_multi_expert_for_stock(
-            ts_code=body.ts_code,
-            stock_name=body.stock_name,
-            stock_code=body.stock_code,
-            analysis_types=list(body.analysis_types),
-            include_cio=body.include_cio,
-            user_id=current_user.id,
-            db=db,
-        )
-    except ValueError as e:
-        return ApiResponse.bad_request(message=str(e)).to_dict()
-    except Exception as e:
-        logger.error(f"[generate_multi] 失败: {e}", exc_info=True)
-        return ApiResponse.error(message=f"多专家分析失败: {e}", code=500).to_dict()
+    ts_code = body.ts_code.strip().upper()
+    if not ts_code:
+        return ApiResponse.bad_request(message="ts_code 不能为空").to_dict()
 
-    results = data["expert_results"]
-    cio_result = data["cio_result"]
-    errors = data["errors"] or []
-    # trade_date 字段仅内部需要，响应中不透出以保持对前端的向后兼容
-    data.pop("trade_date", None)
+    # 先生成 task_id 写 DB → 再 apply_async，避免 worker 提前跑导致 update_batch_progress
+    # 的 WHERE celery_task_id=? 不命中、进度静默丢失（与 /batch 端点同协议）
+    celery_task_id = str(uuid.uuid4())
+
+    await TaskHistoryHelper().create_task_record(
+        celery_task_id=celery_task_id,
+        task_name="tasks.batch_ai_analysis",
+        display_name=f"一键分析 {body.stock_name}（{body.stock_code}）",
+        task_type=SINGLE_TASK_TYPE,
+        user_id=current_user.id,
+        task_params={
+            "ts_codes": [ts_code],
+            "analysis_types": list(body.analysis_types),
+            "include_cio": body.include_cio,
+            "concurrency": 1,
+        },
+        source="analysis_page",
+    )
+
+    batch_ai_analysis_task.apply_async(
+        task_id=celery_task_id,
+        kwargs={
+            "ts_codes": [ts_code],
+            "stock_names": {ts_code: body.stock_name},
+            "analysis_types": list(body.analysis_types),
+            "include_cio": body.include_cio,
+            "user_id": current_user.id,
+            "concurrency": 1,
+        },
+    )
 
     return ApiResponse.success(
-        data=data,
-        message=f"多专家分析完成：{len(results)} 个专家成功"
-        + (f"，{len(errors)} 个失败" if errors else "")
-        + ("，含 CIO 综合决策" if cio_result else ""),
+        data={"celery_task_id": celery_task_id, "ts_code": ts_code},
+        message="一键分析任务已提交，请等待生成完成",
     ).to_dict()
 
 
@@ -830,18 +841,45 @@ async def get_batch_analysis(
 async def get_active_batch_ts_codes(
     current_user: User = Depends(get_current_active_user),
 ):
-    """返回当前用户所有活跃批量任务中"尚未完成"的 ts_code 集合。
+    """返回当前用户所有活跃 AI 分析任务中"尚未完成"的 ts_code 集合。
 
+    覆盖批量分析（task_type=batch_ai_analysis）和单只一键分析（task_type=single_ai_analysis），
     用于股票列表页标记"分析中"的股票，支持刷新后恢复显示。
     """
     from app.repositories.celery_task_history_repository import CeleryTaskHistoryRepository
-    from app.tasks.batch_ai_analysis_tasks import TASK_TYPE
+    from app.tasks.batch_ai_analysis_tasks import TASK_TYPE, SINGLE_TASK_TYPE
 
     repo = CeleryTaskHistoryRepository()
     ts_codes = await asyncio.to_thread(
-        repo.get_active_batch_ts_codes, current_user.id, TASK_TYPE,
+        repo.get_active_batch_ts_codes, current_user.id, [TASK_TYPE, SINGLE_TASK_TYPE],
     )
     return ApiResponse.success(data={"ts_codes": ts_codes}).to_dict()
+
+
+@router.get("/active/by-ts-code/{ts_code}")
+@handle_api_errors
+async def get_active_task_by_ts_code(
+    ts_code: str,
+    current_user: User = Depends(get_current_active_user),
+):
+    """查询某只股票当前是否有活跃的 AI 分析任务（批量或单只一键），返回其 celery_task_id。
+
+    供 /analysis 页面刷新后恢复"分析中"状态：命中则前端续轮询 /batch/{id}，
+    完成后正常刷新各专家最新数据。
+    """
+    from app.repositories.celery_task_history_repository import CeleryTaskHistoryRepository
+    from app.tasks.batch_ai_analysis_tasks import TASK_TYPE, SINGLE_TASK_TYPE
+
+    normalized = (ts_code or "").strip().upper()
+    if not normalized:
+        return ApiResponse.bad_request(message="ts_code 不能为空").to_dict()
+
+    repo = CeleryTaskHistoryRepository()
+    task_id = await asyncio.to_thread(
+        repo.get_active_task_id_by_ts_code,
+        current_user.id, normalized, [TASK_TYPE, SINGLE_TASK_TYPE],
+    )
+    return ApiResponse.success(data={"celery_task_id": task_id}).to_dict()
 
 
 @router.post("/")

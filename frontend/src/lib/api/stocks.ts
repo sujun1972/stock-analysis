@@ -418,8 +418,15 @@ export async function generateMultiAnalysis(params: {
   stock_code: string
   analysis_types: string[]
   include_cio?: boolean
-}): Promise<ApiResponse<{ expert_count: number; errors: Array<{ type: string; error: string }>; total_generation_time: number }>> {
+}): Promise<ApiResponse<{ celery_task_id: string; ts_code: string }>> {
+  // /generate-multi 已改为异步：提交任务后返回 celery_task_id，由调用方轮询 /batch/{id} 取进度
   return apiPost('/api/stock-ai-analysis/generate-multi', params)
+}
+
+export async function getActiveTaskByTsCode(
+  tsCode: string,
+): Promise<ApiResponse<{ celery_task_id: string | null }>> {
+  return apiGet(`/api/stock-ai-analysis/active/by-ts-code/${encodeURIComponent(tsCode)}`)
 }
 
 // ===== 批量 AI 分析 =====

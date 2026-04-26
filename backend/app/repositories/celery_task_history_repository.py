@@ -4,7 +4,7 @@ Celery 任务历史 Repository
 负责 celery_task_history 表的数据访问操作。
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence, Union
 from datetime import datetime
 import json
 from loguru import logger
@@ -558,21 +558,28 @@ class CeleryTaskHistoryRepository(BaseRepository):
                 reason=str(e),
             )
 
-    def get_active_batch_ts_codes(self, user_id: int, task_type: str) -> List[str]:
+    def get_active_batch_ts_codes(
+        self, user_id: int, task_type: Union[str, Sequence[str]]
+    ) -> List[str]:
         """获取指定用户所有活跃（pending/running）批量任务中尚未完成的 ts_code。
 
+        task_type 支持单个字符串或字符串列表（多 task_type 用于同时覆盖批量与单只一键分析）。
         用于前端标记股票列表中"分析中"的股票。
         从 params.ts_codes 中排除 metadata.items 中已 status='success'/'error' 的条目。
         """
+        type_list = [task_type] if isinstance(task_type, str) else list(task_type)
+        if not type_list:
+            return []
+        placeholders = ",".join(["%s"] * len(type_list))
         query = f"""
             SELECT params, metadata
             FROM {self.TABLE_NAME}
             WHERE user_id = %s
-              AND task_type = %s
+              AND task_type IN ({placeholders})
               AND status IN ('pending', 'running', 'progress')
         """
         try:
-            rows = self.execute_query(query, (user_id, task_type))
+            rows = self.execute_query(query, (user_id, *type_list))
         except Exception as e:
             logger.error(f"查询活跃批量任务失败: {e}")
             return []
@@ -596,6 +603,40 @@ class CeleryTaskHistoryRepository(BaseRepository):
                 if ts and ts not in done:
                     active.add(ts)
         return sorted(active)
+
+    def get_active_task_id_by_ts_code(
+        self, user_id: int, ts_code: str, task_type: Union[str, Sequence[str]]
+    ) -> Optional[str]:
+        """查询指定 ts_code 当前是否有活跃 AI 分析任务，返回最新的 celery_task_id。
+
+        用于 /analysis 页面刷新后恢复"分析中"状态并续轮询。同一 ts_code 同时存在多个活跃
+        任务（理论上不应发生，前端会拦截重复点击）时取 created_at 最新的一条。
+        """
+        type_list = [task_type] if isinstance(task_type, str) else list(task_type)
+        if not type_list:
+            return None
+        placeholders = ",".join(["%s"] * len(type_list))
+        query = f"""
+            SELECT celery_task_id, params
+            FROM {self.TABLE_NAME}
+            WHERE user_id = %s
+              AND task_type IN ({placeholders})
+              AND status IN ('pending', 'running', 'progress')
+            ORDER BY created_at DESC
+        """
+        try:
+            rows = self.execute_query(query, (user_id, *type_list))
+        except Exception as e:
+            logger.error(f"查询活跃任务 by ts_code 失败: {e}")
+            return None
+        for row in rows:
+            params_raw = row[1]
+            params_dict = params_raw if isinstance(params_raw, dict) else (
+                json.loads(params_raw) if params_raw else {}
+            )
+            if ts_code in (params_dict.get("ts_codes") or []):
+                return row[0]
+        return None
 
     def delete_task_history(self, celery_task_id: str, user_id: Optional[int] = None) -> int:
         """

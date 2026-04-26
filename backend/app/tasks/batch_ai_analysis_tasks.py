@@ -24,6 +24,10 @@ MAX_BATCH_SIZE = 200
 # 写入 celery_task_history.task_type 的常量，endpoint 查询"活跃批量任务"时用
 TASK_TYPE = "batch_ai_analysis"
 
+# 单只一键分析复用同一个 Celery 任务（ts_codes 长度=1, concurrency=1），
+# 但用独立 task_type 让 active 端点和监控可按子类型区分。两者的 metadata.items 结构一致。
+SINGLE_TASK_TYPE = "single_ai_analysis"
+
 
 @celery_app.task(
     bind=True,

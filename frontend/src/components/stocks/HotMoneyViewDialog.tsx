@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { apiClient } from '@/lib/api-client'
+import { useMultiAnalysisTask } from '@/hooks/useMultiAnalysisTask'
 import { Button } from '@/components/ui/button'
 import { AnalysisContent } from '@/components/stocks/analysis'
 import {
@@ -611,16 +612,30 @@ export function HotMoneyViewDialog({
   cioPrompt, cioPromptLoading,
   onSaved,
 }: HotMoneyViewDialogProps) {
-  const [multiGenerating, setMultiGenerating] = useState(false)
-  const [multiMsg, setMultiMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [activeTab, setActiveTab] = useState(defaultTab ?? 'hot_money')
 
-  // 弹窗关闭时重置；打开时若有 defaultTab 则锁定到指定 Tab
+  // 一键分析任务 (与 /analysis 主页共用 hook): 提交 → 轮询 → 终态 refreshKey + onSaved。
+  // enableProbe=false: 弹窗不需要 mount 后探活, 只响应用户主动点击。
+  // enabled=open: 关闭弹窗时 hook 自动 reset (清 timer + 状态), 不残留到下次打开。
+  const {
+    generating: multiGenerating,
+    message: multiMsg,
+    start: handleMultiGenerate,
+  } = useMultiAnalysisTask({
+    tsCode: tsCode ?? null,
+    stockName: stockName ?? null,
+    stockCode: stockCode ?? null,
+    enabled: open,
+    onFinish: () => {
+      setRefreshKey((k) => k + 1)
+      onSaved?.()
+    },
+  })
+
+  // 弹窗打开时锁定到指定 Tab; 关闭时复位 Tab (轮询状态由 hook enabled=open 自动处理)
   useEffect(() => {
     if (!open) {
-      setMultiGenerating(false)
-      setMultiMsg(null)
       setActiveTab(defaultTab ?? 'hot_money')
     } else if (defaultTab) {
       setActiveTab(defaultTab)
@@ -635,39 +650,6 @@ export function HotMoneyViewDialog({
     setActiveTab(targetTab)
     onSaved?.()
   }, [onSaved])
-
-  const handleMultiGenerate = useCallback(async () => {
-    if (!tsCode || !stockName || !stockCode) return
-    setMultiGenerating(true)
-    setMultiMsg(null)
-    try {
-      const res = await apiClient.generateMultiAnalysis({
-        ts_code: tsCode,
-        stock_name: stockName,
-        stock_code: stockCode,
-        analysis_types: ['hot_money_view', 'midline_industry_expert', 'longterm_value_watcher'],
-        include_cio: true,
-      })
-      if (res?.code === 200) {
-        const data = res.data
-        const count = data?.expert_count ?? 0
-        const errors = data?.errors?.length ?? 0
-        const time = data?.total_generation_time ?? 0
-        setMultiMsg({
-          text: `${count} 个专家分析完成（${time}s）` + (errors ? `，${errors} 个失败` : ''),
-          type: errors ? 'error' : 'success',
-        })
-        setRefreshKey((k) => k + 1)
-        onSaved?.()
-      } else {
-        setMultiMsg({ text: res?.message || '一键分析失败', type: 'error' })
-      }
-    } catch (e: any) {
-      setMultiMsg({ text: e?.response?.data?.message || '一键分析失败', type: 'error' })
-    } finally {
-      setMultiGenerating(false)
-    }
-  }, [tsCode, stockName, stockCode, onSaved])
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>

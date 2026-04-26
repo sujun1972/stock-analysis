@@ -23,6 +23,7 @@ import {
 } from '@/components/stocks/analysis'
 import { AddToListDialog } from '@/app/stocks/components/AddToListDialog'
 import { useToast } from '@/hooks/use-toast'
+import { useMultiAnalysisTask } from '@/hooks/useMultiAnalysisTask'
 import { Bookmark, Share2 } from 'lucide-react'
 
 // 动态导入StockPriceCard组件（统一的图表组件）
@@ -565,8 +566,6 @@ function AnalysisContent() {
   const [expertsRefreshKey, setExpertsRefreshKey] = useState(0)
   const [activeExpertTab, setActiveExpertTab] = useState<Exclude<ExpertMeta['key'], 'cio'>>('hot_money')
   const [cioOpen, setCioOpen] = useState(false)
-  const [multiGenerating, setMultiGenerating] = useState(false)
-  const [multiMessage, setMultiMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [regeneratingKey, setRegeneratingKey] = useState<ExpertMeta['key'] | null>(null)
   const [historyDefaultTab, setHistoryDefaultTab] = useState<string | undefined>(undefined)
   const cioCardRef = useRef<HTMLDivElement | null>(null)
@@ -676,48 +675,28 @@ function AnalysisContent() {
     }
   }, [latestByExpert.cio])
 
-  // 主页一键分析（与弹窗 Footer 同 API，但 refresh 主页 4 专家而非弹窗）
-  const handleMultiGenerate = useCallback(async () => {
-    const tsCode = basicInfo?.ts_code || (code ? toTsCode(code) : null)
-    const stockName = stockInfo?.name
-    if (!tsCode || !stockName || !code) return
-    setMultiGenerating(true)
-    setMultiMessage(null)
-    try {
-      const res = await apiClient.generateMultiAnalysis({
-        ts_code: tsCode,
-        stock_name: stockName,
-        stock_code: code,
-        analysis_types: ['hot_money_view', 'midline_industry_expert', 'longterm_value_watcher'],
-        include_cio: true,
-      })
-      if (res?.code === 200) {
-        const data = res.data
-        const count = data?.expert_count ?? 0
-        const errors = data?.errors?.length ?? 0
-        const time = data?.total_generation_time ?? 0
-        setMultiMessage({
-          type: errors ? 'error' : 'success',
-          text: `${count} 位专家完成（${time}s）${errors ? '，' + errors + ' 个失败' : ''}`,
-        })
-        setExpertsRefreshKey((k) => k + 1)
-      } else {
-        setMultiMessage({ type: 'error', text: res?.message || '一键分析失败' })
-      }
-    } catch (e: any) {
-      setMultiMessage({ type: 'error', text: e?.response?.data?.message || '一键分析失败' })
-    } finally {
-      setMultiGenerating(false)
-    }
-  }, [basicInfo?.ts_code, code, stockInfo?.name])
+  // 一键分析任务: 提交 / 轮询 / 探活 / 终态收尾全部由 hook 接管 (与 HotMoneyViewDialog 共用)。
+  // enableProbe=true 让 mount 后每 3s 探一次活跃任务, 同步 /stocks 批量分析或多 tab 状态。
+  const tsCodeForTask = basicInfo?.ts_code || (code ? toTsCode(code) : null)
+  const {
+    generating: multiGenerating,
+    message: multiMessage,
+    start: handleMultiGenerate,
+  } = useMultiAnalysisTask({
+    tsCode: tsCodeForTask,
+    stockName: stockInfo?.name ?? null,
+    stockCode: code ?? null,
+    enableProbe: true,
+    enabled: isAuthenticated,
+    onFinish: () => setExpertsRefreshKey((k) => k + 1),
+  })
 
-  // 单专家重新分析（在 ExpertDetailCard 触发，用 stock-ai-analysis/generate 单调）
+  // 单专家重新分析: 走 toast 单独通知, 不与一键分析(multiMessage) 共用 UI 槽位
   const handleRegenerateExpert = useCallback(async (expert: ExpertMeta) => {
     const tsCode = basicInfo?.ts_code || (code ? toTsCode(code) : null)
     const stockName = stockInfo?.name
     if (!tsCode || !stockName || !code) return
     setRegeneratingKey(expert.key)
-    setMultiMessage(null)
     try {
       const res = await apiClient.generateStockAnalysis({
         ts_code: tsCode,
@@ -727,17 +706,17 @@ function AnalysisContent() {
         template_key: expert.templateKey,
       })
       if (res?.code === 200 && res.data?.analysis_text) {
-        setMultiMessage({ type: 'success', text: `${expert.label}专家分析完成` })
+        toast({ title: '已完成', description: `${expert.label}专家分析完成` })
         setExpertsRefreshKey((k) => k + 1)
       } else {
-        setMultiMessage({ type: 'error', text: res?.message || `${expert.label}分析失败` })
+        toast({ title: '失败', description: res?.message || `${expert.label}分析失败`, variant: 'destructive' })
       }
     } catch (e: any) {
-      setMultiMessage({ type: 'error', text: e?.response?.data?.message || `${expert.label}分析失败` })
+      toast({ title: '失败', description: e?.response?.data?.message || `${expert.label}分析失败`, variant: 'destructive' })
     } finally {
       setRegeneratingKey(null)
     }
-  }, [basicInfo?.ts_code, code, stockInfo?.name])
+  }, [basicInfo?.ts_code, code, stockInfo?.name, toast])
 
   // 雷达图节点点击 → 滚到对应专家详情；CIO 节点 → 展开 CIO 详情卡
   const handleScoreNodeClick = useCallback((label: string) => {
@@ -825,7 +804,7 @@ function AnalysisContent() {
     }, 300)
   }
 
-  const toTsCode = (c: string) => {
+  function toTsCode(c: string): string {
     if (c.includes('.')) return c.toUpperCase()
     if (c.startsWith('6')) return `${c}.SH`
     if (c.startsWith('4') || c.startsWith('8')) return `${c}.BJ`
