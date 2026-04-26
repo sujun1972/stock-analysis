@@ -111,7 +111,7 @@ export function StockCardSkeleton({ count = 5 }: { count?: number }) {
   )
 }
 
-/** HotMoneyViewDialog 各 Tab 首次拉取历史记录时的骨架屏。 */
+/** 分析历史首次拉取记录时的骨架屏（行 + 翻页器 + 内容块）。 */
 export function AnalysisHistorySkeleton() {
   return (
     <div

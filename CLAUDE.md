@@ -192,7 +192,7 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
 **新增专家类型 checklist**：
 1. Prompt 迁移脚本在 `backend/scripts/migrate_*_template.py`（重新执行会 UPSERT）
 2. 后端 `app/api/endpoints/stock_ai_analysis.py` 的 `ALLOWED_ANALYSIS_TYPES` 和 `_JSON_ANALYSIS_TYPES` 更新
-3. 前端 `HotMoneyViewDialog.tsx` 的 `SECTION_CONFIGS` 添加对应 `analysisType` 的 section 列表（title + labels 映射）
+3. 前端 `frontend/src/components/stocks/analysis/section-configs.ts` 的 `SECTION_CONFIGS` 添加对应 `analysisType` 的 section 列表（title + labels 映射）；如需独立主页卡，在 [analysis/](frontend/src/components/stocks/analysis/) 新增 `XxxCard.tsx` + barrel 导出 + 在 `/analysis/page.tsx` 串入
 4. `admin/types/prompt-template.ts` 的 `BUSINESS_TYPES` 和 `BUSINESS_TYPE_LABELS` 添加
 
 ### 专家自评（事后复盘）架构
@@ -210,7 +210,7 @@ create_agent(model, tools, system_prompt)   ← langchain.agents.create_agent（
 - **时间窗校验**：原报告距今 `< min_days_lag` 自然日时拒绝，错误消息含"建议..."关键词；前端 `handleReview` 检测到该关键词弹 `window.confirm` 询问是否 `force=true` 重试。
 - **`build_stock_prompt` 的 `extra_variables` 参数**：复盘端点通过该参数把 `{{ original_analysis_date }}` / `{{ original_analysis_json }}` / `{{ days_since_original }}` 注入复盘模板，避免在通用 `build_stock_prompt` 内硬编码复盘字段。
 - **复盘 prompt 评分语义**：`final_score.score` 评的是**原报告预测准确度**而非股票投资价值；中线/长线复盘模板含"时效降级规则"（时效不足时评分上限封顶）。
-- **前端 Tab 布局**：`HotMoneyViewDialog` 的 `TabsList` 用 `grid-cols-8` 排：游资 / 游资复盘 / 中线 / 中线复盘 / 价值 / 价值复盘 / CIO / 数据；游资/中线/价值三个原始 Tab 通过 `enableReview + reviewType` 在每条历史记录旁渲染橙色 `RotateCcw` 按钮触发复盘，成功后 `onReviewCreated(reviewType)` 让父组件切到对应复盘 Tab。
+- **前端入口**：复盘按钮内嵌在 `ExpertDetailCard` 三个专家 Tab 内的 `RecordActionToolbar`（`enableReview + reviewType` 控制是否渲染橙色 `RotateCcw` 按钮）；触发后子段控件自动切到"复盘 M"侧。CIO 与数据收集卡不暴露复盘入口。
 
 ### Celery 任务架构
 

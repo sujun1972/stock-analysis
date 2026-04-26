@@ -341,7 +341,7 @@ const safeFormatNumber = (value: any, decimals: number = 2): string => {
 
 ### 弹窗响应式（Dialog → 移动端全屏 Sheet）
 
-`HotMoneyViewDialog` 在 <sm（手机）将 Radix `<DialogContent>` 覆盖为从底部滑入的全屏页，≥sm 保持居中弹窗。不引入新组件，全部靠 Tailwind `max-sm:` 变体叠加覆盖 `DialogContent` 基础类：
+需要承载长内容的 Radix `<DialogContent>`，在 <sm（手机）覆盖为从底部滑入的全屏页，≥sm 保持居中弹窗。不引入新组件，全部靠 Tailwind `max-sm:` 变体叠加覆盖 `DialogContent` 基础类：
 
 - 定位：`max-sm:inset-0 max-sm:left-0 max-sm:top-0 max-sm:translate-x-0 max-sm:translate-y-0`（抵消基础类的 `left-[50%] top-[50%] translate-*-[50%]`）
 - 尺寸：`max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-screen max-sm:max-w-none`（`100dvh` 避开 iOS 地址栏动态高度）
@@ -466,18 +466,19 @@ useEffect(() => {
 
 ### 个股分析页 `/analysis` 的 AI 决策板块
 
-`/analysis` 页面有四张语义独立的卡片串联展示。**所有运行时操作（历史翻页 / 编辑 / 删除 / 查看源代码 / 触发复盘）都内嵌在卡片头部工具栏，弹窗只剩"提示词模板查看"一个职责。** 新增"AI 类"功能时优先放主页卡，不要回头往弹窗塞。
+`/analysis` 页面所有 AI 内容（4 专家 JSON + CIO + 数据收集 Markdown）都以**主页卡片**形式串联展示：每张卡头部内嵌"日期翻页器 + 编辑 / 删除 / 源代码 / 复盘"工具栏，触发分析的"重新分析 / 一键分析 / 生成数据"按钮也在卡内。**没有 AI 分析弹窗**——曾经的 `HotMoneyViewDialog`（标题栏"提示词"按钮触发的 5 Tab 综合视图）已整体下线。新增"AI 类"维度直接加主页卡。
 
 **核心数据模型：AI 分析的逻辑标的是"交易日"**。同 `(ts_code, analysis_type)` 在同一交易日下可能有多个版本（重新生成 / 改提示词 / 切模型），不同交易日各自独立编号。后端 `stock_ai_analysis` 表的 `version` 列在 `(ts_code, analysis_type)` 范围内全局递增（跨日跳号），**不要直接展示给用户**——前端用 `groupRecordsByTradeDate` 分组后按同日 `created_at` ASC 重新编号 `displayVersion 1..N`。卡片头部用 `<TradeDateVersionPager>` 表达两层导航：日历选交易日 + 同日内 `< vX/N >` 翻版本。后端表已支持该模型（`trade_date` 字段、`/api/stock-ai-analysis/list?trade_date=` 端点），无需后端改动；新增专家类型沿用 `useAnalysisHistory` 即可天然继承日历翻页能力。
 
-页面纵向流：
-1. **行情卡**（`QuotePanel`）— 最新价 / OHLC / 振幅 / 换手 / 成交 / 公司规模 chip / 4 维雷达图（点击节点滚到对应专家）/ CIO 一句话观点 + 复查触发器。
+页面纵向流（仅登录态显示 ③④⑤）：
+1. **行情卡**（`QuotePanel`）— 最新价 / OHLC / 振幅 / 换手 / 成交 / 公司规模 chip。**纯盘口数据**，与 AI 解耦。
 2. **估值数据卡**（`ValuationCard`）— PE / PB / PS / 股息率（`daily_basic`）+ ROC / EY / 安全边际（`stock_value_metrics`）+ 快照日期。**公开数据，未登录可见**。
-3. **AI 决策摘要卡**（`ExpertSummaryCard`）— 4 列等宽：CIO / 游资 / 中线 / 价值；每列 = 评分 + rating + key_quote（`line-clamp-2`）+ ▲/▼ 因子计数；顶部"一键分析"按钮。**仅登录态显示**。
+3. **AI 决策摘要卡**（`ExpertSummaryCard`）— 4 列等宽：CIO / 游资 / 中线 / 价值；每列 = 评分 + rating + key_quote（`line-clamp-2`）+ ▲/▼ 因子计数；顶部"一键分析"按钮。点专家列滚到对应详情卡。
 4. **CIO 综合决策卡**（`CioDecisionCard`，默认折叠）— 头部 collapse 按钮 + `TradeDateVersionPager` + `RecordActionToolbar`（源代码 / 编辑 / 删除）；展开后：multi_dimension_scan 三栏 / cross_dimension_analysis / core_drivers + core_risks 双栏 / rating_and_action 高亮卡（按 action 关键词配色）/ followup_triggers。
-5. **三专家详情卡**（`ExpertDetailCard`，嵌入 Tab）— 游资 / 中线 / 价值；每个 Tab 内部含 `原报告 N | 复盘 M` 子段控件 + `TradeDateVersionPager` + `RecordActionToolbar`（源代码 / 编辑 / 复盘 / 删除）。Tab 右上角保留"重新分析"（单专家）/ "提示词"（弹窗仅模板预览）。
+5. **三专家详情卡**（`ExpertDetailCard`，嵌入 Tab）— 游资 / 中线 / 价值；每个 Tab 内部含 `原报告 N | 复盘 M` 子段控件 + `TradeDateVersionPager` + `RecordActionToolbar`（源代码 / 编辑 / 复盘 / 删除）。Tab 右上角"重新分析"按钮（单专家）。
+6. **数据收集卡**（`DataCollectionCard`，默认折叠）— "AI 看到的原料"；非 JSON、无评分、无复盘。
 
-**主页 → 卡内组件统一通过 `tsCode` 驱动自身历史拉取**（不再依赖父级 `latestByExpert` prop 注入；保留 `latestByExpert` 仅供 `ExpertSummaryCard` / 行情卡 `cioKeyQuote` 派生）。父页传 `refreshKey` 触发外部刷新，卡内通过 `onChange` 回调反向通知父页 bump `expertsRefreshKey` 以同步雷达图 / 摘要卡。
+**主页 → 卡内组件统一通过 `tsCode` 驱动自身历史拉取**（不再依赖父级 `latestByExpert` prop 注入；保留 `latestByExpert` 仅供 `ExpertSummaryCard` 派生）。父页传 `refreshKey` 触发外部刷新，卡内通过 `onChange` 回调反向通知父页 bump `expertsRefreshKey` 以同步摘要卡。
 
 共享渲染组件全部在 [components/stocks/analysis/](src/components/stocks/analysis/)：
 
@@ -489,53 +490,53 @@ useEffect(() => {
 - `trade-date-utils.ts` — 历史记录的"交易日 + 同日多版本"分组工具（`groupRecordsByTradeDate` / `normalizeTradeDate` / `parseTradeDateToDate` / `formatDateToTradeDate`）
 - `useAnalysisHistory.ts` — 历史翻页 hook：返回 `{records, total, groups, selectedTradeDate, setSelectedTradeDate, versions, versionIndex, goNewerVersion, goOlderVersion, current, refresh, remove, update, loading}`，内部按 `(tsCode, analysisType)` 拉 `/api/stock-ai-analysis/history?limit=50` 后用 `groupRecordsByTradeDate` 分组。`refreshKey` 自增触发外部重拉，`enabled=false` 时跳过（`ExpertDetailCard` 的非激活 Tab 用此节流）。**锚定 effect 只依赖 `groups`，不依赖 `selectedTradeDate / versionIndex`**——否则用户手动切日期/版本会触发回锚循环（`Maximum update depth exceeded`）；用户选择通过 functional updater 读最新状态。**编辑后按 `lastViewedIdRef` 锚回原记录所在交易日 + 版本**。
 - `RecordActions.tsx` — 4 个内嵌操作组件：`TradeDateVersionPager`（日期 pill 弹 [Calendar](src/components/ui/calendar.tsx) Popover 选交易日 + 同日多版本时显示 `< vX/N >` 翻页）、`RecordActionToolbar`（源代码 / 编辑 / 复盘 / 删除 4 图标按钮，按 tone 配色）、`DeleteConfirmDialog`、`EditAnalysisDialog`、`ViewSourceDialog`。**新增分析维度时只需在新组件里挂 `useAnalysisHistory` + 这几个工具，不必再为复盘 / 编辑 / 删除写一份 state**。
-- `ExpertSummaryCard.tsx` / `CioDecisionCard.tsx` / `ExpertDetailCard.tsx` — 三张主页卡
+- `ExpertSummaryCard.tsx` / `CioDecisionCard.tsx` / `ExpertDetailCard.tsx` / `DataCollectionCard.tsx` — 四张主页卡
 
-**弹窗（`HotMoneyViewDialog`）与主页卡共用同一份 SECTION_CONFIGS 与渲染逻辑**——`HotMoneyViewDialog` 内部 `import { AnalysisContent } from '@/components/stocks/analysis'`，新增专家或调整 schema 时改一处即可两端生效。
+**专家身份色 token（`--expert-*`）**：CIO 紫 / 游资 橙 / 中线 蓝 / 价值 金，定义在 [globals.css](src/app/globals.css)，Tailwind 暴露为 `text-expert-cio` / `border-l-expert-hot-money` 等。**身份色仅用于"哪位专家说的"染色**（卡片左 border / 头部图标 / key_quote 背景）；评分高低仍走 `score-*`（紫罗兰单色相，见"语义色与过渡时长 token"），涨跌仍走 `positive` / `negative`，三套色阶不混用。数据收集卡是"原料"非"专家观点"，不戴身份色，标题图标用 `text-muted-foreground`。
 
-**专家身份色 token（`--expert-*`）**：CIO 紫 / 游资 橙 / 中线 蓝 / 价值 金，定义在 [globals.css](src/app/globals.css)，Tailwind 暴露为 `text-expert-cio` / `border-l-expert-hot-money` 等。**身份色仅用于"哪位专家说的"染色**（卡片左 border / 头部图标 / key_quote 背景）；评分高低仍走 `score-*`（紫罗兰单色相，见"语义色与过渡时长 token"），涨跌仍走 `positive` / `negative`，三套色阶不混用。
+**与现有派生数据的复用**：4 专家最新数据由统一的 `useEffect` + `Promise.all` 拉取，`expertsRefreshKey` 自增触发重拉；摘要卡 / CIO 卡 / 详情卡 / 数据卡都共享这个 key。
 
-**与现有派生数据的复用**：行情卡的 `cioKeyQuote` 直接从 `latestByExpert.cio` 用 `useMemo` 派生，不另发请求；4 专家最新数据由统一的 `useEffect` + `Promise.all` 拉取，`expertsRefreshKey` 自增触发重拉。
+### 数据收集卡（`DataCollectionCard`）— "非 LLM 大文本类"主页卡范式
 
-**雷达图节点点击联动**：`MiniRadarChart` / `ScoreRings` 接受 `onNodeClick(label)`；主页据此 `scrollIntoView` 到对应卡（CIO → CioDecisionCard 并展开 / 其他 → ExpertDetailCard 并切 Tab）。
+数据收集（`stock_data_collection`）和 4 位专家走的是同一张表（`stock_ai_analysis`）、同一套 `useAnalysisHistory` + `RecordActions` + `TradeDateVersionPager`，但有几条决定 UI 形态的关键差异，给后续添加"非评分类"维度（如新闻摘要、研报汇总等）时照抄：
 
-### AI 分析弹窗（`HotMoneyViewDialog`）
+| 维度 | 4 位专家卡 | 数据收集卡 |
+|------|---------|---------|
+| 输出格式 | JSON（`StructuredAnalysisContent` 结构化渲染） | **Markdown + YAML**（`MarkdownContent` 渲染） |
+| 评分 / `key_quote` | 有 | **无**（卡头不显示评分槽位） |
+| 默认展开 | 摘要卡总是显示，CIO / 详情卡按情况 | **默认折叠**（5k-15k 字的 Markdown 不该默认占屏；展开才渲染 body，省 DOM） |
+| 触发方式 | `POST /api/stock-ai-analysis/generate-multi`（异步 Celery，`useMultiAnalysisTask`） | `apiClient.collectStockData(tsCode, name)`（**同步 1-3 秒，不走 LLM / Celery**，按钮内 spinner 即可） |
+| 是否复盘 | 游资 / 中线 / 价值 有 | **无**（数据是事实，不"复盘"） |
+| 一键分析覆盖 | ✓ | ✓（`expertsRefreshKey` bump 时跟着刷新） |
 
-共享组件位于 [components/stocks/HotMoneyViewDialog.tsx](src/components/stocks/HotMoneyViewDialog.tsx)，目前**仅由 `/analysis` 页面**使用（标题栏"提示词"按钮触发）。历史翻页 / 编辑 / 删除 / 复盘 / 源代码已全部下放到主页卡片内嵌工具栏（见上一节），**弹窗当前只承担 5 个专家提示词模板的查看入口**——点击"提示词"按钮后，前端通过 `apiClient.getPromptTemplateByKey()` 并发拉取 `top_speculative_investor_v1` / `stock_data_collection_v1` / `midline_industry_expert_v1` / `longterm_value_watcher_v1` / `cio_directive_v1` 5 套模板渲染到 5 个 Tab。`/stocks` 列表页**没有**直接打开此弹窗的入口——单股 AI 分析统一通过点击股票名跳转 `/analysis?code=XXX` 完成。`/stocks` 仅保留多选后的"批量 AI 分析"（`BatchAnalysisDialog`，浮动操作栏触发）。
+实现要点：
+- **空态 + 满态两套 JSX**——空态时 header 一行（图标 + "尚未生成" + 生成按钮），跳过翻页器和工具栏；满态时按"折叠卡 + 折叠后才挂 MarkdownContent"组织，避免空数据时还渲染翻页空槽位。
+- **`generateButton` JSX 抽常量**，空态和满态两处复用，避免重复定义。
+- **错误/成功消息条**：折叠头下方 / 空态 header 下方分别一处 `genMsg`，两处样式同 `text-emerald-600` / `text-red-500`，操作完 2-3 秒人眼能看到即可，不做 toast。
 
-弹窗内含 **5 个 Tab**，各自独立管理历史记录和状态：
+### 跨入口任务状态同步：`useMultiAnalysisTask`
 
-| Tab | analysis_type | 提示词 key |
-|-----|--------------|------------|
-| 游资观点 | `hot_money_view` | `top_speculative_investor_v1` |
-| 数据收集 | `stock_data_collection` | `stock_data_collection_v1` |
-| 中线专家 | `midline_industry_expert` | `midline_industry_expert_v1` |
-| 价值守望 | `longterm_value_watcher` | `longterm_value_watcher_v1` |
-| CIO 指令 | `cio_directive` | `cio_directive_v1` |
-
-每个 Tab 功能：通过"AI 分析"按钮一键生成并自动保存、查看/翻页历史分析记录、编辑/删除已有记录（仅记录创建者）、折叠展示提示词（复制按钮在提示词区域内）。弹窗内无手动输入/保存区域，所有分析均通过后端 AI 生成。
-
-**AI 分析任务（异步 + 轮询）**：批量与单只一键共用 Celery 任务 `tasks.batch_ai_analysis`（后端用 `task_type` 区分，前端协议完全一致），三处入口：
+**AI 分析任务（异步 + 轮询）**：批量与单只一键共用 Celery 任务 `tasks.batch_ai_analysis`（后端用 `task_type` 区分，前端协议完全一致），两处入口：
 
 - `/stocks` 浮动操作栏「批量 AI 分析」（`BatchAnalysisDialog`）：调 `POST /api/stock-ai-analysis/batch` 提交一组 ts_codes，拿 `celery_task_id` 后 3s 轮询 `GET /batch/{id}`。关闭弹窗不中断任务。
-- `/analysis` 主页 + `HotMoneyViewDialog` Footer 的「一键分析」按钮：调 `POST /api/stock-ai-analysis/generate-multi`（单只 + concurrency=1），同样异步返回 `celery_task_id`，3s 轮询 `GET /batch/{id}`。提交前先调 `GET /active/by-ts-code/{ts_code}` 查活跃任务，命中则续轮询不重复提交。
+- `/analysis` 主页「一键分析」按钮（`ExpertSummaryCard` Header）：调 `POST /api/stock-ai-analysis/generate-multi`（单只 + concurrency=1），同样异步返回 `celery_task_id`，3s 轮询 `GET /batch/{id}`。提交前先调 `GET /active/by-ts-code/{ts_code}` 查活跃任务，命中则续轮询不重复提交。
 - `/stocks` 另一层常驻轮询 `GET /batch/active/ts-codes` 拿"分析中"ts_code 集合（**覆盖批量 + 单只一键两类 task_type**）；`StockTableRow` 的 `isAnalyzing=true` 时把"AI 分析"按钮换为旋转图标，刷新页面后仍能恢复。股票从"分析中"列表移除时自动 `fetchStocks(true)` 拉最新评分。
 
-**`useMultiAnalysisTask` hook**（[hooks/useMultiAnalysisTask.ts](src/hooks/useMultiAnalysisTask.ts)）封装"提交 → 轮询 → 探活 → 终态收尾"完整生命周期，被 `/analysis` 主页（`enableProbe=true` mount 后每 3s 探活）和 `HotMoneyViewDialog`（`enableProbe=false`，仅响应主动点击）共用。终态后必须**再补拉一次** `GET /batch/{id}` 兜底 metadata.items 抢跑（见 backend/CLAUDE.md 同名陷阱）。新增"基于活跃 Celery 任务做 UI 状态恢复"的入口时优先复用此 hook。
+**`useMultiAnalysisTask` hook**（[hooks/useMultiAnalysisTask.ts](src/hooks/useMultiAnalysisTask.ts)）封装"提交 → 轮询 → 探活 → 终态收尾"完整生命周期。`/analysis` 主页 `enableProbe=true`，mount 后每 3s 探一次活跃任务，与 `/stocks` 批量分析的状态同步——用户从 `/stocks` 触发批量分析后跳到 `/analysis` 看某只股，按钮自动是"分析中"态。终态后必须**再补拉一次** `GET /batch/{id}` 兜底 metadata.items 抢跑（见 backend/CLAUDE.md 同名陷阱）。新增"基于活跃 Celery 任务做 UI 状态恢复"的入口时优先复用此 hook。
 
 **禁止把"分析中"状态做成短轮询闪烁**：探活 effect 不要把 `taskId` 列入 `useEffect` deps（每次 setTaskId 都触发 effect 重建 → cleanup 误清状态导致按钮文字闪烁）；用 ref 读最新 taskId。同理切股票/失能时清状态的 effect 不能"挂载即清"，必须用 `lastTsCodeRef` 比较"上一次实际生效的 tsCode"，仅在真切到不同值时清 —— 否则 `loadStockInfo` 完成那一拍 `basicInfo?.ts_code` 从 undefined 变为有值，会把刚由探活设上的状态误清。`useMultiAnalysisTask` 已封装这两条约束，参考它实现类似 hook。
 
-打开弹窗时，全部 5 个提示词通过 `Promise.all` 并发加载，互不阻塞。新增 Tab 后必须同步更新父页面（`/stocks/page.tsx`、`/analysis/page.tsx`）的 state 和 `HotMoneyViewDialog` props。
+### AI 生成接口
 
 **`{{ stock_data_collection }}` 占位符填充**：`build_stock_prompt()` 通过 `allow_generate_data_collection` 参数区分行为：
 - `GET /by-key/{key}`（模板预览）：`False`（默认），仅读取已有记录填充，无则留空提示
 - `POST /generate`（生成分析）：`True`，若无今日数据收集记录则自动触发生成（带 asyncio.Lock 防并发重复）
 
-**AI 直接生成（各 Tab）**：各 Tab 可通过"AI 分析"按钮调用 `POST /api/stock-ai-analysis/generate`，后端用 `build_stock_prompt()` 构建提示词，调用 AI 服务生成并自动保存，返回 `analysis_text` + `score` 并刷新历史列表。提示词构建逻辑集中在 `build_stock_prompt()`（`prompt_templates.py`），`GET /by-key/{key}` 和 `POST /generate` 共用同一函数，确保一致性。
+**单专家"重新分析"**：`ExpertDetailCard` Tab 头的"重新分析"按钮调用 `POST /api/stock-ai-analysis/generate`，后端用 `build_stock_prompt()` 构建提示词，调用 AI 服务生成并自动保存，返回 `analysis_text` + `score` 并刷新历史列表。提示词构建逻辑集中在 `build_stock_prompt()`（`prompt_templates.py`），`GET /by-key/{key}` 和 `POST /generate` 共用同一函数，确保一致性。
 
 **JSON 格式分析类型（5 种）**：`hot_money_view`、`midline_industry_expert`、`longterm_value_watcher`、`cio_directive`、`macro_risk_expert` 均要求 AI 返回结构化 JSON。后端通过 `ai_output_parser.parse_ai_json()` + Pydantic 模型（`schemas/ai_analysis_result.py`）解析，失败降级为原始 JSON dict。评分提取优先级：`final_score.score` → `comprehensive_score` → `score`。
 
-**前端 `StructuredAnalysisContent` 渲染架构**（位于 [components/stocks/analysis/](src/components/stocks/analysis/)，弹窗与主页卡共用）：
+**前端 `StructuredAnalysisContent` 渲染架构**（位于 [components/stocks/analysis/](src/components/stocks/analysis/)）：
 - 按 `analysisType` 查表 `SECTION_CONFIGS[type]`，每个专家声明自己的 section 列表（顶层 JSON key + 中文标题 + 子字段 key→label 映射）。扩展新专家时只需追加一个配置项。
 - `GenericSection` 组件统一渲染"标题 + 条目列表"；`FieldValue` 组件递归处理字符串 / 数组（`catalysts` 等） / 嵌套对象（`next_day_scenarios` 三档的 `{probability, trigger_condition}`）。
 - `final_score` 统一渲染：新 schema `bull_factors`/`bear_factors`/`key_quote`，向后兼容旧 `pros`/`cons`。

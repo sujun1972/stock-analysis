@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useCallback, useState } from 'react'
-import { Sparkles, RefreshCcw, BookOpen, RotateCcw } from 'lucide-react'
+import { Sparkles, RefreshCcw, RotateCcw } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { apiClient } from '@/lib/api-client'
 import { renderBold } from './text-utils'
@@ -57,8 +57,6 @@ export interface ExpertDetailCardProps {
   /** Active expert tab (controlled). */
   activeExpert: TabExpertKey
   onActiveExpertChange: (k: TabExpertKey) => void
-  /** Optional escape hatch — opens the legacy modal for prompt viewing. */
-  onOpenHistory?: (defaultTab: ExpertMeta['key']) => void
   /** Single-expert "重新分析" trigger. */
   onRegenerate?: (expert: ExpertMeta) => void
   regeneratingKey?: ExpertMeta['key'] | null
@@ -80,7 +78,7 @@ export interface ExpertDetailCardProps {
  *   - delete-confirm / edit / view-source popups
  *
  * The user no longer needs to click a "历史" button to flip versions or trigger
- * a review. The legacy modal is still reachable for prompt viewing only.
+ * a review — everything is in-card.
  */
 export function ExpertDetailCard({
   tsCode,
@@ -88,7 +86,6 @@ export function ExpertDetailCard({
   stockCode,
   activeExpert,
   onActiveExpertChange,
-  onOpenHistory,
   onRegenerate,
   regeneratingKey,
   refreshKey,
@@ -136,18 +133,6 @@ export function ExpertDetailCard({
               )}
               <span className="hidden sm:inline">重新分析</span>
             </button>
-            {onOpenHistory && (
-              <button
-                type="button"
-                onClick={() => onOpenHistory(activeExpert)}
-                className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-fast focus-ring"
-                title="打开提示词查看视图（仅模板，不影响内容）"
-                aria-label="查看提示词模板"
-              >
-                <BookOpen className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">提示词</span>
-              </button>
-            )}
           </div>
         </header>
 

@@ -1,5 +1,4 @@
-// Barrel export for the analysis components shared between
-// the in-page expert cards (/analysis) and HotMoneyViewDialog.
+// Barrel export for the in-page expert cards on /analysis.
 export { renderBold, highlightTags } from './text-utils'
 export { markdownComponents, MarkdownContent } from './markdown'
 export {
@@ -36,6 +35,7 @@ export {
 
 export { ExpertSummaryCard, type LatestAnalysisRecord, type ExpertSummaryCardProps } from './ExpertSummaryCard'
 export { CioDecisionCard, type CioDecisionCardProps } from './CioDecisionCard'
+export { DataCollectionCard, type DataCollectionCardProps } from './DataCollectionCard'
 export { ExpertDetailCard, type ExpertDetailCardProps } from './ExpertDetailCard'
 export { useAnalysisHistory, type UseAnalysisHistoryResult } from './useAnalysisHistory'
 export {
