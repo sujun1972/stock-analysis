@@ -482,7 +482,7 @@ useEffect(() => {
 1. **行情卡**（`QuotePanel`）— 最新价 / OHLC / 振幅 / 换手 / 成交 / 公司规模 chip。**纯盘口数据**，与 AI 解耦。
 2. **估值数据卡**（`ValuationCard`）— PE / PB / PS / 股息率（`daily_basic`）+ ROC / EY / 安全边际（`stock_value_metrics`）+ 快照日期。**公开数据，未登录可见**。
 3. **AI 决策摘要卡**（`ExpertSummaryCard`）— 4 列等宽：CIO / 游资 / 中线 / 价值；每列 = 评分 + rating + key_quote（`line-clamp-2`）+ ▲/▼ 因子计数；顶部"一键分析"按钮。点专家列滚到对应详情卡。
-4. **CIO 综合决策卡**（`CioDecisionCard`，默认折叠）— 头部 collapse 按钮 + `TradeDateVersionPager` + `RecordActionToolbar`（源代码 / 编辑 / 删除）；展开后：multi_dimension_scan 三栏 / cross_dimension_analysis / core_drivers + core_risks 双栏 / rating_and_action 高亮卡（按 action 关键词配色）/ followup_triggers。
+4. **CIO 综合决策卡**（`CioDecisionCard`，默认折叠）— 头部 collapse 按钮 + `TradeDateVersionPager` + `RecordActionToolbar`（源代码 / 编辑 / 删除）；展开后：multi_dimension_scan 三栏 / cross_dimension_analysis / core_drivers + core_risks 双栏 / rating_and_action 高亮卡（按 action 关键词配色）/ followup_triggers。**两套空态分支**：`!current` → "尚未生成"（真没记录）；`!parsed` → "内容解析失败"（有记录但 JSON 不合法）+ 翻页器 / 查看源代码 / 删除按钮，让用户能定位 LLM 原始输出并清理污染版本。后端写库前已强校验合法 JSON（见 backend/CLAUDE.md），新数据不会再走 `!parsed`，但保留兜底应对历史遗留畸形记录。
 5. **三专家详情卡**（`ExpertDetailCard`，嵌入 Tab）— 游资 / 中线 / 价值；每个 Tab 内部含 `原报告 N | 复盘 M` 子段控件 + `TradeDateVersionPager` + `RecordActionToolbar`（源代码 / 编辑 / 复盘 / 删除）。Tab 右上角"重新分析"按钮（单专家）。
 6. **数据收集卡**（`DataCollectionCard`，默认折叠）— "AI 看到的原料"；非 JSON、无评分、无复盘。
 

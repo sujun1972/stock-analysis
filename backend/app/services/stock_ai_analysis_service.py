@@ -77,13 +77,18 @@ def extract_cio_followup_triggers(ai_text: str) -> Optional[Dict[str, Any]]:
     }
 
 
-def extract_json_and_score(ai_text: str) -> tuple[str, Optional[float]]:
+def extract_json_and_score(ai_text: str) -> tuple[str, Optional[float], bool]:
     """
     从 AI 返回文本中：
     1. 去掉 ```json ... ``` 代码块标识，只保留纯 JSON 内容
-    2. 尝试用 Pydantic 模型提取评分，失败降级为手动路径查找
+    2. 强校验 cleaned 是否为合法 JSON（extract_json_text 内部已含 _try_repair_json
+       修复，但仍可能因 LLM 偶发输出"字符串值内未转义引号"等修复链覆盖不到的错误
+       而透传原文，是 is_malformed=True 的来源）
+    3. 用 Pydantic 模型提取评分，失败降级为手动路径查找
 
-    返回 (cleaned_text, score_or_None)
+    返回 (cleaned_text, score_or_None, is_malformed)。is_malformed=True 时
+    调用方应据此决定是否拒绝写库（CIO 强结构化场景拒绝；普通专家走 Markdown
+    兜底渲染，可继续写库仅日志告警）。
     """
     from app.schemas.ai_analysis_result import StockExpertAnalysisResult
 
@@ -91,17 +96,25 @@ def extract_json_and_score(ai_text: str) -> tuple[str, Optional[float]]:
     json_text = extract_json_text(ai_text)
     cleaned = json_text if json_text else ai_text.strip()
 
+    # 强校验：cleaned 必须能被 json.loads 解析。修复链（_try_repair_json）已在
+    # extract_json_text 内尝试过，到这一步仍失败说明是修复算法不覆盖的错误模式
+    is_malformed = False
+    try:
+        data = json.loads(cleaned)
+    except (json.JSONDecodeError, ValueError):
+        is_malformed = True
+        data = None
+
     # 优先：Pydantic 结构化解析 + 评分提取
     parsed = parse_ai_json(ai_text, StockExpertAnalysisResult)
     if parsed is not None:
         score = parsed.extract_score()
         if score is not None:
-            return cleaned, score
+            return cleaned, score, is_malformed
 
-    # 降级：手动路径查找
+    # 降级：手动路径查找（只有 cleaned 是合法 JSON 才能拿到 data）
     score: Optional[float] = None
-    try:
-        data = json.loads(cleaned)
+    if data is not None:
         for path in _SCORE_PATHS:
             node = data
             for key in path:
@@ -117,10 +130,8 @@ def extract_json_and_score(ai_text: str) -> tuple[str, Optional[float]]:
                         break
                 except (TypeError, ValueError):
                     pass
-    except Exception:
-        pass
 
-    return cleaned, score
+    return cleaned, score, is_malformed
 
 
 class StockAiAnalysisService:

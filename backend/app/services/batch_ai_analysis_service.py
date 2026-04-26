@@ -8,6 +8,7 @@
 """
 
 import asyncio
+import json
 import time
 from typing import Dict, List, Optional
 
@@ -15,6 +16,7 @@ from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
+from app.repositories.stock_ai_analysis_repository import StockAiAnalysisRepository
 
 
 # 对外暴露的 analysis_type → 默认 template_key 映射（与端点共享）
@@ -85,6 +87,7 @@ async def run_multi_expert_for_stock(
     include_cio: bool,
     user_id: int,
     db: Optional[Session] = None,
+    reuse_existing_experts: bool = True,
 ) -> Dict:
     """对单只股票并行生成多个专家分析 + 可选 CIO 综合决策。
 
@@ -119,6 +122,7 @@ async def run_multi_expert_for_stock(
         db = SessionLocal()
     try:
         ai_service = AIStrategyService()
+        analysis_repo = StockAiAnalysisRepository()
 
         # 去重，移除 cio_directive（若 include_cio=True 末尾单独处理）
         expert_types = list(dict.fromkeys(
@@ -129,6 +133,7 @@ async def run_multi_expert_for_stock(
             raise ValueError("至少需要一个非 CIO 分析类型")
 
         # 1. 构建第一个专家的提示词（触发数据收集，后续专家共享缓存）
+        # 这一步是必需的：数据收集必须就绪 trade_date 才能拿到，下面的复用判断也依赖它
         first_type = expert_types[0] if expert_types else "cio_directive"
         first_template_key = DEFAULT_TEMPLATE_KEYS.get(first_type)
         if not first_template_key:
@@ -145,7 +150,50 @@ async def run_multi_expert_for_stock(
         )
         trade_date = first_prompt_data.get("trade_date")
 
-        # 2. 并行构建其余专家提示词
+        # 2. 复用判定：同交易日已存在合法 JSON 的专家报告时跳过其 LLM 调用。
+        # CIO 始终重跑（综合性结论用户每次点"一键分析"都希望刷新），仅复用三专家。
+        # 校验 JSON 合法性是因为旧 DB 可能仍有 LLM 偶发畸形遗留（写库强校验之前），
+        # 这种"看似存在但解析不出"的记录视同缺失，让 LLM 重跑覆盖。
+        reused_results: List[Dict] = []
+        types_to_run = expert_types
+        if reuse_existing_experts and trade_date and expert_types:
+            existing_records = await asyncio.gather(*[
+                asyncio.to_thread(analysis_repo.get_by_trade_date, ts_code, t, trade_date)
+                for t in expert_types
+            ])
+            still_pending: List[str] = []
+            for t, rec in zip(expert_types, existing_records):
+                if not rec:
+                    still_pending.append(t)
+                    continue
+                rec_text = rec.get("analysis_text") or ""
+                try:
+                    json.loads(rec_text)
+                except (json.JSONDecodeError, ValueError, TypeError):
+                    logger.info(
+                        f"[run_multi_expert] {ts_code} {t} @ {trade_date} 同日历史记录"
+                        f"JSON 不合法，按缺失处理重新生成"
+                    )
+                    still_pending.append(t)
+                    continue
+                logger.info(
+                    f"[run_multi_expert] {ts_code} {t} @ {trade_date} 复用已有报告"
+                    f"(id={rec.get('id')}, version={rec.get('version')})"
+                )
+                # tokens_used / generation_time 置 0 避免下游 total 聚合时出错；
+                # 其余字段对齐 run_expert 的返回结构，让 CIO 拼装与前端摘要无感
+                reused_results.append({
+                    "analysis_type": t,
+                    "id": rec.get("id"),
+                    "version": rec.get("version"),
+                    "analysis_text": rec_text,
+                    "score": rec.get("score"),
+                    "tokens_used": 0,
+                    "generation_time": 0,
+                })
+            types_to_run = still_pending
+
+        # 3. 并行构建其余专家提示词（仅为待跑专家）
         async def build_expert_prompt(analysis_type: str) -> Dict:
             template_key = DEFAULT_TEMPLATE_KEYS.get(analysis_type)
             if not template_key:
@@ -160,12 +208,17 @@ async def run_multi_expert_for_stock(
                 allow_generate_data_collection=True,
             )
 
-        remaining_types = expert_types[1:]
+        # first_prompt_data 已经构建好了；如果 first_type 也在 types_to_run 里就直接复用,
+        # 否则需要为剩余的 types_to_run 重新构建（first_type 已被复用，其 prompt_data 不再需要）
+        all_prompt_data: Dict[str, Dict] = {}
+        if first_type in types_to_run:
+            all_prompt_data[first_type] = first_prompt_data
+            remaining_types = [t for t in types_to_run if t != first_type]
+        else:
+            remaining_types = list(types_to_run)
         remaining_prompts = await asyncio.gather(*[
             build_expert_prompt(t) for t in remaining_types
         ])
-
-        all_prompt_data = {expert_types[0]: first_prompt_data} if expert_types else {}
         for t, pd_item in zip(remaining_types, remaining_prompts):
             all_prompt_data[t] = pd_item
 
@@ -203,7 +256,13 @@ async def run_multi_expert_for_stock(
             _log_llm_success(db, call_id, start_time_log, ai_text, tokens_used)
 
             if analysis_type in JSON_ANALYSIS_TYPES:
-                ai_text, extracted_score = extract_json_and_score(ai_text)
+                ai_text, extracted_score, is_malformed = extract_json_and_score(ai_text)
+                if is_malformed:
+                    # 普通专家走 MarkdownContent 兜底渲染，畸形 JSON 仅告警不阻断写库
+                    logger.warning(
+                        f"[run_expert] {ts_code} {analysis_type} JSON 畸形,"
+                        f"前端将走 MarkdownContent 兜底渲染"
+                    )
             else:
                 extracted_score = None
 
@@ -229,15 +288,16 @@ async def run_multi_expert_for_stock(
             }
 
         expert_raw_results = await asyncio.gather(*[
-            run_expert(t) for t in expert_types
+            run_expert(t) for t in types_to_run
         ], return_exceptions=True)
 
-        results: List[Dict] = []
+        # 复用的专家先入 results，再合并新跑的，保持原 expert_types 顺序方便下游 CIO 拼装
+        results: List[Dict] = list(reused_results)
         errors: List[Dict] = []
         for i, r in enumerate(expert_raw_results):
             if isinstance(r, Exception):
-                errors.append({"analysis_type": expert_types[i], "error": str(r)})
-                logger.error(f"[run_multi_expert] {ts_code} {expert_types[i]} 失败: {r}")
+                errors.append({"analysis_type": types_to_run[i], "error": str(r)})
+                logger.error(f"[run_multi_expert] {ts_code} {types_to_run[i]} 失败: {r}")
             else:
                 results.append(r)
 
@@ -285,33 +345,46 @@ async def run_multi_expert_for_stock(
                 cio_gen_time = agent_result["generation_time"]
                 _log_llm_success(db, cio_call_id, cio_start_time_log, cio_text, cio_tokens)
 
-                cio_text, cio_score = extract_json_and_score(cio_text)
-                cio_followup_triggers = extract_cio_followup_triggers(cio_text)
+                cio_text, cio_score, cio_malformed = extract_json_and_score(cio_text)
 
-                cio_saved = await StockAiAnalysisService().save_analysis(
-                    ts_code=ts_code,
-                    analysis_type="cio_directive",
-                    analysis_text=cio_text,
-                    score=cio_score,
-                    prompt_text=prep["full_prompt"],
-                    ai_provider=prep["provider_name"],
-                    ai_model=prep["provider_config"].get("model_name"),
-                    created_by=user_id,
-                    trade_date=trade_date,
-                    followup_triggers=cio_followup_triggers,
-                )
+                # CIO 是强结构化展示场景（前端 StructuredAnalysisContent 直接解构 JSON），
+                # 修复链覆盖不到的偶发畸形（如字符串值内未转义引号）必须拦在写库前，
+                # 避免污染历史 → 用户翻到该版本时显示"内容解析失败"的兜底页。
+                if cio_malformed:
+                    logger.warning(
+                        f"[run_multi_expert] {ts_code} CIO 输出 JSON 畸形且修复失败，拒绝写库"
+                    )
+                    errors.append({
+                        "analysis_type": "cio_directive",
+                        "error": "CIO 输出 JSON 畸形且自动修复失败，请重试",
+                    })
+                else:
+                    cio_followup_triggers = extract_cio_followup_triggers(cio_text)
 
-                cio_result = {
-                    "analysis_type": "cio_directive",
-                    **cio_saved,
-                    "analysis_text": cio_text,
-                    "score": cio_score,
-                    "tokens_used": cio_tokens,
-                    "generation_time": round(cio_gen_time, 2),
-                    "agent_tool_calls": agent_result.get("tool_calls", []),
-                    "agent_iterations": agent_result.get("iterations", 0),
-                    "followup_triggers": cio_followup_triggers,
-                }
+                    cio_saved = await StockAiAnalysisService().save_analysis(
+                        ts_code=ts_code,
+                        analysis_type="cio_directive",
+                        analysis_text=cio_text,
+                        score=cio_score,
+                        prompt_text=prep["full_prompt"],
+                        ai_provider=prep["provider_name"],
+                        ai_model=prep["provider_config"].get("model_name"),
+                        created_by=user_id,
+                        trade_date=trade_date,
+                        followup_triggers=cio_followup_triggers,
+                    )
+
+                    cio_result = {
+                        "analysis_type": "cio_directive",
+                        **cio_saved,
+                        "analysis_text": cio_text,
+                        "score": cio_score,
+                        "tokens_used": cio_tokens,
+                        "generation_time": round(cio_gen_time, 2),
+                        "agent_tool_calls": agent_result.get("tool_calls", []),
+                        "agent_iterations": agent_result.get("iterations", 0),
+                        "followup_triggers": cio_followup_triggers,
+                    }
             except Exception as e:
                 logger.error(f"[run_multi_expert] {ts_code} CIO Agent 综合决策失败: {e}", exc_info=True)
                 errors.append({"analysis_type": "cio_directive", "error": str(e)})

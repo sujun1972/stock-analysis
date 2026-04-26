@@ -96,7 +96,10 @@ export function CioDecisionCard({
     </>
   )
 
-  if (!parsed) {
+  // 两套空态分支：!current 是"真没记录" → "尚未生成"；!parsed 是"有记录但 JSON
+  // 解析不出"→"内容解析失败"。后端写库前已强校验合法 JSON，新数据不会再走 !parsed,
+  // 但历史 DB 仍有畸形遗留（例如 LLM 偶发输出字符串内未转义引号），保留兜底。
+  if (!current) {
     return (
       <section
         id={id}
@@ -109,6 +112,45 @@ export function CioDecisionCard({
             {history.loading ? '加载中…' : '尚未生成'}
           </span>
         </header>
+        {dialogs}
+      </section>
+    )
+  }
+
+  if (!parsed) {
+    // 给用户三条出路：翻页到其他合法版本 / 查看源代码 / 删除该版本后重新生成
+    return (
+      <section
+        id={id}
+        className="rounded-lg border border-gray-200 dark:border-gray-700 bg-card p-3 sm:p-5"
+      >
+        <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <Brain className="h-5 w-5 text-expert-cio" aria-hidden />
+          <h2 className="text-base font-semibold">CIO 综合决策</h2>
+          <span className="text-xs text-amber-600 dark:text-amber-400">
+            内容解析失败
+          </span>
+          <div className="ml-auto flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            <TradeDateVersionPager
+              groups={history.groups}
+              selectedTradeDate={history.selectedTradeDate}
+              onSelectTradeDate={history.setSelectedTradeDate}
+              versions={history.versions}
+              versionIndex={history.versionIndex}
+              onPrevVersion={history.goOlderVersion}
+              onNextVersion={history.goNewerVersion}
+              loading={history.loading}
+            />
+            <RecordActionToolbar
+              onView={() => setShowSource(true)}
+              onDelete={() => setShowDelete(true)}
+            />
+          </div>
+        </header>
+        <p className="mt-3 text-xs text-muted-foreground">
+          v{current.displayVersion}/{current.displayTotal} 的 JSON 不合法，无法结构化渲染。
+          可翻到其他版本，或点击「源代码」查看 LLM 原始输出，或删除该版本后重新生成。
+        </p>
         {dialogs}
       </section>
     )

@@ -203,6 +203,11 @@ class GenerateMultiRequest(BaseModel):
         False,
         description="是否在所有专家完成后追加 CIO 综合决策（将前面专家的输出作为 CIO 输入）",
     )
+    reuse_existing_experts: bool = Field(
+        True,
+        description="同一交易日已有合法专家报告时是否复用（默认开启，避免重复消耗 LLM 配额）。"
+                    "CIO 始终重跑（综合性结论用户每次都希望刷新）。",
+    )
 
 
 # ------------------------------------------------------------------
@@ -299,7 +304,17 @@ async def _run_cio_agent_single(body, current_user, db, ai_service) -> dict:
     generation_time = agent_result["generation_time"]
     _log_llm_success(db, call_id, start_time_log, ai_text, tokens_used)
 
-    ai_text, extracted_score = _extract_json_and_score(ai_text)
+    ai_text, extracted_score, is_malformed = _extract_json_and_score(ai_text)
+
+    # CIO 是强结构化展示场景，修复链覆盖不到的偶发畸形必须拦在写库前
+    if is_malformed:
+        logger.warning(
+            f"[generate_analysis/cio] {body.ts_code} CIO 输出 JSON 畸形且修复失败"
+        )
+        return ApiResponse.bad_request(
+            message="CIO 输出 JSON 畸形且自动修复失败，请重试"
+        ).to_dict()
+
     followup_triggers = extract_cio_followup_triggers(ai_text)
 
     try:
@@ -448,9 +463,14 @@ async def generate_analysis(
 
     _log_llm_success(db, call_id, start_time_log, ai_text, tokens_used)
 
-    # 4. 清理 JSON 代码块标识并提取评分（对所有 JSON 格式分析类型）
+    # 4. 清理 JSON + 评分提取。普通专家走 MarkdownContent 兜底渲染，畸形仅告警不阻断
     if body.analysis_type in _JSON_ANALYSIS_TYPES:
-        ai_text, extracted_score = _extract_json_and_score(ai_text)
+        ai_text, extracted_score, is_malformed = _extract_json_and_score(ai_text)
+        if is_malformed:
+            logger.warning(
+                f"[generate_analysis] {body.ts_code} {body.analysis_type} JSON 畸形,"
+                f"前端将走 MarkdownContent 兜底渲染"
+            )
     else:
         extracted_score = None
 
@@ -610,8 +630,13 @@ async def generate_review(
 
     _log_llm_success(db, call_id, start_time_log, ai_text, tokens_used)
 
-    # 7. JSON 清洗 + 评分提取
-    ai_text, extracted_score = _extract_json_and_score(ai_text)
+    # 7. JSON 清洗 + 评分提取（复盘走 MarkdownContent 兜底渲染，畸形 JSON 仅告警不阻断）
+    ai_text, extracted_score, is_malformed = _extract_json_and_score(ai_text)
+    if is_malformed:
+        logger.warning(
+            f"[generate_review] {body.ts_code} {body.review_type} 复盘 JSON 畸形,"
+            f"前端将走 MarkdownContent 兜底渲染"
+        )
 
     # 8. 保存复盘结果，携带 original_analysis_id 指向原记录
     try:
@@ -685,6 +710,7 @@ async def generate_multi_analysis(
             "ts_codes": [ts_code],
             "analysis_types": list(body.analysis_types),
             "include_cio": body.include_cio,
+            "reuse_existing_experts": body.reuse_existing_experts,
             "concurrency": 1,
         },
         source="analysis_page",
@@ -697,6 +723,7 @@ async def generate_multi_analysis(
             "stock_names": {ts_code: body.stock_name},
             "analysis_types": list(body.analysis_types),
             "include_cio": body.include_cio,
+            "reuse_existing_experts": body.reuse_existing_experts,
             "user_id": current_user.id,
             "concurrency": 1,
         },
@@ -719,6 +746,11 @@ class BatchAnalysisRequest(BaseModel):
         description="分析类型列表，默认 3 专家",
     )
     include_cio: bool = Field(True, description="是否追加 CIO 综合决策")
+    reuse_existing_experts: bool = Field(
+        True,
+        description="同一交易日已有合法专家报告时是否复用（默认开启，避免重复消耗 LLM 配额）。"
+                    "CIO 始终重跑。",
+    )
     concurrency: Optional[int] = Field(
         None,
         ge=1, le=8,
@@ -781,6 +813,7 @@ async def submit_batch_analysis(
             "ts_codes": ts_codes,
             "analysis_types": list(body.analysis_types),
             "include_cio": body.include_cio,
+            "reuse_existing_experts": body.reuse_existing_experts,
             "concurrency": body.concurrency,
         },
         source="stocks_page",
@@ -793,6 +826,7 @@ async def submit_batch_analysis(
             "stock_names": stock_names,
             "analysis_types": list(body.analysis_types),
             "include_cio": body.include_cio,
+            "reuse_existing_experts": body.reuse_existing_experts,
             "user_id": current_user.id,
             "concurrency": body.concurrency,
         },

@@ -44,6 +44,7 @@ def batch_ai_analysis_task(
     include_cio: bool,
     user_id: int,
     concurrency: Optional[int] = None,
+    reuse_existing_experts: bool = True,
 ):
     """批量为多只股票生成 AI 分析。
 
@@ -54,12 +55,14 @@ def batch_ai_analysis_task(
         include_cio: 是否追加 CIO 综合决策
         user_id: 发起任务的用户 ID
         concurrency: 股票层面并发数；None 时用 DEFAULT_STOCK_CONCURRENCY；端点可覆盖（1~8）
+        reuse_existing_experts: 同一交易日已有合法专家报告时复用（默认 True）
     """
     celery_task_id = self.request.id
     effective_concurrency = max(1, min(concurrency or DEFAULT_STOCK_CONCURRENCY, 8))
     logger.info(
         f"[batch_ai_analysis] 任务启动 task_id={celery_task_id[:8]} "
-        f"user_id={user_id} total={len(ts_codes)} concurrency={effective_concurrency}"
+        f"user_id={user_id} total={len(ts_codes)} concurrency={effective_concurrency} "
+        f"reuse_existing_experts={reuse_existing_experts}"
     )
 
     return run_async_in_celery(
@@ -71,6 +74,7 @@ def batch_ai_analysis_task(
         include_cio=include_cio,
         user_id=user_id,
         concurrency=effective_concurrency,
+        reuse_existing_experts=reuse_existing_experts,
     )
 
 
@@ -83,6 +87,7 @@ async def _batch_run(
     include_cio: bool,
     user_id: int,
     concurrency: int,
+    reuse_existing_experts: bool = True,
 ) -> Dict:
     """异步编排：初始化明细 → Semaphore 并发执行 → 每只完成后回写进度。
 
@@ -161,6 +166,7 @@ async def _batch_run(
                     include_cio=include_cio,
                     user_id=user_id,
                     db=None,   # Service 内部自管 Session（Celery 无请求作用域）
+                    reuse_existing_experts=reuse_existing_experts,
                 )
                 errors = result.get("errors") or []
                 expert_count = result.get("expert_count", 0)
