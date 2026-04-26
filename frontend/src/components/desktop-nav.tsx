@@ -54,10 +54,10 @@ export function DesktopNav() {
   }
 
   return (
-    <nav className="bg-white dark:bg-gray-800 shadow hidden md:block">
+    <nav className="bg-card border-b border-border hidden md:block">
       <div className="container-custom">
-        <div className="flex items-center justify-between py-4">
-          <div className="flex space-x-8">
+        <div className="flex items-center justify-between py-3">
+          <div className="flex space-x-7">
             {menuItems.map((item) => {
               // 如果需要登录但未登录，则不显示该菜单
               if (item.requireAuth && !isAuthenticated) {
@@ -68,10 +68,10 @@ export function DesktopNav() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "transition-colors font-medium",
+                    "transition-colors text-sm font-medium",
                     isActive(item.href)
-                      ? "text-blue-600 dark:text-blue-400"
-                      : "text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
+                      ? "text-primary"
+                      : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {item.label}

@@ -26,15 +26,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-background">
       <AIGenerationTaskMonitor />
-      <header className="bg-blue-600 text-white shadow-lg">
-        <div className="container-custom py-4">
+      {/* Header：金融终端工具栏式（去 bg-blue-600 大色块），数据让位为视觉焦点。
+          仅一根 border-b 分隔，无 shadow——Bloomberg/Refinitiv 同款克制风格 */}
+      <header className="bg-card border-b border-border">
+        <div className="container-custom py-3.5">
           <div className="flex items-center justify-between gap-4">
             <MobileNav />
-            <div className="flex-1">
-              <h1 className="text-xl sm:text-2xl font-bold">A股AI量化交易系统</h1>
-              <p className="text-blue-100 text-xs sm:text-sm hidden sm:block">Stock Analysis Platform</p>
+            <div className="flex-1 flex items-baseline gap-3 min-w-0">
+              {/* 左侧 2px 主色短条作为微品牌锚点（替代品牌色块） */}
+              <span aria-hidden className="hidden sm:block h-5 w-[3px] rounded-sm bg-primary shrink-0" />
+              <div className="min-w-0">
+                <h1 className="text-base sm:text-lg font-semibold text-foreground leading-tight truncate">A股AI量化交易系统</h1>
+                <p className="text-muted-foreground text-[11px] sm:text-xs hidden sm:block leading-tight mt-0.5">Stock Analysis Platform</p>
+              </div>
             </div>
             <div className="hidden md:block">
               <StockSearch />
@@ -46,14 +52,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <DesktopNav />
 
-      <main className="flex-1 bg-gray-50 dark:bg-gray-900">
+      <main className="flex-1">
         <div className="container-custom py-8">{children}</div>
       </main>
 
-      <footer className="bg-gray-800 text-white py-6">
+      {/* Footer：低调灰条（不再用 #1F2937 高对比深色块抢视觉） */}
+      <footer className="bg-card border-t border-border py-5">
         <div className="container-custom text-center">
-          <p className="text-sm">A股AI量化交易系统 &copy; 2026</p>
-          <p className="text-xs text-gray-400 mt-2">仅供学习和研究使用，不构成任何投资建议</p>
+          <p className="text-xs text-muted-foreground">A股AI量化交易系统 &copy; 2026</p>
+          <p className="text-[11px] text-muted-foreground/70 mt-1.5">仅供学习和研究使用，不构成任何投资建议</p>
         </div>
       </footer>
 
