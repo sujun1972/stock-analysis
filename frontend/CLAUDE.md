@@ -44,11 +44,14 @@ import { apiClient } from '@/lib/api-client'
 |---------|------|----------|
 | `text-positive` / `bg-positive-soft` | A 股涨红 | `pct_change > 0`、`break_up` 触发价、ROC ≥30% |
 | `text-negative` / `bg-negative-soft` | A 股跌绿 | `pct_change < 0`、`break_down` 触发价、亏损 |
-| `text-warning` / `bg-warning-soft` | 关注黄 | ROC 15~30%、安全边际 30~100%、评分 6-8 |
+| `text-warning` / `bg-warning-soft` | 关注黄 | ROC 15~30%、安全边际 30~100%、PE 异常（亏损/>500） |
 | `text-info` | 信息蓝 | 排序激活、次要提示；业务 primary 仍用 `text-primary` |
+| `bg-score-low` / `bg-score-mid` / `bg-score-high` | AI 评分单色相紫罗兰 (270°) | 仅 ScoreBadge 用：4-6 浅紫 outline / 6-8 中紫实底 / ≥8 深紫实底 |
 | `duration-fast` (120ms) / `duration-normal` (200ms) / `duration-slow` (320ms) | 过渡时长分档 | `transition-colors duration-fast` 等 |
 
 token 定义在 [globals.css](src/app/globals.css) 的 `:root` / `.dark` 里，深色模式已单独升阶至 red-300 / green-400 / yellow-300 级亮度以保证对比度。K 线红涨绿跌的 `#ef4444` / `#22c55e` 是 ECharts 专用常量不走此体系（见 useEChartsTheme）。
+
+**评分色阶为何是紫罗兰单色相**（`--score-low/-mid/-high` 全部 270°）：① 主色 `primary` 是 221° 蓝（链接/CTA），评分用蓝会与 CTA 撞色；② 灰背景在多个状态间堆叠会让表格"脏"；③ 紫罗兰 270° 与红 (0°)/绿 (142°)/蓝 (221°) 三色色相距均 ≥49°，不与任何业务语义冲突。亮度递进 88%→58%→38% 形成"高分扎眼、低分隐形"的金字塔视觉权重。禁止把 score-* 与 positive/negative 混用；非情感语境的装饰色（如 Tab badge 蓝）保留 Tailwind 原色阶。
 
 **迁移规则**：新加的涨跌/状态色一律用语义 token；改到老文件时顺手替换（低风险、一致）。非情感语境的装饰色（如 Tab badge 的蓝色徽章）保留原 Tailwind 色阶即可。
 
@@ -402,14 +405,30 @@ useEffect(() => {
 
 ### 表格列可见性（`/stocks` 表）
 
-`/stocks` 桌面表格列多（15 列）且密，用户可自定义显示哪些列。实现集中在：
+`/stocks` 桌面表格列多（16 列）且密，用户可自定义显示哪些列。实现集中在：
 
-- [useStockTableColumns.ts](src/app/stocks/hooks/useStockTableColumns.ts) — `COLUMN_CONFIGS` 列定义单一数据源（id / label / default / group） + localStorage 持久化 hook（`stocks:visible-columns:v1`）。新增列在此追加一行即可；股票名/操作列为结构性必要，不在此声明，由 page.tsx 直接硬渲染
+- [useStockTableColumns.ts](src/app/stocks/hooks/useStockTableColumns.ts) — `COLUMN_CONFIGS` 列定义单一数据源（id / label / default / group） + localStorage 持久化 hook（`stocks:visible-columns:v3`）。新增列在此追加一行即可；股票名为结构性必要不在此声明，由 page.tsx 直接硬渲染
 - [ColumnVisibilityMenu.tsx](src/app/stocks/components/ColumnVisibilityMenu.tsx) — 下拉菜单组件，嵌在筛选器卡片 Header 右侧（与"清除全部"同列），`<lg` 只显图标避免窄屏挤压；`onSelect={(e) => e.preventDefault()}` 让 CheckboxItem 切换后不关闭菜单，支持连续切换多列
 - `page.tsx` `<thead>` 和 [StockTableRow.tsx](src/app/stocks/components/StockTableRow.tsx) `<tbody>` 按 `isVisible(id)` 条件渲染 `<th>` / `<td>`，两处列顺序必须保持一致（错位会导致数据对不齐）
 - 移动端 `StockCard` 卡片视图不受影响，列选择不适用
 
-默认隐藏：关注价格 / 关注时间（CIO 复查触发器，使用频率低）。默认可见其余 10 列。新增列时默认可见性以"日常常用"为准。
+**默认显示策略**：行情 4 列（最新价 / 涨跌幅 / 成交额 / 换手率） + 估值 2 列（总市值 / PE-TTM） + CIO 综合评分 + 价值度量 3 列（ROC / 收益率 / 安全边际）= 10 列。**默认隐藏**：游资 / 中线 / 价值 三个 sub-component 评分（避免首屏徽章扎堆，需要时手动开启）、CIO 报告日期、关注价格 / 关注时间（CIO 复查触发器，使用频率低）。
+
+**列定义破坏性变更须 bump `STORAGE_KEY` 版本号**（v1→v2→v3 …）。直接 bump 让所有用户回到最新默认视图，避免老用户落到"半新半旧"的视图。bump 时不需要写 migration——读取 storage 时按 `KNOWN_IDS` 白名单过滤已废弃 id，新加列对老 storage 数据自动隐藏。
+
+### 染色规则（涨跌红绿）
+
+`/stocks` 表格 + 移动卡片**只对"方向性"指标染红绿**：股票名 / 最新价 / 涨跌幅。**禁止**对成交额 / 换手率 / 总市值 / PE-TTM 染色——这些是"活跃度/估值"指标，不携带方向语义（10 亿成交额可能伴随上涨也可能伴随下跌），强行染色会赋予不存在的语义、误导用户。同花顺/东方财富/富途/雪球等主流软件均遵守此约定。
+
+价值度量列（ROC / 收益率 / 安全边际）**可以**染红绿——它们是"对投资者有利/不利"的方向性判断（正收益率 = 红利好）。
+
+### 数字格式化共享 utils（`format-utils.ts`）
+
+[stocks/components/format-utils.ts](src/app/stocks/components/format-utils.ts) 集中桌面 `StockTableRow` 与移动 `StockCard` 共用的金额/市值/PE 格式化函数：`fmtAmount`（元 → 亿/万）/ `fmtMarketCap`（万元 → 亿/万）/ `fmtPE`（负值 → "亏损" warn / >500 → ">500" warn / 正常 → 1 位小数）。新加股票列表数字字段时必须复用，避免单位/警戒值在两端漂移。返回 `{ text, tone }` 让调用方按 tone 选 className（normal/muted/warn）。
+
+### SortHeaderButton 占位 indicator 模式
+
+可排序表头的方向箭头**槽位始终保留 12px**：未激活渲染淡灰双向 `ArrowUpDown`，激活渲染主色单向 `ChevronUp/Down`。这样切换排序状态时按钮宽度恒定，避免列宽抖动；同时给可排序列一个视觉提示。新加可排序列时直接用 `<SortHeaderButton ... />`，不要再手写排序图标占位。
 
 ### 筛选器与 URL 状态
 
@@ -466,7 +485,7 @@ useEffect(() => {
 
 **弹窗与主页卡共用同一份 SECTION_CONFIGS 与渲染逻辑**——`HotMoneyViewDialog` 内部 `import { AnalysisContent } from '@/components/stocks/analysis'`，新增专家或调整 schema 时改一处即可两端生效。
 
-**专家身份色 token（`--expert-*`）**：CIO 紫 / 游资 橙 / 中线 蓝 / 价值 金，定义在 [globals.css](src/app/globals.css)，Tailwind 暴露为 `text-expert-cio` / `border-l-expert-hot-money` 等。**身份色仅用于"哪位专家说的"染色**（卡片左 border / 头部图标 / key_quote 背景）；评分高低仍走 `score-*`（紫金蓝），涨跌仍走 `positive` / `negative`，三套色阶不混用。
+**专家身份色 token（`--expert-*`）**：CIO 紫 / 游资 橙 / 中线 蓝 / 价值 金，定义在 [globals.css](src/app/globals.css)，Tailwind 暴露为 `text-expert-cio` / `border-l-expert-hot-money` 等。**身份色仅用于"哪位专家说的"染色**（卡片左 border / 头部图标 / key_quote 背景）；评分高低仍走 `score-*`（紫罗兰单色相，见"语义色与过渡时长 token"），涨跌仍走 `positive` / `negative`，三套色阶不混用。
 
 **与现有派生数据的复用**：行情卡的 `cioKeyQuote` 直接从 `latestByExpert.cio` 用 `useMemo` 派生，不另发请求；4 专家最新数据由统一的 `useEffect` + `Promise.all` 拉取，`expertsRefreshKey` 自增触发重拉。
 
@@ -474,7 +493,7 @@ useEffect(() => {
 
 ### AI 分析弹窗（`HotMoneyViewDialog`）
 
-共享组件位于 [components/stocks/HotMoneyViewDialog.tsx](src/components/stocks/HotMoneyViewDialog.tsx)，在股票列表页（`/stocks`）和分析页（`/analysis`）复用。通过"AI 分析"按钮（`/stocks`）或"历史·AI"按钮（`/analysis`）触发。`/analysis` 调用时通过 `defaultTab` prop 锁定到指定专家 Tab（卡 ④ 右上"历史"按钮按当前 Tab 透传）。
+共享组件位于 [components/stocks/HotMoneyViewDialog.tsx](src/components/stocks/HotMoneyViewDialog.tsx)，目前**仅由 `/analysis` 页面**使用（个股详情页"历史·AI"按钮触发）。`/stocks` 列表页**没有**直接打开此弹窗的入口——单股 AI 分析统一通过点击股票名跳转 `/analysis?code=XXX` 完成。`/stocks` 仅保留多选后的"批量 AI 分析"（`BatchAnalysisDialog`，浮动操作栏触发）。`/analysis` 调用时通过 `defaultTab` prop 锁定到指定专家 Tab（卡 ④ 右上"历史"按钮按当前 Tab 透传）。
 
 弹窗内含 **5 个 Tab**，各自独立管理历史记录和状态：
 

@@ -38,6 +38,52 @@ class DailyBasicRepository(BaseRepository):
 
     # ==================== 查询操作 ====================
 
+    def get_latest_snapshot_by_ts_codes(
+        self, ts_codes: List[str]
+    ) -> Dict[str, Dict[str, Optional[float]]]:
+        """
+        批量取一组 ts_code 的最新一条 daily_basic 快照（仅核心字段）。
+
+        用于股票列表页等需要"每股一行最新指标"的场景。先解最新交易日，再
+        WHERE trade_date = latest AND ts_code IN (...)；不依赖 DISTINCT ON
+        以避免 daily_basic 后续转 hypertable 时性能衰减。
+
+        Args:
+            ts_codes: ts_code 列表
+
+        Returns:
+            { ts_code: { 'total_mv': 万元, 'pe_ttm': float, 'turnover_rate': % } }
+            没有快照的 ts_code 不出现在返回字典中。
+        """
+        if not ts_codes:
+            return {}
+        try:
+            latest_row = self.execute_query(
+                f"SELECT MAX(trade_date) FROM {self.TABLE_NAME}"
+            )
+            if not latest_row or not latest_row[0] or latest_row[0][0] is None:
+                return {}
+            latest_date = latest_row[0][0]
+
+            placeholders = ",".join(["%s"] * len(ts_codes))
+            query = f"""
+                SELECT ts_code, total_mv, pe_ttm, turnover_rate
+                FROM {self.TABLE_NAME}
+                WHERE trade_date = %s AND ts_code IN ({placeholders})
+            """
+            rows = self.execute_query(query, (latest_date, *ts_codes))
+            return {
+                row[0]: {
+                    "total_mv": float(row[1]) if row[1] is not None else None,
+                    "pe_ttm": float(row[2]) if row[2] is not None else None,
+                    "turnover_rate": float(row[3]) if row[3] is not None else None,
+                }
+                for row in rows
+            }
+        except PsycopgDatabaseError as e:
+            logger.warning(f"批量取 daily_basic 最新快照失败: {e}")
+            return {}
+
     def get_by_code_and_date_range(
         self,
         ts_code: str,

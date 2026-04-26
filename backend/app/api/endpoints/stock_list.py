@@ -453,7 +453,7 @@ async def get_stock_list(
             'status': row[17]
         })
 
-    # 注入实时行情（latest_price, pct_change 等）
+    # 注入实时行情（latest_price, pct_change, amount, turnover 等）
     if items:
         ts_codes = [item['ts_code'] for item in items if item.get('ts_code')]
         quotes = await stock_quote_cache.get_quotes_batch(ts_codes)
@@ -461,6 +461,22 @@ async def get_stock_list(
             quote = quotes.get(item['ts_code'], {})
             item['latest_price'] = quote.get('latest_price')
             item['pct_change'] = quote.get('pct_change')
+            item['amount'] = quote.get('amount')
+
+        # 注入 daily_basic 最新快照（total_mv 万元 / pe_ttm / turnover_rate %）
+        try:
+            from app.repositories.daily_basic_repository import DailyBasicRepository
+            db_map = await asyncio.to_thread(
+                DailyBasicRepository().get_latest_snapshot_by_ts_codes, ts_codes
+            )
+            for item in items:
+                snap = db_map.get(item['ts_code']) or {}
+                item['total_mv'] = snap.get('total_mv')
+                item['pe_ttm'] = snap.get('pe_ttm')
+                # turnover_rate 单位为 %（daily_basic 原生单位），与实时 quote.turnover 同义但更稳定
+                item['turnover_rate'] = snap.get('turnover_rate')
+        except Exception as e:
+            logger.warning(f"注入 daily_basic 快照失败: {e}")
 
         # 注入价值度量（ROC / EY / 内在价值）
         try:

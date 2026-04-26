@@ -6,25 +6,20 @@ export type ScoreBadgeVariant = 'table' | 'card'
 
 const TIER_TOOLTIP = '≥8 强烈信号 / ≥6 关注 / <6 中性'
 
-function resolveTone(score: number | null | undefined, variant: ScoreBadgeVariant) {
+// 单色相紫罗兰 4 档（避主色蓝 + 消多重灰底）：
+//   ≥8 强信号 = 深紫实底 + 白字（醒目）
+//   6-8 关注  = 中紫实底 + 白字（次醒目）
+//   4-6 中性  = 浅紫描边 + 紫字（轻量 outline，与实底形成视觉重量差）
+//   <4 弱     = 紫字无块（避免再出一个灰背景）
+//   null     = card variant 灰底占位；table variant 由组件 JSX 早 return 渲染 "—"，不进此函数
+function resolveTone(score: number | null | undefined) {
   if (score == null) {
-    return variant === 'card'
-      ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600'
-      : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
+    return 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600'
   }
-  // 评分色阶用 score-* token（蓝/金/紫），与行情红绿独立——避免评分 8 分和涨幅红色在同一行混淆
-  // 浅色模式：紫/蓝走白字（对比度 ≥4.5:1）；金色用深字（金色背景 white 字仅 ~2:1）
-  // 深色模式：score-* 整体提亮一档，全部走深字保证对比度
-  if (score >= 8) {
-    return 'bg-score-high text-white dark:text-gray-950'
-  }
-  if (score >= 6) {
-    return 'bg-score-mid text-gray-950'
-  }
-  if (score >= 4) {
-    return 'bg-score-low text-white dark:text-gray-950'
-  }
-  return 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
+  if (score >= 8) return 'bg-score-high text-white dark:text-gray-950'
+  if (score >= 6) return 'bg-score-mid text-white dark:text-gray-950'
+  if (score >= 4) return 'bg-score-low text-score-high ring-1 ring-inset ring-score-mid/40 dark:bg-score-low dark:text-score-high'
+  return 'text-score-mid dark:text-score-high'
 }
 
 function formatScore(score: number | null | undefined): string {
@@ -52,7 +47,7 @@ export function ScoreBadge({
   variant = 'table',
   ariaPrefix,
 }: ScoreBadgeProps) {
-  const tone = resolveTone(score, variant)
+  const tone = resolveTone(score)
   const tip = score == null
     ? '无评分数据'
     : `评分 ${formatScore(score)}（${tierLabel(score)}）· 分档：${TIER_TOOLTIP}`

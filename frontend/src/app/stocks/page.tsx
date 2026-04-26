@@ -36,7 +36,6 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { useSmartRefresh } from '@/hooks/useMarketStatus'
 import { LazyConceptSelect } from '@/components/stocks/LazyConceptSelect'
-import { HotMoneyViewDialog } from '@/components/stocks/HotMoneyViewDialog'
 import { AddToListDialog } from './components/AddToListDialog'
 import { RenameListDialog } from './components/RenameListDialog'
 import { StockTableRow } from './components/StockTableRow'
@@ -117,6 +116,8 @@ function computeNextSort(prev: SortKey[], key: string, shift: boolean): SortKey[
 }
 
 // 表头排序按钮：显示标签 + 方向箭头；多列排序时附带优先级数字角标
+// 关键：indicator 槽位**始终保留**，未激活显示淡灰双向箭头，激活显示主色单向箭头。
+// 这样切换排序状态时按钮宽度恒定，避免列宽抖动；同时给可排序列一个视觉提示
 function SortHeaderButton({
   sortKey,
   label,
@@ -144,7 +145,13 @@ function SortHeaderButton({
       title="点击单列排序；Shift+点击 追加为次级排序键"
     >
       {label}
-      {active && <SortIndicator order={order} className="h-3 w-3 text-info" />}
+      {/* 占位槽位：未激活淡灰双向，激活主色单向。固定 12px 宽，保宽度恒定 */}
+      <span className="inline-flex w-3 justify-center shrink-0">
+        {active
+          ? <SortIndicator order={order} className="h-3 w-3 text-info" />
+          : <ArrowUpDown className="h-3 w-3 text-gray-300 dark:text-gray-600" />
+        }
+      </span>
       {showPriority && (
         <span className="ml-0.5 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
           {idx + 1}
@@ -219,20 +226,11 @@ function StocksPageContent() {
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [renameTarget, setRenameTarget] = useState<StockList | null>(null)
   const [batchAnalysisOpen, setBatchAnalysisOpen] = useState(false)
-  const [analyzingTsCodes, setAnalyzingTsCodes] = useState<Set<string>>(new Set())
+  // 批量分析"分析中"集合：仅用于轮询时检测"刚结束"以触发列表静默刷新（拉新评分）。
+  // 不再展示在 UI 上（行级 AI 分析按钮已移除），用 ref 避免每 3s 触发组件重渲染
+  const analyzingTsCodesRef = useRef<Set<string>>(new Set())
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [filtersCollapsed, setFiltersCollapsed] = useState<boolean>(() => searchParams.get('filters') === 'collapsed')
-
-  // ── AI 分析弹窗状态 ──
-  const [hotMoneyDialogOpen, setHotMoneyDialogOpen] = useState(false)
-  const [hotMoneyStock, setHotMoneyStock] = useState<{ name: string; code: string; tsCode: string } | null>(null)
-  const [promptStates, setPromptStates] = useState({
-    hotMoney: { content: '', loading: false },
-    dataCollection: { content: '', loading: false },
-    midline: { content: '', loading: false },
-    longterm: { content: '', loading: false },
-    cio: { content: '', loading: false },
-  })
 
   const user = useAuthStore((s) => s.user)
 
@@ -364,9 +362,10 @@ function StocksPageContent() {
   useSmartRefresh(refreshCallback, currentPageCodes, true)
 
   // ── 批量分析"分析中"股票轮询（每 3 秒） ──
+  // 检测到某只股票"刚从分析中移除"时，触发列表静默刷新拉取最新评分
   useEffect(() => {
     if (!isAuthenticated) {
-      setAnalyzingTsCodes(new Set())
+      analyzingTsCodesRef.current = new Set()
       return
     }
     let cancelled = false
@@ -376,13 +375,11 @@ function StocksPageContent() {
         const res = await apiClient.getActiveBatchTsCodes()
         if (cancelled) return
         const nextCodes: string[] = res?.data?.ts_codes ?? []
-        setAnalyzingTsCodes((prev) => {
-          const next = new Set(nextCodes)
-          let removedAny = false
-          prev.forEach((ts) => { if (!next.has(ts)) removedAny = true })
-          if (removedAny) fetchStocks(true)
-          return next
-        })
+        const next = new Set(nextCodes)
+        let removedAny = false
+        analyzingTsCodesRef.current.forEach((ts) => { if (!next.has(ts)) removedAny = true })
+        analyzingTsCodesRef.current = next
+        if (removedAny) fetchStocks(true)
       } catch {
         // 静默失败，下个 tick 重试
       }
@@ -494,49 +491,6 @@ function StocksPageContent() {
       toast.error(e?.response?.data?.detail || '删除失败')
     }
   }, [deleteList])
-
-  // ── 打开 AI 分析弹窗 ──
-  const handleOpenAnalysis = useCallback((stock: StockInfo) => {
-    const ts = stock.ts_code ?? toTsCode(stock.code)
-    setHotMoneyStock({ name: stock.name, code: stock.code, tsCode: ts })
-    setPromptStates({
-      hotMoney: { content: '', loading: true },
-      dataCollection: { content: '', loading: true },
-      midline: { content: '', loading: true },
-      longterm: { content: '', loading: true },
-      cio: { content: '', loading: true },
-    })
-    setHotMoneyDialogOpen(true)
-
-    const vars = { stock_name: stock.name, stock_code: stock.code }
-    interface PromptResponse { code?: number; data?: { system_prompt?: string; user_prompt_template?: string } }
-    const toPrompt = (res: unknown): string => {
-      const r = res as PromptResponse
-      if (r?.code === 200 && r.data?.user_prompt_template) {
-        return [r.data.system_prompt, r.data.user_prompt_template].filter(Boolean).join('\n\n')
-      }
-      return '加载失败，请重试'
-    }
-
-    Promise.all([
-      apiClient.getPromptTemplateByKey('top_speculative_investor_v1', { ...vars, ts_code: ts }),
-      apiClient.getPromptTemplateByKey('stock_data_collection_v1', vars),
-      apiClient.getPromptTemplateByKey('midline_industry_expert_v1', { ...vars, ts_code: ts }),
-      apiClient.getPromptTemplateByKey('longterm_value_watcher_v1', { ...vars, ts_code: ts }),
-      apiClient.getPromptTemplateByKey('cio_directive_v1', { ...vars, ts_code: ts }),
-    ]).then(([hotRes, dataRes, midRes, ltRes, cioRes]) => {
-      setPromptStates({
-        hotMoney: { content: toPrompt(hotRes), loading: false },
-        dataCollection: { content: toPrompt(dataRes), loading: false },
-        midline: { content: toPrompt(midRes), loading: false },
-        longterm: { content: toPrompt(ltRes), loading: false },
-        cio: { content: toPrompt(cioRes), loading: false },
-      })
-    }).catch(() => {
-      const failed = { content: '加载失败，请重试', loading: false }
-      setPromptStates({ hotMoney: failed, dataCollection: failed, midline: failed, longterm: failed, cio: failed })
-    })
-  }, [])
 
   // 移动端激活筛选数（用于 Drawer 按钮徽章）
   const activeFilterCount = useMemo(() => {
@@ -1013,9 +967,7 @@ function StocksPageContent() {
                   stock={stock}
                   isAuthenticated={isAuthenticated}
                   isSelected={selectedCodes.has(toTsCode(stock.code))}
-                  isAnalyzing={analyzingTsCodes.has(toTsCode(stock.code))}
                   onToggleSelect={toggleStock}
-                  onOpenAnalysis={handleOpenAnalysis}
                 />
               ))}
             </div>
@@ -1039,17 +991,28 @@ function StocksPageContent() {
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">最新价</th>
                     )}
                     {isVisible('pct_change') && (
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        <span className="inline-flex items-center gap-1">
-                          <SortHeaderButton sortKey="pct_change" label="涨跌幅" sortKeys={sortKeys} onClick={handleSortClick} />
-                          <span
-                            className="inline-flex text-gray-400 dark:text-gray-500 cursor-help"
-                            title="Shift+点击列头可追加次级排序"
-                            aria-hidden="true"
-                          >
-                            <ArrowUpDown className="h-3 w-3" />
-                          </span>
-                        </span>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">
+                        <SortHeaderButton sortKey="pct_change" label="涨跌幅" sortKeys={sortKeys} onClick={handleSortClick} />
+                      </th>
+                    )}
+                    {isVisible('amount') && (
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap" title="当日成交额（元）">
+                        成交额
+                      </th>
+                    )}
+                    {isVisible('turnover_rate') && (
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap" title="换手率（最近交易日 daily_basic）">
+                        换手率
+                      </th>
+                    )}
+                    {isVisible('total_mv') && (
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap" title="总市值（最近交易日 daily_basic）">
+                        总市值
+                      </th>
+                    )}
+                    {isVisible('pe_ttm') && (
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap" title="滚动市盈率 PE-TTM。亏损/＞500 标橙">
+                        PE-TTM
                       </th>
                     )}
                     {([
@@ -1059,7 +1022,7 @@ function StocksPageContent() {
                       ['cio_score', 'CIO评分', 'score_cio'],
                       ['cio_last_date', 'CIO日期', 'cio_last_date'],
                     ] as const).map(([sortKey, label, colId]) => isVisible(colId) && (
-                      <th key={sortKey} className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th key={sortKey} className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">
                         <SortHeaderButton sortKey={sortKey} label={label} sortKeys={sortKeys} onClick={handleSortClick} />
                       </th>
                     ))}
@@ -1095,7 +1058,6 @@ function StocksPageContent() {
                         <SortHeaderButton sortKey="cio_followup_time" label="关注时间" sortKeys={sortKeys} onClick={handleSortClick} />
                       </th>
                     )}
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
@@ -1105,10 +1067,8 @@ function StocksPageContent() {
                       stock={stock}
                       isAuthenticated={isAuthenticated}
                       isSelected={selectedCodes.has(toTsCode(stock.code))}
-                      isAnalyzing={analyzingTsCodes.has(toTsCode(stock.code))}
                       isVisible={isVisible}
                       onToggleSelect={toggleStock}
-                      onOpenAnalysis={handleOpenAnalysis}
                     />
                   ))}
                 </tbody>
@@ -1202,24 +1162,6 @@ function StocksPageContent() {
         onClose={() => setBatchAnalysisOpen(false)}
         selectedTsCodes={Array.from(selectedCodes)}
         onSuccess={() => fetchStocks(true)}
-      />
-      <HotMoneyViewDialog
-        open={hotMoneyDialogOpen}
-        onClose={() => { setHotMoneyDialogOpen(false); setHotMoneyStock(null) }}
-        stockName={hotMoneyStock?.name ?? ''}
-        stockCode={hotMoneyStock?.code ?? ''}
-        tsCode={hotMoneyStock?.tsCode ?? ''}
-        promptContent={promptStates.hotMoney.content}
-        promptLoading={promptStates.hotMoney.loading}
-        dataCollectionPrompt={promptStates.dataCollection.content}
-        dataCollectionPromptLoading={promptStates.dataCollection.loading}
-        midlinePrompt={promptStates.midline.content}
-        midlinePromptLoading={promptStates.midline.loading}
-        longtermPrompt={promptStates.longterm.content}
-        longtermPromptLoading={promptStates.longterm.loading}
-        cioPrompt={promptStates.cio.content}
-        cioPromptLoading={promptStates.cio.loading}
-        onSaved={() => fetchStocks(true)}
       />
     </div>
   )

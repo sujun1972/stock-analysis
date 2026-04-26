@@ -1,11 +1,11 @@
 'use client'
 
 import React from 'react'
-import { Loader2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ScoreBadge } from '@/components/shared'
 import type { StockInfo, CioFollowupTriggers } from '@/types'
 import type { StockColumnId } from '../hooks/useStockTableColumns'
+import { fmtAmount, fmtMarketCap, fmtPE } from './format-utils'
 
 function toTsCode(code: string): string {
   if (code.includes('.')) return code.toUpperCase()
@@ -110,20 +110,16 @@ interface StockTableRowProps {
   stock: StockInfo
   isAuthenticated: boolean
   isSelected: boolean
-  isAnalyzing?: boolean
   isVisible: (id: StockColumnId) => boolean
   onToggleSelect: (tsCode: string) => void
-  onOpenAnalysis: (stock: StockInfo) => void
 }
 
 export const StockTableRow = React.memo(function StockTableRow({
   stock,
   isAuthenticated,
   isSelected,
-  isAnalyzing = false,
   isVisible,
   onToggleSelect,
-  onOpenAnalysis,
 }: StockTableRowProps) {
   const tsCode = toTsCode(stock.code)
 
@@ -143,6 +139,9 @@ export const StockTableRow = React.memo(function StockTableRow({
         </td>
       )}
       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium" onClick={(e) => e.stopPropagation()}>
+        {/* 股票名称跟随当日涨跌染色 —— 用户偏好（"一眼看到是否上涨"）。
+            注意：仅"最新价/涨跌幅/股票名"三处用红绿；成交额/换手率/市值/PE-TTM 是
+            活跃度/估值指标，不携带方向语义，保持中性以免误导 */}
         <a
           href={`/analysis?code=${stock.code}`}
           className={`hover:underline ${
@@ -178,6 +177,34 @@ export const StockTableRow = React.memo(function StockTableRow({
               {stock.pct_change > 0 ? '+' : ''}{stock.pct_change.toFixed(2)}%
             </span>
           ) : '-'}
+        </td>
+      )}
+      {isVisible('amount') && (
+        <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100">
+          {fmtAmount(stock.amount)}
+        </td>
+      )}
+      {isVisible('turnover_rate') && (
+        <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium tabular-nums text-gray-700 dark:text-gray-300">
+          {stock.turnover_rate != null ? `${stock.turnover_rate.toFixed(2)}%` : '—'}
+        </td>
+      )}
+      {isVisible('total_mv') && (
+        <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium tabular-nums text-gray-700 dark:text-gray-300">
+          {fmtMarketCap(stock.total_mv)}
+        </td>
+      )}
+      {isVisible('pe_ttm') && (
+        <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium tabular-nums">
+          {(() => {
+            const { text, tone } = fmtPE(stock.pe_ttm)
+            const cls = tone === 'warn'
+              ? 'text-warning'
+              : tone === 'muted'
+              ? 'text-gray-300 dark:text-gray-600'
+              : 'text-gray-900 dark:text-gray-100'
+            return <span className={cls}>{text}</span>
+          })()}
         </td>
       )}
       {SCORE_COLUMNS.map(({ id, field, aria }) => isVisible(id) && (
@@ -225,25 +252,6 @@ export const StockTableRow = React.memo(function StockTableRow({
           <FollowupTimeCell triggers={stock.latest_analysis_cio?.followup_triggers ?? null} />
         </td>
       )}
-      <td className="px-4 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-        {isAnalyzing ? (
-          <span
-            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-blue-400 text-blue-600 bg-blue-50 dark:border-blue-500 dark:text-blue-400 dark:bg-blue-900/20 whitespace-nowrap"
-            title="正在批量 AI 分析中"
-          >
-            <Loader2 className="h-3 w-3 animate-spin" />分析中
-          </span>
-        ) : (
-          <button
-            type="button"
-            onClick={() => onOpenAnalysis(stock)}
-            aria-label={`打开 ${stock.name} 的 AI 分析`}
-            className="text-xs px-2 py-1 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors whitespace-nowrap focus-ring"
-          >
-            AI 分析
-          </button>
-        )}
-      </td>
     </tr>
   )
 })

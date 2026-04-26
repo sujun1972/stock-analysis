@@ -36,9 +36,13 @@ export interface StockInfo {
   pct_change?: number
   change_amount?: number
   volume?: number
-  amount?: number
+  amount?: number               // 当日成交额（元，原始单位）
   turnover?: number
   trade_time?: string
+  // daily_basic 最新快照（收盘后更新；列表页注入用）
+  total_mv?: number | null      // 总市值（万元）
+  pe_ttm?: number | null        // 滚动 PE
+  turnover_rate?: number | null // 换手率（%，已是百分数）
   // 概念标签
   concepts?: Concept[]
   // AI分析摘要（include_analysis=true 时由后端注入）

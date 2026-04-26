@@ -1,16 +1,10 @@
 'use client'
 
 import React from 'react'
-import { Loader2, Sparkles, MoreVertical } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { ScoreBadge } from '@/components/shared'
 import type { StockInfo, CioFollowupTriggers } from '@/types'
+import { fmtAmount, fmtMarketCap, fmtPE } from './format-utils'
 
 // 与 StockTableRow / page.tsx 保持同一套代码→ts_code 规则（见 frontend/CLAUDE.md 股票代码规范）
 function toTsCode(code: string): string {
@@ -18,6 +12,19 @@ function toTsCode(code: string): string {
   if (code.startsWith('6')) return `${code}.SH`
   if (code.startsWith('4') || code.startsWith('8')) return `${code}.BJ`
   return `${code}.SZ`
+}
+
+/** 价值度量小百分比（ROC / EY 共用）— A股配色：正红/负绿/零黑/缺数据灰 */
+function PctMetric({ label, value }: { label: string; value: number | null | undefined }) {
+  if (value == null || !isFinite(value)) {
+    return <span className="text-gray-400">{label} —</span>
+  }
+  const pct = value * 100
+  const cls =
+    pct > 0 ? 'text-positive'
+    : pct < 0 ? 'text-negative'
+    : 'text-gray-600 dark:text-gray-400'
+  return <span className={cls}>{label} {pct.toFixed(1)}%</span>
 }
 
 function cioFollowupSummary(triggers: CioFollowupTriggers | null): string | null {
@@ -38,18 +45,14 @@ interface StockCardProps {
   stock: StockInfo
   isAuthenticated: boolean
   isSelected: boolean
-  isAnalyzing?: boolean
   onToggleSelect: (tsCode: string) => void
-  onOpenAnalysis: (stock: StockInfo) => void
 }
 
 export const StockCard = React.memo(function StockCard({
   stock,
   isAuthenticated,
   isSelected,
-  isAnalyzing = false,
   onToggleSelect,
-  onOpenAnalysis,
 }: StockCardProps) {
   const tsCode = toTsCode(stock.code)
   const pct = stock.pct_change
@@ -107,35 +110,41 @@ export const StockCard = React.memo(function StockCard({
             {pct == null ? '-' : `${pct > 0 ? '+' : ''}${pct.toFixed(2)}%`}
           </span>
         </div>
-
-        <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="p-1.5 -mr-1 -mt-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 focus-ring"
-                aria-label={`${stock.name} 操作菜单`}
-              >
-                <MoreVertical className="h-4 w-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => onOpenAnalysis(stock)}
-                disabled={isAnalyzing}
-              >
-                {isAnalyzing ? (
-                  <><Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />分析中</>
-                ) : (
-                  <><Sparkles className="h-3.5 w-3.5 mr-2" />AI 分析</>
-                )}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-4 gap-1.5" onClick={(e) => e.stopPropagation()}>
+      {/* 量价 + 估值行：成交额 / 换手 / 市值 / PE — 决策核心数据，桌面有移动也必须有 */}
+      <div className="mt-2.5 flex items-center justify-between gap-1 text-[11px] text-gray-600 dark:text-gray-400 tabular-nums">
+        <span className="text-gray-900 dark:text-gray-100 font-medium">{fmtAmount(stock.amount)}</span>
+        <span className="text-gray-300 dark:text-gray-700" aria-hidden>·</span>
+        <span>换 {stock.turnover_rate != null ? `${stock.turnover_rate.toFixed(2)}%` : '—'}</span>
+        <span className="text-gray-300 dark:text-gray-700" aria-hidden>·</span>
+        <span>{fmtMarketCap(stock.total_mv)}</span>
+        <span className="text-gray-300 dark:text-gray-700" aria-hidden>·</span>
+        {(() => {
+          const { text, tone } = fmtPE(stock.pe_ttm)
+          return <span className={tone === 'warn' ? 'text-warning' : ''}>PE {text}</span>
+        })()}
+      </div>
+
+      {/* 价值度量行：ROC / EY / 安全边际 — 价值投资视角，与桌面价值列同语义 */}
+      {(stock.value_metrics?.roc != null || stock.value_metrics?.earnings_yield != null || stock.value_metrics?.intrinsic_margin != null) && (
+        <div className="mt-1 flex items-center justify-between gap-1 text-[11px] tabular-nums">
+          <PctMetric label="ROC" value={stock.value_metrics?.roc} />
+          <span className="text-gray-300 dark:text-gray-700" aria-hidden>·</span>
+          <PctMetric label="EY" value={stock.value_metrics?.earnings_yield} />
+          <span className="text-gray-300 dark:text-gray-700" aria-hidden>·</span>
+          {(() => {
+            // 安全边际单独：需要"+"前缀和整数小数位（与 PctMetric 默认 1 位不同）
+            const m = stock.value_metrics?.intrinsic_margin
+            if (m == null || !isFinite(m)) return <span className="text-gray-400">边际 —</span>
+            const pct = m * 100
+            const cls = pct > 0 ? 'text-positive' : pct < 0 ? 'text-negative' : 'text-gray-600 dark:text-gray-400'
+            return <span className={cls}>边际 {pct > 0 ? '+' : ''}{pct.toFixed(0)}%</span>
+          })()}
+        </div>
+      )}
+
+      <div className="mt-2.5 grid grid-cols-4 gap-1.5" onClick={(e) => e.stopPropagation()}>
         <ScoreBadge variant="card" label="游资" score={stock.latest_analysis_hot_money?.score} />
         <ScoreBadge variant="card" label="中线" score={stock.latest_analysis_midline?.score} />
         <ScoreBadge variant="card" label="价值" score={stock.latest_analysis_longterm?.score} />

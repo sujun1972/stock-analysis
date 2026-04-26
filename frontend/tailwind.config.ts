@@ -90,7 +90,7 @@ const config: Config = {
         info: {
           DEFAULT: "hsl(var(--info))",
         },
-        // 评分/价值指标色阶（蓝→金→紫），独立于行情红绿
+        // 评分/价值指标色阶 单色相紫罗兰（4-6 浅 → 6-8 中 → ≥8 深），独立于行情红绿
         score: {
           low: "hsl(var(--score-low))",
           mid: "hsl(var(--score-mid))",

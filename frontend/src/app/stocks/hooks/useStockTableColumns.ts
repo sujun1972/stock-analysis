@@ -11,6 +11,10 @@ import { useCallback, useEffect, useState } from 'react'
 export type StockColumnId =
   | 'latest_price'
   | 'pct_change'
+  | 'amount'
+  | 'turnover_rate'
+  | 'total_mv'
+  | 'pe_ttm'
   | 'score_hot_money'
   | 'score_midline'
   | 'score_longterm'
@@ -32,14 +36,21 @@ export interface StockColumnConfig {
 }
 
 // 列显示顺序以此数组为准。新增列在此追加一行即可
+// 默认显示策略：CIO 综合评分作为唯一一档"高度浓缩的 AI 评级"放在量价旁边即可；
+// 游资/中线/价值三个 sub-component 评分需要时手动开启，避免首屏 4 列徽章扎堆
+// CIO 日期独立成列（默认隐），同时在 score_cio 单元格里以小字脚注顺带显示
 export const COLUMN_CONFIGS: readonly StockColumnConfig[] = [
   { id: 'latest_price',     label: '最新价',   default: true,  group: 'quote' },
   { id: 'pct_change',       label: '涨跌幅',   default: true,  group: 'quote' },
-  { id: 'score_hot_money',  label: '游资',     default: true,  group: 'score' },
-  { id: 'score_midline',    label: '中线',     default: true,  group: 'score' },
-  { id: 'score_longterm',   label: '价值',     default: true,  group: 'score' },
+  { id: 'amount',           label: '成交额',   default: true,  group: 'quote' },
+  { id: 'turnover_rate',    label: '换手率',   default: true,  group: 'quote' },
+  { id: 'total_mv',         label: '总市值',   default: true,  group: 'quote' },
+  { id: 'pe_ttm',           label: 'PE-TTM',  default: true,  group: 'quote' },
+  { id: 'score_hot_money',  label: '游资',     default: false, group: 'score' },
+  { id: 'score_midline',    label: '中线',     default: false, group: 'score' },
+  { id: 'score_longterm',   label: '价值',     default: false, group: 'score' },
   { id: 'score_cio',        label: 'CIO评分',  default: true,  group: 'score' },
-  { id: 'cio_last_date',    label: 'CIO日期',  default: true,  group: 'cio' },
+  { id: 'cio_last_date',    label: 'CIO日期',  default: false, group: 'cio' },
   { id: 'roc',              label: 'ROC',     default: true,  group: 'value' },
   { id: 'earnings_yield',   label: '收益率',   default: true,  group: 'value' },
   { id: 'intrinsic_margin', label: '安全边际', default: true,  group: 'value' },
@@ -57,8 +68,9 @@ export const COLUMN_GROUP_LABELS: Record<StockColumnGroup, string> = {
   value: '价值度量',
 }
 
-// 版本号 v1；若将来 schema 破坏性变更（如列 id 语义变动），bump 到 v2 即可丢弃旧数据
-const STORAGE_KEY = 'stocks:visible-columns:v1'
+// 版本号 bump 到 v3：v2→v3 默认列集合再次调整（cio_last_date 加回但默认隐；游资/中线/价值改默认隐）
+// bump 一次让所有用户回到最新默认视图，避免"半新半旧"局面
+const STORAGE_KEY = 'stocks:visible-columns:v3'
 
 const KNOWN_IDS: ReadonlySet<StockColumnId> = new Set(COLUMN_CONFIGS.map(c => c.id))
 
