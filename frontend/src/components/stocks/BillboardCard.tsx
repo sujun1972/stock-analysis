@@ -103,7 +103,7 @@ export function BillboardCard({ tsCode }: { tsCode: string }) {
     setLoading(true)
     setError(null)
     const { start, end } = calcDateRange()
-    apiClient.get<{ code: number; data: { items: BillboardItem[] } }>(
+    apiClient.get<{ items: BillboardItem[] }>(
       `/api/top-list?ts_code=${encodeURIComponent(tsCode)}&start_date=${start}&end_date=${end}&page_size=200`
     ).then(res => {
       if (cancelled) return
@@ -139,7 +139,7 @@ export function BillboardCard({ tsCode }: { tsCode: string }) {
     setInstOpen(s => ({ ...s, [dateKey]: true }))
     if (instData[dateKey]) return  // 已加载（含错误态）
     setInstData(s => ({ ...s, [dateKey]: 'loading' }))
-    apiClient.get<{ code: number; data: { items: InstItem[] } }>(
+    apiClient.get<{ items: InstItem[] }>(
       `/api/top-inst?ts_code=${encodeURIComponent(tsCode)}&trade_date=${dateKey}&page_size=50`
     ).then(res => {
       const list: InstItem[] = res?.data?.items ?? []

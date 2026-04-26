@@ -109,9 +109,9 @@ export function FinancialBriefCard({ tsCode }: { tsCode: string }) {
     setLoading(true)
     setError(null)
     Promise.all([
-      apiClient.get<{ code: number; data: { items: IncomeItem[] } }>(`/api/income?ts_code=${encodeURIComponent(tsCode)}&limit=4`),
-      apiClient.get<{ code: number; data: { items: CashflowItem[] } }>(`/api/cashflow?ts_code=${encodeURIComponent(tsCode)}&limit=4`),
-      apiClient.get<{ code: number; data: { items: FinaIndItem[] } }>(`/api/fina-indicator?ts_code=${encodeURIComponent(tsCode)}&limit=4`),
+      apiClient.get<{ items: IncomeItem[] }>(`/api/income?ts_code=${encodeURIComponent(tsCode)}&limit=4`),
+      apiClient.get<{ items: CashflowItem[] }>(`/api/cashflow?ts_code=${encodeURIComponent(tsCode)}&limit=4`),
+      apiClient.get<{ items: FinaIndItem[] }>(`/api/fina-indicator?ts_code=${encodeURIComponent(tsCode)}&limit=4`),
     ]).then(([incRes, cfRes, fiRes]) => {
       if (cancelled) return
       // 三个端点 end_date/ann_date 格式不一致：income/cashflow=YYYY-MM-DD，fina-indicator=YYYYMMDD
