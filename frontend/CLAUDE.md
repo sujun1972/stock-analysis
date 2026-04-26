@@ -566,6 +566,8 @@ useEffect(() => {
 
 **股票列表静默刷新（`fetchStocks(silent=true)`）**：自动刷新（交易时段每 3s、分析中标志移除后）只更新当前已显示行，不改变行集合/顺序/`totalStocks`。实现：从 `useStockStore.getState().stocks` 取当前显示的 `ts_code`s，调 `GET /api/stocks/list?ts_codes=...,...&include_analysis=true`（新增的 `ts_codes` IN 过滤跳过分页/排序/筛选），按 `code` Map 原位合并回存量数组。避免用户翻到第 N 页或改变排序后被异步刷新重置到默认视图。
 
+**竞态守卫（`requestIdRef`）**：`fetchStocks` 内每次 ++ 一个 token，所有 `setStocks` / `setTotalStocks` / `setError` / `setLoading(false)` 写入前对比 `myReqId === requestIdRef.current`，迟到的旧响应一律丢弃。silent 路径再叠一层"快照 codes 对比"——响应到达时 store 的行集合必须仍与请求时的 codes 序列全等才合并，覆盖"翻走又翻回 reqId 巧合仍最新"的边界。新增触发 `fetchStocks` 的入口（dialog onSuccess、新轮询、新 effect 等）走原函数即可天然继承守卫，禁止绕过自己 `await apiClient.getStockList` + `setStocks`。
+
 `stock_ai_analysis` 表通过 `analysis_type` 字段区分类型，后端 `ALLOWED_ANALYSIS_TYPES` 枚举控制允许写入的类型——**新增分析类型时必须同时更新后端 Service 中的 `ALLOWED_ANALYSIS_TYPES`**，以及 `_JSON_ANALYSIS_TYPES`（`stock_ai_analysis.py`）、`admin/types/prompt-template.ts` 中的 `BUSINESS_TYPES` 和 `BUSINESS_TYPE_LABELS`。
 
 后端 API（均需登录）：

@@ -245,6 +245,8 @@ function StocksPageContent() {
   // 批量分析"分析中"集合：仅用于轮询时检测"刚结束"以触发列表静默刷新（拉新评分）。
   // 不再展示在 UI 上（行级 AI 分析按钮已移除），用 ref 避免每 3s 触发组件重渲染
   const analyzingTsCodesRef = useRef<Set<string>>(new Set())
+  // 请求竞态令牌：避免翻页/改排序/改筛选时旧请求迟到覆盖新页数据
+  const requestIdRef = useRef(0)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [filtersCollapsed, setFiltersCollapsed] = useState<boolean>(() => searchParams.get('filters') === 'collapsed')
 
@@ -303,29 +305,39 @@ function StocksPageContent() {
   // silent=true 的静默刷新只更新当前已显示行的数据（按 ts_code 定向拉取 + 原位合并），
   // 不改变行的集合和顺序，也不改变 totalStocks，避免翻页/排序状态被异步刷新打乱
   const fetchStocks = useCallback(async (silent: boolean = false) => {
+    const myReqId = ++requestIdRef.current
+    const isLatest = () => myReqId === requestIdRef.current
+
     try {
       if (!silent) setLoading(true)
       setError(null)
 
       if (silent) {
         const existing = useStockStore.getState().stocks
-        const displayedTsCodes = Array.isArray(existing)
-          ? existing.map((s) => s.ts_code || toTsCode(s.code)).filter(Boolean)
-          : []
-        if (displayedTsCodes.length === 0) return
+        if (existing.length === 0) return
+        const snapshotCodes = existing.map((s) => s.code)
+        const tsCodes = existing.map((s) => s.ts_code || toTsCode(s.code))
         const response = await apiClient.getStockList({
-          ts_codes: displayedTsCodes.join(','),
-          limit: displayedTsCodes.length,
+          ts_codes: tsCodes.join(','),
+          limit: tsCodes.length,
           list_status: 'L',
           include_analysis: true,
         })
-        const fetched = response.items || []
-        const byCode = new Map(fetched.map((s: StockInfo) => [s.code, s]))
-        const merged = existing.map((prev) => {
+        if (!isLatest()) return
+        // 响应到达时 store 的行集合必须仍与请求快照一致，否则用户已翻页/换筛选；
+        // reqId 校验之外再做一次 codes 快照对比，覆盖"翻走又翻回"导致 reqId 巧合仍是最新的边界
+        const current = useStockStore.getState().stocks
+        if (
+          current.length !== snapshotCodes.length ||
+          current.some((s, i) => s.code !== snapshotCodes[i])
+        ) {
+          return
+        }
+        const byCode = new Map((response.items || []).map((s: StockInfo) => [s.code, s]))
+        setStocks(current.map((prev) => {
           const next = byCode.get(prev.code)
           return next ? { ...prev, ...next } : prev
-        })
-        setStocks(merged)
+        }))
         return
       }
 
@@ -342,6 +354,7 @@ function StocksPageContent() {
           list_status: 'L',
           include_analysis: true,
         })
+        if (!isLatest()) return
         setStocks(response.items || [])
         setTotalStocks(response.total ?? response.items?.length ?? 0)
         return
@@ -363,14 +376,17 @@ function StocksPageContent() {
       if (activeListId !== null && typeof activeListId === 'number') params.user_stock_list_id = activeListId
 
       const response = await apiClient.getStockList(params)
+      if (!isLatest()) return
       setStocks(response.items || [])
       setTotalStocks(response.total ?? 0)
     } catch (err: unknown) {
+      if (!isLatest()) return
       const e = err as { message?: string }
       setError(e.message || '加载股票列表失败')
       if (!silent) { setStocks([]); setTotalStocks(0) }
     } finally {
-      if (!silent) {
+      // loading 标志只对最新一次 non-silent 请求生效，否则旧请求 finally 会提前关 spinner
+      if (!silent && isLatest()) {
         setLoading(false)
         setIsFirstLoad(false)
       }
