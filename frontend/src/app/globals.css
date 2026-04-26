@@ -104,6 +104,13 @@
   * {
     @apply border-border;
   }
+  /* 滚动条槽位恒定预留 —— 解决 SPA 翻页/排序/筛选时内容高度变化导致的
+     "纵向滚动条出现/消失 → 视口宽度跳动 → 整页向左/右抖一下" 问题。
+     Chrome 94+/Firefox 97+/Safari 16+ 原生支持，无需 JS 补偿。
+     macOS overlay 滚动条平台天然无槽位，此声明对其无副作用。 */
+  html {
+    scrollbar-gutter: stable;
+  }
   body {
     @apply bg-background text-foreground font-sans;
     /* Inter 字形优化：cv11=单层 a，ss01=曲线风格统一 */
