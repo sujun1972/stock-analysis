@@ -174,9 +174,23 @@
   /* 滚动条槽位恒定预留 —— 解决 SPA 翻页/排序/筛选时内容高度变化导致的
      "纵向滚动条出现/消失 → 视口宽度跳动 → 整页向左/右抖一下" 问题。
      Chrome 94+/Firefox 97+/Safari 16+ 原生支持，无需 JS 补偿。
-     macOS overlay 滚动条平台天然无槽位，此声明对其无副作用。 */
+     macOS overlay 滚动条平台天然无槽位，此声明对其无副作用。
+
+     额外强制 overflow-y: scroll —— Radix（Select / Dropdown / Dialog）使用
+     react-remove-scroll 在弹窗打开时给 html 设 overflow:hidden（inline style）
+     吃掉我们的 gutter。!important 让 CSS 战胜 inline style，使滚动条始终可见 */
   html {
+    overflow-y: scroll !important;
     scrollbar-gutter: stable;
+  }
+  /* react-remove-scroll 打开时还会给 body 加 padding-right + margin-right: 15px
+     "补偿"消失的滚动条 —— 既然我们让滚动条始终在，这段补偿就成了多余的 15px
+     偏移，让居中容器视觉上左移。强制清零。
+     注：库的注入样式同样用了 body[data-scroll-locked] !important 选择器，
+     且因 runtime 后注入而胜出，必须用 `html body` 提高特异度（0,1,2 > 0,1,1） */
+  html body[data-scroll-locked] {
+    padding-right: 0 !important;
+    margin-right: 0 !important;
   }
   body {
     @apply bg-background text-foreground font-sans;
