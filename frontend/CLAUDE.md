@@ -466,14 +466,16 @@ useEffect(() => {
 
 ### 个股分析页 `/analysis` 的 AI 决策板块
 
-`/analysis` 页面有四张语义独立的卡片串联展示，**用户在主页就能看到完整决策视图，弹窗只承担"历史归档 + 编辑/复盘"高级视图角色**。新增"AI 类"功能时优先放主页卡，不要回头往弹窗塞。
+`/analysis` 页面有四张语义独立的卡片串联展示。**所有运行时操作（历史翻页 / 编辑 / 删除 / 查看源代码 / 触发复盘）都内嵌在卡片头部工具栏，弹窗只剩"提示词模板查看"一个职责。** 新增"AI 类"功能时优先放主页卡，不要回头往弹窗塞。
 
 页面纵向流：
 1. **行情卡**（`QuotePanel`）— 最新价 / OHLC / 振幅 / 换手 / 成交 / 公司规模 chip / 4 维雷达图（点击节点滚到对应专家）/ CIO 一句话观点 + 复查触发器。
 2. **估值数据卡**（`ValuationCard`）— PE / PB / PS / 股息率（`daily_basic`）+ ROC / EY / 安全边际（`stock_value_metrics`）+ 快照日期。**公开数据，未登录可见**。
-3. **AI 决策摘要卡**（`ExpertSummaryCard`）— 4 列等宽：CIO / 游资 / 中线 / 价值；每列 = 评分 + rating + key_quote（`line-clamp-2`）+ ▲/▼ 因子计数；顶部"一键分析"按钮（与弹窗 Footer 同 API）。**仅登录态显示**。
-4. **CIO 综合决策卡**（`CioDecisionCard`，默认折叠）— 头部显示评分 + rating + 一句话；展开后：multi_dimension_scan 三栏 / cross_dimension_analysis / core_drivers + core_risks 双栏 / rating_and_action 高亮卡（按 action 关键词配色）/ followup_triggers。
-5. **三专家详情卡**（`ExpertDetailCard`，嵌入 Tab）— 游资 / 中线 / 价值；卡内：评分 / rating / key_quote / 正反因子双栏 / 完整 SECTION_CONFIGS。Tab 右上角"重新分析"（单专家）/ "历史"（唤起弹窗，自动锁到当前 Tab）。
+3. **AI 决策摘要卡**（`ExpertSummaryCard`）— 4 列等宽：CIO / 游资 / 中线 / 价值；每列 = 评分 + rating + key_quote（`line-clamp-2`）+ ▲/▼ 因子计数；顶部"一键分析"按钮。**仅登录态显示**。
+4. **CIO 综合决策卡**（`CioDecisionCard`，默认折叠）— 头部 collapse 按钮 + `HistoryPager` + `RecordActionToolbar`（源代码 / 编辑 / 删除）；展开后：multi_dimension_scan 三栏 / cross_dimension_analysis / core_drivers + core_risks 双栏 / rating_and_action 高亮卡（按 action 关键词配色）/ followup_triggers。
+5. **三专家详情卡**（`ExpertDetailCard`，嵌入 Tab）— 游资 / 中线 / 价值；每个 Tab 内部含 `原报告 N | 复盘 M` 子段控件 + `HistoryPager` + `RecordActionToolbar`（源代码 / 编辑 / 复盘 / 删除）。Tab 右上角保留"重新分析"（单专家）/ "提示词"（弹窗仅模板预览）。
+
+**主页 → 卡内组件统一通过 `tsCode` 驱动自身历史拉取**（不再依赖父级 `latestByExpert` prop 注入；保留 `latestByExpert` 仅供 `ExpertSummaryCard` / 行情卡 `cioKeyQuote` 派生）。父页传 `refreshKey` 触发外部刷新，卡内通过 `onChange` 回调反向通知父页 bump `expertsRefreshKey` 以同步雷达图 / 摘要卡。
 
 共享渲染组件全部在 [components/stocks/analysis/](src/components/stocks/analysis/)：
 
@@ -482,8 +484,11 @@ useEffect(() => {
 - `StructuredAnalysisContent.tsx` — JSON 结构化渲染入口；支持 `hideFinalScore` / `hideTitleHeader` props（主页详情卡已自渲染头部和评分时用）
 - `section-configs.ts` — `SECTION_CONFIGS` / `PM_FIELD_LABELS` / `JSON_ANALYSIS_TYPES`
 - `expert-meta.ts` — 4 专家身份元数据（key / analysisType / templateKey / 中文名 / 副标题 / 图标 / colorVar / borderClass）+ `safeParseJSON` / `extractScore` / `extractKeyQuote` / `extractRating` / `extractBullBearCount` / `scoreToneClass`
+- `useAnalysisHistory.ts` — 历史翻页 hook：返回 `{records, total, index, current, setIndex, goNewer/goOlder, refresh, remove, update, loading}`，内部按 `(tsCode, analysisType)` 拉 `/api/stock-ai-analysis/history?limit=50`，`update` / `remove` 直连 PUT/DELETE 端点。`refreshKey` 自增触发外部重拉，`enabled=false` 时跳过（`ExpertDetailCard` 的非激活 Tab 用此节流）。**编辑后会按 `lastViewedIdRef` 重新锚定光标到原记录位置，避免版本顺序变动时光标跳到顶部**。
+- `RecordActions.tsx` — 4 个内嵌操作组件：`HistoryPager`（◀ N/M ▶ 翻页 + 终端样式版本/日期 pill；日期在 <sm 自动隐藏）、`RecordActionToolbar`（源代码 / 编辑 / 复盘 / 删除 4 图标按钮，按 tone 配色）、`DeleteConfirmDialog`（红色头部 + 不可恢复提示 + 版本/评分/时间核对块）、`EditAnalysisDialog`（评分输入 + monospace textarea；JSON 自动展开编辑 / 保存时自动单行压缩）、`ViewSourceDialog`（带元数据 pills 的 pretty JSON 视图 + 复制按钮）。**新增分析维度时只需在新组件里挂 `useAnalysisHistory` + 这 5 个工具，不必再为复盘 / 编辑 / 删除写一份 state**。
+- `ExpertSummaryCard.tsx` / `CioDecisionCard.tsx` / `ExpertDetailCard.tsx` — 三张主页卡
 
-**弹窗与主页卡共用同一份 SECTION_CONFIGS 与渲染逻辑**——`HotMoneyViewDialog` 内部 `import { AnalysisContent } from '@/components/stocks/analysis'`，新增专家或调整 schema 时改一处即可两端生效。
+**弹窗（`HotMoneyViewDialog`）与主页卡共用同一份 SECTION_CONFIGS 与渲染逻辑**——`HotMoneyViewDialog` 内部 `import { AnalysisContent } from '@/components/stocks/analysis'`，新增专家或调整 schema 时改一处即可两端生效。
 
 **专家身份色 token（`--expert-*`）**：CIO 紫 / 游资 橙 / 中线 蓝 / 价值 金，定义在 [globals.css](src/app/globals.css)，Tailwind 暴露为 `text-expert-cio` / `border-l-expert-hot-money` 等。**身份色仅用于"哪位专家说的"染色**（卡片左 border / 头部图标 / key_quote 背景）；评分高低仍走 `score-*`（紫罗兰单色相，见"语义色与过渡时长 token"），涨跌仍走 `positive` / `negative`，三套色阶不混用。
 
@@ -493,7 +498,7 @@ useEffect(() => {
 
 ### AI 分析弹窗（`HotMoneyViewDialog`）
 
-共享组件位于 [components/stocks/HotMoneyViewDialog.tsx](src/components/stocks/HotMoneyViewDialog.tsx)，目前**仅由 `/analysis` 页面**使用（个股详情页"历史·AI"按钮触发）。`/stocks` 列表页**没有**直接打开此弹窗的入口——单股 AI 分析统一通过点击股票名跳转 `/analysis?code=XXX` 完成。`/stocks` 仅保留多选后的"批量 AI 分析"（`BatchAnalysisDialog`，浮动操作栏触发）。`/analysis` 调用时通过 `defaultTab` prop 锁定到指定专家 Tab（卡 ④ 右上"历史"按钮按当前 Tab 透传）。
+共享组件位于 [components/stocks/HotMoneyViewDialog.tsx](src/components/stocks/HotMoneyViewDialog.tsx)，目前**仅由 `/analysis` 页面**使用（标题栏"提示词"按钮触发）。历史翻页 / 编辑 / 删除 / 复盘 / 源代码已全部下放到主页卡片内嵌工具栏（见上一节），**弹窗当前只承担 5 个专家提示词模板的查看入口**——点击"提示词"按钮后，前端通过 `apiClient.getPromptTemplateByKey()` 并发拉取 `top_speculative_investor_v1` / `stock_data_collection_v1` / `midline_industry_expert_v1` / `longterm_value_watcher_v1` / `cio_directive_v1` 5 套模板渲染到 5 个 Tab。`/stocks` 列表页**没有**直接打开此弹窗的入口——单股 AI 分析统一通过点击股票名跳转 `/analysis?code=XXX` 完成。`/stocks` 仅保留多选后的"批量 AI 分析"（`BatchAnalysisDialog`，浮动操作栏触发）。
 
 弹窗内含 **5 个 Tab**，各自独立管理历史记录和状态：
 

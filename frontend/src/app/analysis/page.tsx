@@ -1028,13 +1028,15 @@ function AnalysisContent() {
               自选
             </button>
           )}
+          {/* 历史 / 编辑 / 复盘 / 源代码 已内嵌到下方专家卡片中——本按钮仅用于查看
+              提示词模板原文。命名直说："提示词"，避免误导用户以为还要点这里翻历史。 */}
           <button
             type="button"
             onClick={() => { setHistoryDefaultTab(undefined); openHotMoneyDialog() }}
-            className="text-xs px-3 py-1.5 rounded border border-warning/40 text-warning hover:bg-warning-soft transition-colors duration-fast focus-ring"
-            title="打开历史分析视图（含版本翻页 / 编辑 / 复盘 / 提示词）"
+            className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-border text-muted-foreground hover:bg-surface-hover hover:text-foreground transition-colors duration-fast focus-ring"
+            title="查看 5 个专家的提示词模板原文"
           >
-            历史·AI
+            提示词
           </button>
         </div>
       </div>
@@ -1114,24 +1116,31 @@ function AnalysisContent() {
           />
 
           {/* 卡 ③：CIO 综合决策（默认折叠；雷达图点 CIO / 卡②点 CIO 时展开） */}
+          {/*  历史翻页 + 编辑 / 删除 / 源代码 已内嵌到卡片头部，无需再点"历史"按钮  */}
           <div ref={cioCardRef}>
             <CioDecisionCard
-              analysisText={latestByExpert.cio?.analysis_text ?? null}
+              tsCode={tsCode}
               defaultOpen={cioOpen}
-              key={`cio-${cioOpen}-${latestByExpert.cio?.id ?? 'none'}`}
+              refreshKey={expertsRefreshKey}
+              onChange={() => setExpertsRefreshKey((k) => k + 1)}
+              key={`cio-${cioOpen}-${tsCode}`}
               id="cio-decision-card"
             />
           </div>
 
-          {/* 卡 ④：三专家详情（嵌入式 Tab） */}
+          {/* 卡 ④：三专家详情（嵌入式 Tab + 原报告/复盘 子段控件） */}
           <div ref={detailCardRef}>
             <ExpertDetailCard
-              latestByExpert={latestByExpert}
+              tsCode={tsCode}
+              stockName={stockInfo?.name ?? ''}
+              stockCode={code ?? ''}
               activeExpert={activeExpertTab}
               onActiveExpertChange={setActiveExpertTab}
               onOpenHistory={handleOpenHistory}
               onRegenerate={handleRegenerateExpert}
               regeneratingKey={regeneratingKey}
+              refreshKey={expertsRefreshKey}
+              onChange={() => setExpertsRefreshKey((k) => k + 1)}
               id="expert-detail-card"
             />
           </div>

@@ -37,3 +37,11 @@ export {
 export { ExpertSummaryCard, type LatestAnalysisRecord, type ExpertSummaryCardProps } from './ExpertSummaryCard'
 export { CioDecisionCard, type CioDecisionCardProps } from './CioDecisionCard'
 export { ExpertDetailCard, type ExpertDetailCardProps } from './ExpertDetailCard'
+export { useAnalysisHistory, type UseAnalysisHistoryResult } from './useAnalysisHistory'
+export {
+  HistoryPager,
+  RecordActionToolbar,
+  DeleteConfirmDialog,
+  EditAnalysisDialog,
+  ViewSourceDialog,
+} from './RecordActions'
