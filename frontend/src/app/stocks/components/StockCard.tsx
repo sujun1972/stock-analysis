@@ -72,10 +72,10 @@ export const StockCard = React.memo(function StockCard({
 
   return (
     <div
-      className={`rounded-lg border bg-white dark:bg-gray-900 transition-colors p-3 ${
+      className={`rounded-lg border bg-card transition-colors duration-fast p-3 ${
         isSelected
-          ? 'border-blue-500 bg-blue-50/60 dark:border-blue-500 dark:bg-blue-900/20 ring-1 ring-blue-500/30'
-          : 'border-gray-200 dark:border-gray-700'
+          ? 'border-primary bg-primary/[0.08] ring-1 ring-primary/30'
+          : 'border-border'
       }`}
       onClick={isAuthenticated ? () => onToggleSelect(tsCode) : undefined}
       style={isAuthenticated ? { cursor: 'pointer' } : undefined}

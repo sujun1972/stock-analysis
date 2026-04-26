@@ -125,7 +125,7 @@ export const StockTableRow = React.memo(function StockTableRow({
 
   return (
     <tr
-      className={`transition-colors ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
+      className={`transition-colors duration-fast ${isSelected ? 'bg-primary/[0.08]' : 'hover:bg-surface-hover'}`}
       onClick={isAuthenticated ? () => onToggleSelect(tsCode) : undefined}
       style={isAuthenticated ? { cursor: 'pointer' } : undefined}
     >

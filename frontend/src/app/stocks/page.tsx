@@ -153,7 +153,7 @@ function SortHeaderButton({
         }
       </span>
       {showPriority && (
-        <span className="ml-0.5 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+        <span className="ml-0.5 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full text-[9px] font-bold bg-primary/15 text-primary">
           {idx + 1}
         </span>
       )}
@@ -680,7 +680,7 @@ function StocksPageContent() {
                       title="重命名"
                       aria-label={`重命名列表 ${list.name}`}
                       onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setRenameTarget(list); setRenameDialogOpen(true) }}
-                      className="p-0.5 hover:text-blue-600 rounded focus-ring"
+                      className="p-0.5 hover:text-primary rounded focus-ring"
                     >
                       <Pencil className="h-3 w-3" />
                     </button>
@@ -689,7 +689,7 @@ function StocksPageContent() {
                       title="删除"
                       aria-label={`删除列表 ${list.name}`}
                       onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteList(list.id) }}
-                      className="p-0.5 hover:text-red-600 rounded focus-ring-red"
+                      className="p-0.5 hover:text-destructive rounded focus-ring-red"
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>
@@ -713,8 +713,8 @@ function StocksPageContent() {
       </div>
 
       {error && (
-        <Alert className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
-          <AlertDescription className="text-red-800 dark:text-red-200">{error}</AlertDescription>
+        <Alert className="bg-destructive/10 border-destructive/30">
+          <AlertDescription className="text-destructive">{error}</AlertDescription>
         </Alert>
       )}
 
@@ -723,7 +723,7 @@ function StocksPageContent() {
          下部操作行：取消、添加到列表、批量 AI 分析等主动作 */}
       {isAuthenticated && selectedCodes.size > 0 && (
         <div
-          className="fixed z-40 flex flex-col gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 shadow-xl
+          className="fixed z-40 flex flex-col gap-2 bg-card border border-border shadow-xl
                      bottom-0 left-0 right-0 rounded-none px-3 py-2
                      md:bottom-6 md:left-1/2 md:right-auto md:-translate-x-1/2 md:rounded-xl md:px-5 md:py-3"
           style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 0.5rem)' }}
@@ -839,7 +839,7 @@ function StocksPageContent() {
                 <Filter className="h-4 w-4 shrink-0" />
                 <span>筛选器</span>
                 {activeFilterCount > 0 && (
-                  <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-semibold bg-blue-600 text-white shrink-0">
+                  <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-semibold bg-primary text-primary-foreground shrink-0">
                     {activeFilterCount}
                   </span>
                 )}
@@ -855,7 +855,7 @@ function StocksPageContent() {
                 <button
                   type="button"
                   onClick={handleClearAllFilters}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900 rounded-sm"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-destructive focus-ring rounded-sm"
                 >
                   <X className="h-3.5 w-3.5" />
                   清除全部
@@ -875,13 +875,13 @@ function StocksPageContent() {
               {activeFilterChips.map((chip) => (
                 <span
                   key={chip.key}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-primary/10 text-primary border border-primary/25"
                 >
                   {chip.label}
                   <button
                     type="button"
                     onClick={chip.onClear}
-                    className="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-200 dark:hover:bg-blue-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    className="ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-primary/20 focus-ring"
                     aria-label={`清除 ${chip.label}`}
                   >
                     <X className="h-3 w-3" />
@@ -974,8 +974,8 @@ function StocksPageContent() {
 
             {/* 桌面端表格视图 */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-800">
+              <table className="min-w-full divide-y divide-border">
+                <thead className="bg-surface-base">
                   <tr>
                     {isAuthenticated && (
                       <th className="px-4 py-3 w-10">
@@ -1060,7 +1060,7 @@ function StocksPageContent() {
                     )}
                   </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody className="bg-card divide-y divide-border">
                   {displayedStocks.map((stock) => (
                     <StockTableRow
                       key={stock.code}
@@ -1079,7 +1079,7 @@ function StocksPageContent() {
 
           {/* 分页 */}
           {totalPages > 1 && (
-            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="px-6 py-4 border-t border-border">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div className="flex items-center justify-between md:justify-start gap-4 md:gap-6">
                   <p className="text-sm text-gray-700 dark:text-gray-300">

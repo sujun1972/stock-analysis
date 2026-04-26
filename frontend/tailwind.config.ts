@@ -90,6 +90,35 @@ const config: Config = {
         info: {
           DEFAULT: "hsl(var(--info))",
         },
+        // ─── 金融级专业色板 v2 别名（语义更明确的同义入口） ───
+        // bull/bear: 业务命名（避开 success/danger 在 A 股语境的歧义）
+        bull: {
+          DEFAULT: "hsl(var(--bull))",
+          soft: "hsl(var(--bull-soft))",
+          hover: "hsl(var(--bull-hover))",
+        },
+        bear: {
+          DEFAULT: "hsl(var(--bear))",
+          soft: "hsl(var(--bear-soft))",
+          hover: "hsl(var(--bear-hover))",
+        },
+        // surface 4 档背景层级（页面 → 卡片 → 浮层 → hover）
+        surface: {
+          base: "hsl(var(--bg-base))",
+          DEFAULT: "hsl(var(--bg-surface))",
+          overlay: "hsl(var(--bg-overlay))",
+          hover: "hsl(var(--bg-hover))",
+        },
+        // 文字 3 档（主/次/弱）—— 等价于 foreground / muted-foreground / 无对应 token，给个统一入口
+        txt: {
+          primary: "hsl(var(--text-primary))",
+          secondary: "hsl(var(--text-secondary))",
+          tertiary: "hsl(var(--text-tertiary))",
+        },
+        // 金标（premium 标签，不与 warning 混用）
+        gold: {
+          DEFAULT: "hsl(var(--gold))",
+        },
         // 评分/价值指标色阶 单色相紫罗兰（4-6 浅 → 6-8 中 → ≥8 深），独立于行情红绿
         score: {
           low: "hsl(var(--score-low))",

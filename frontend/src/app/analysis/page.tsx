@@ -201,9 +201,9 @@ function StatusBadges({ basic }: { basic: StockInfo | null }) {
 
   if (badges.length === 0) return null
   const toneClass = (t: 'neutral' | 'info' | 'warning') =>
-    t === 'info'    ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-800'
-    : t === 'warning' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-    :                   'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700'
+    t === 'info'    ? 'bg-primary/10 text-primary border-primary/25'
+    : t === 'warning' ? 'bg-warning-soft text-warning border-warning/30'
+    :                   'bg-muted text-muted-foreground border-border'
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -939,7 +939,7 @@ function AnalysisContent() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
               <p className="mt-4 text-gray-600 dark:text-gray-400">请从股票列表选择股票</p>
-              <a href="/stocks" className="mt-4 inline-block text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 hover:underline">
+              <a href="/stocks" className="mt-4 inline-block text-primary hover:underline">
                 前往股票列表
               </a>
             </div>
@@ -956,7 +956,7 @@ function AnalysisContent() {
         <Card>
           <CardContent className="py-12">
             <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-blue-600"></div>
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-border border-t-primary"></div>
               <p className="mt-4 text-gray-600 dark:text-gray-400">加载中...</p>
             </div>
           </CardContent>
@@ -971,8 +971,8 @@ function AnalysisContent() {
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">股票分析</h1>
         <Card>
           <CardContent className="p-0">
-            <Alert className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 rounded-none">
-              <AlertDescription className="text-red-800 dark:text-red-200">{error}</AlertDescription>
+            <Alert className="bg-destructive/10 border-destructive/30 rounded-none">
+              <AlertDescription className="text-destructive">{error}</AlertDescription>
             </Alert>
           </CardContent>
         </Card>
@@ -1008,7 +1008,7 @@ function AnalysisContent() {
                 () => toast({ title: '复制失败', description: '请手动复制地址栏链接', variant: 'destructive' })
               )
             }}
-            className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors focus-ring"
+            className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-border text-muted-foreground hover:bg-surface-hover hover:text-foreground transition-colors duration-fast focus-ring"
             aria-label="复制当前股票分享链接"
             title="复制当前页面链接"
           >
@@ -1020,7 +1020,7 @@ function AnalysisContent() {
             <button
               type="button"
               onClick={() => setAddToListOpen(true)}
-              className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-info text-info hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors focus-ring"
+              className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-primary/30 text-primary hover:bg-primary/10 transition-colors duration-fast focus-ring"
               aria-label="添加到自选列表"
               title="添加到自选列表"
             >
@@ -1031,7 +1031,7 @@ function AnalysisContent() {
           <button
             type="button"
             onClick={() => { setHistoryDefaultTab(undefined); openHotMoneyDialog() }}
-            className="text-xs px-3 py-1.5 rounded border border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:border-yellow-500 dark:text-yellow-400 dark:hover:bg-yellow-900/20 transition-colors focus-ring"
+            className="text-xs px-3 py-1.5 rounded border border-warning/40 text-warning hover:bg-warning-soft transition-colors duration-fast focus-ring"
             title="打开历史分析视图（含版本翻页 / 编辑 / 复盘 / 提示词）"
           >
             历史·AI
@@ -1216,7 +1216,7 @@ export default function AnalysisPage() {
         <Card>
           <CardContent className="py-12">
             <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-blue-600"></div>
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-border border-t-primary"></div>
               <p className="mt-4 text-gray-600 dark:text-gray-400">加载中...</p>
             </div>
           </CardContent>
