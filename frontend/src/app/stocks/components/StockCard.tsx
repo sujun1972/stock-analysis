@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { Loader2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ScoreBadge } from '@/components/shared'
 import type { StockInfo, CioFollowupTriggers } from '@/types'
@@ -45,6 +46,8 @@ interface StockCardProps {
   stock: StockInfo
   selectable: boolean
   isSelected: boolean
+  // 该股票是否正在 AI 分析中（来自 /stocks 页面的 3s 轮询）
+  isAnalyzing?: boolean
   onToggleSelect: (tsCode: string) => void
 }
 
@@ -52,6 +55,7 @@ export const StockCard = React.memo(function StockCard({
   stock,
   selectable,
   isSelected,
+  isAnalyzing = false,
   onToggleSelect,
 }: StockCardProps) {
   const tsCode = toTsCode(stock.code)
@@ -92,11 +96,17 @@ export const StockCard = React.memo(function StockCard({
             </div>
           )}
           <div className="min-w-0 flex-1" onClick={(e) => e.stopPropagation()}>
+            {/* min-w-0：让内层 <span class="truncate"> 在 flex 父项中真正生效（默认 min-width:auto 会拒绝收缩） */}
             <a
               href={`/analysis?code=${stock.code}`}
-              className={`block text-sm font-semibold truncate hover:underline ${nameTone}`}
+              className={`flex items-center gap-1.5 min-w-0 text-sm font-semibold hover:underline ${nameTone}`}
             >
-              {stock.name}
+              {isAnalyzing && (
+                <span title="AI 分析中" className="inline-flex shrink-0">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-info" aria-label="AI 分析中" />
+                </span>
+              )}
+              <span className="truncate">{stock.name}</span>
             </a>
             <div className={`text-xs mt-0.5 ${nameTone}`}>{stock.code}</div>
           </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { Loader2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ScoreBadge } from '@/components/shared'
 import type { StockInfo, CioFollowupTriggers } from '@/types'
@@ -110,6 +111,8 @@ interface StockTableRowProps {
   stock: StockInfo
   selectable: boolean
   isSelected: boolean
+  // 该股票是否正在 AI 分析中（来自 /stocks 页面的 3s 轮询）
+  isAnalyzing?: boolean
   isVisible: (id: StockColumnId) => boolean
   onToggleSelect: (tsCode: string) => void
 }
@@ -118,6 +121,7 @@ export const StockTableRow = React.memo(function StockTableRow({
   stock,
   selectable,
   isSelected,
+  isAnalyzing = false,
   isVisible,
   onToggleSelect,
 }: StockTableRowProps) {
@@ -142,18 +146,25 @@ export const StockTableRow = React.memo(function StockTableRow({
         {/* 股票名称跟随当日涨跌染色 —— 用户偏好（"一眼看到是否上涨"）。
             注意：仅"最新价/涨跌幅/股票名"三处用红绿；成交额/换手率/市值/PE-TTM 是
             活跃度/估值指标，不携带方向语义，保持中性以免误导 */}
-        <a
-          href={`/analysis?code=${stock.code}`}
-          className={`hover:underline ${
-            stock.pct_change != null
-              ? stock.pct_change > 0 ? 'text-positive'
-              : stock.pct_change < 0 ? 'text-negative'
-              : 'text-gray-900 dark:text-white'
-              : 'text-gray-900 dark:text-white'
-          }`}
-        >
-          {stock.name}({stock.code})
-        </a>
+        <span className="inline-flex items-center gap-1.5">
+          {isAnalyzing && (
+            <span title="AI 分析中" className="inline-flex shrink-0">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-info" aria-label="AI 分析中" />
+            </span>
+          )}
+          <a
+            href={`/analysis?code=${stock.code}`}
+            className={`hover:underline ${
+              stock.pct_change != null
+                ? stock.pct_change > 0 ? 'text-positive'
+                : stock.pct_change < 0 ? 'text-negative'
+                : 'text-gray-900 dark:text-white'
+                : 'text-gray-900 dark:text-white'
+            }`}
+          >
+            {stock.name}({stock.code})
+          </a>
+        </span>
       </td>
       {isVisible('latest_price') && (
         <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium tabular-nums">

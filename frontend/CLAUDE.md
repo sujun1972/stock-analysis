@@ -528,7 +528,7 @@ useEffect(() => {
 
 - `/stocks` 浮动操作栏「批量 AI 分析」（`BatchAnalysisDialog`）：调 `POST /api/stock-ai-analysis/batch` 提交一组 ts_codes，拿 `celery_task_id` 后 3s 轮询 `GET /batch/{id}`。关闭弹窗不中断任务。
 - `/analysis` 主页「一键分析」按钮（`ExpertSummaryCard` Header）：调 `POST /api/stock-ai-analysis/generate-multi`（单只 + concurrency=1），同样异步返回 `celery_task_id`，3s 轮询 `GET /batch/{id}`。提交前先调 `GET /active/by-ts-code/{ts_code}` 查活跃任务，命中则续轮询不重复提交。
-- `/stocks` 另一层常驻轮询 `GET /batch/active/ts-codes` 拿"分析中"ts_code 集合（**覆盖批量 + 单只一键两类 task_type**）；`StockTableRow` 的 `isAnalyzing=true` 时把"AI 分析"按钮换为旋转图标，刷新页面后仍能恢复。股票从"分析中"列表移除时自动 `fetchStocks(true)` 拉最新评分。
+- `/stocks` 另一层常驻轮询 `GET /batch/active/ts-codes` 拿"分析中"ts_code 集合（**覆盖批量 + 单只一键两类 task_type**）；`StockTableRow` / `StockCard` 的 `isAnalyzing=true` 时在股票名前显示 14px `Loader2` spinner（`text-info` 蓝），刷新页面后仍能恢复。股票从"分析中"集合移除时自动 `fetchStocks(true)` 拉最新评分。**双轨存储**：ref 在 tick 内同步对比 prev/next 做"刚结束"边沿检测（`removedAny` → 触发评分刷新），state 仅在集合内容真正变化时 setState（`size 不同 || 任一新元素不在 prev` → 触发 spinner 增减）；前者必须用 ref（state 异步更新无法当 prev 用），后者用 state（ref 不会触发渲染）。新加"高频轮询驱动行级状态"的页面照抄此模式：tick 内 `nextCodes.some(c => !prev.has(c))` 比逐元素遍历短路更快，size 不同直接判定变化避免无谓遍历。
 
 **`useMultiAnalysisTask` hook**（[hooks/useMultiAnalysisTask.ts](src/hooks/useMultiAnalysisTask.ts)）封装"提交 → 轮询 → 探活 → 终态收尾"完整生命周期。`/analysis` 主页 `enableProbe=true`，mount 后每 3s 探一次活跃任务，与 `/stocks` 批量分析的状态同步——用户从 `/stocks` 触发批量分析后跳到 `/analysis` 看某只股，按钮自动是"分析中"态。终态后必须**再补拉一次** `GET /batch/{id}` 兜底 metadata.items 抢跑（见 backend/CLAUDE.md 同名陷阱）。新增"基于活跃 Celery 任务做 UI 状态恢复"的入口时优先复用此 hook。
 

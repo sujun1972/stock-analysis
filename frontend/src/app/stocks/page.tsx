@@ -242,9 +242,11 @@ function StocksPageContent() {
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [renameTarget, setRenameTarget] = useState<StockList | null>(null)
   const [batchAnalysisOpen, setBatchAnalysisOpen] = useState(false)
-  // 批量分析"分析中"集合：仅用于轮询时检测"刚结束"以触发列表静默刷新（拉新评分）。
-  // 不再展示在 UI 上（行级 AI 分析按钮已移除），用 ref 避免每 3s 触发组件重渲染
+  // 批量分析"分析中"集合双轨：
+  //   - ref：每 3s tick 同步对比 prev/next，做"刚结束"边沿检测（state 异步更新无法当 prev 用）
+  //   - state：仅当集合内容变化时 setState，驱动行/卡片显示 spinner；无变化 tick 不重渲染整张表
   const analyzingTsCodesRef = useRef<Set<string>>(new Set())
+  const [analyzingTsCodes, setAnalyzingTsCodes] = useState<Set<string>>(() => new Set())
   // 请求竞态令牌：避免翻页/改排序/改筛选时旧请求迟到覆盖新页数据
   const requestIdRef = useRef(0)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
@@ -424,10 +426,12 @@ function StocksPageContent() {
   useSmartRefresh(refreshCallback, currentPageCodes, true)
 
   // ── 批量分析"分析中"股票轮询（每 3 秒） ──
-  // 检测到某只股票"刚从分析中移除"时，触发列表静默刷新拉取最新评分
+  // 1) 边沿检测：股票"刚从分析中移除" → 列表静默刷新拉新评分
+  // 2) 行级高亮：分析中集合 → StockTableRow / StockCard spinner
   useEffect(() => {
     if (!isAuthenticated) {
       analyzingTsCodesRef.current = new Set()
+      setAnalyzingTsCodes((prev) => (prev.size === 0 ? prev : new Set()))
       return
     }
     let cancelled = false
@@ -438,9 +442,14 @@ function StocksPageContent() {
         if (cancelled) return
         const nextCodes: string[] = res?.data?.ts_codes ?? []
         const next = new Set(nextCodes)
+        const prev = analyzingTsCodesRef.current
         let removedAny = false
-        analyzingTsCodesRef.current.forEach((ts) => { if (!next.has(ts)) removedAny = true })
+        prev.forEach((ts) => { if (!next.has(ts)) removedAny = true })
         analyzingTsCodesRef.current = next
+        // 集合内容真正变化才 setState（size 不同 或 任一新元素不在 prev）；新增和减少都需触发 spinner 增减
+        const changed = next.size !== prev.size || nextCodes.some((c) => !prev.has(c))
+        if (changed) setAnalyzingTsCodes(next)
+        // 仅"减少"才拉评分（新增进入分析中没有新数据）
         if (removedAny) fetchStocks(true)
       } catch {
         // 静默失败，下个 tick 重试
@@ -1057,6 +1066,7 @@ function StocksPageContent() {
                   stock={stock}
                   selectable={true}
                   isSelected={selectedCodes.has(toTsCode(stock.code))}
+                  isAnalyzing={analyzingTsCodes.has(toTsCode(stock.code))}
                   onToggleSelect={toggleStock}
                 />
               ))}
@@ -1155,6 +1165,7 @@ function StocksPageContent() {
                       stock={stock}
                       selectable={true}
                       isSelected={selectedCodes.has(toTsCode(stock.code))}
+                      isAnalyzing={analyzingTsCodes.has(toTsCode(stock.code))}
                       isVisible={isVisible}
                       onToggleSelect={toggleStock}
                     />
