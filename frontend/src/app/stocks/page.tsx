@@ -622,14 +622,16 @@ function StocksPageContent() {
   }, [updateURL])
 
   // 排序点击（多列）：普通=切单列，Shift=追加/循环；同步到 URL
+  // 关键：updater 函数在 React render/commit 阶段执行，禁止在内部同步调 updateURL
+  // → router.replace —— 会触发 "Cannot update a component (Router) while rendering
+  // a different component (StocksPageContent)" 警告。改为外部一次性计算 next 后
+  // 分别同步 state 和 URL。
   const handleSortClick = useCallback((key: string, event?: React.MouseEvent) => {
     const shift = !!event?.shiftKey
-    setSortKeys((prev) => {
-      const next = computeNextSort(prev, key, shift)
-      updateURL({ sort: isDefaultSort(next) ? null : serializeSort(next) })
-      return next
-    })
-  }, [updateURL])
+    const next = computeNextSort(sortKeys, key, shift)
+    setSortKeys(next)
+    updateURL({ sort: isDefaultSort(next) ? null : serializeSort(next) })
+  }, [sortKeys, updateURL])
 
   // 筛选器 JSX：桌面端内联在 Card 中，移动端由 Sheet 渲染复用
   const filtersGrid = (
